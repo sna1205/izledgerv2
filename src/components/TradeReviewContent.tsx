@@ -15,7 +15,7 @@ export function TradeReviewContent({ review, orphaned = false }: TradeReviewCont
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border bg-background/70 p-4">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Execution</p>
           <p className="mt-2 text-sm font-medium text-foreground">{review.executionRating || 0}/5</p>

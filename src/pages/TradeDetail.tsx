@@ -232,7 +232,7 @@ export default function TradeDetail() {
 
   if (!trade) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Button variant="ghost" size="sm" onClick={() => navigate("/trades")}>
           <ArrowLeft className="mr-1 h-4 w-4" /> Back
         </Button>
@@ -282,7 +282,7 @@ export default function TradeDetail() {
 
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
                     {trade.pair}
                   </h1>
                   <ResultBadge result={trade.result} />
@@ -321,7 +321,7 @@ export default function TradeDetail() {
             <div className="flex w-full flex-col gap-4 xl:max-w-[420px] xl:items-end">
               <div className="w-full rounded-3xl border bg-background/70 p-5 xl:max-w-[360px]">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Net Result</p>
-                <ProfitDisplay value={trade.profit} className="mt-3 block text-3xl font-semibold sm:text-4xl" />
+                <ProfitDisplay value={trade.profit} className="mt-3 block text-2xl font-semibold sm:text-4xl" />
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border bg-card px-3 py-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Direction</p>
@@ -334,20 +334,20 @@ export default function TradeDetail() {
                 </div>
               </div>
 
-              <div className="flex w-full flex-wrap gap-2 xl:justify-end">
-                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <div className="grid w-full gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end">
+                <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setEditOpen(true)}>
                   <Pencil className="mr-1 h-4 w-4" />
                   Edit Trade
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>
+                <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setReviewOpen(true)}>
                   <Sparkles className="mr-1 h-4 w-4" />
                   {review ? "Edit Review" : "Write Review"}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
+                  className="w-full text-destructive hover:text-destructive xl:w-auto"
                   onClick={() => setDeleteOpen(true)}
-                  className="text-destructive hover:text-destructive"
                 >
                   <Trash2 className="mr-1 h-4 w-4" />
                   Delete

@@ -25,11 +25,11 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_35%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.75))] px-4 py-10">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_35%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.75))] px-4 py-6 sm:py-10">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">IZLedger</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">Create account</h1>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Create account</h1>
           <p className="mt-2 text-sm text-muted-foreground">Set up a username and password so you can get into the journal quickly.</p>
         </div>
 

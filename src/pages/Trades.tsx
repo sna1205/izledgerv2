@@ -113,7 +113,7 @@ function FilterField({
   options: Array<{ label: string; value: string }>;
 }) {
   return (
-    <div className="min-w-[180px] space-y-2">
+    <div className="min-w-0 w-full space-y-2">
       <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80">
@@ -181,12 +181,12 @@ function PaginationControls({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t bg-background/60 px-4 py-3">
+    <div className="flex flex-col gap-3 border-t bg-background/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm text-muted-foreground">
         Page <span className="font-medium text-foreground">{currentPage}</span> of{" "}
         <span className="font-medium text-foreground">{totalPages}</span> {itemLabel}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
         <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={onPrevious} disabled={currentPage === 1}>
           <ChevronLeft className="mr-1 h-4 w-4" />
           Previous
@@ -342,7 +342,7 @@ export default function Trades() {
 
         <div className="rounded-2xl border bg-card p-4 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <FilterField
                 label="Account"
                 value={accountFilter}
@@ -372,7 +372,7 @@ export default function Trades() {
               />
             </div>
 
-            <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground">
+            <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground xl:min-w-[172px]">
               <span className="font-medium text-foreground">{filteredTrades.length}</span>{" "}
               {filteredTrades.length === 1 ? "trade" : "trades"} in view
             </div>
@@ -391,7 +391,7 @@ export default function Trades() {
         ) : (
           <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "ledger" | "screenbook")} className="w-full">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <TabsList className="grid h-11 w-full max-w-[320px] grid-cols-2 rounded-2xl border bg-muted/40 p-1">
+              <TabsList className="grid h-11 w-full grid-cols-2 rounded-2xl border bg-muted/40 p-1 sm:max-w-[320px]">
                 <TabsTrigger value="ledger" className="rounded-xl gap-2 data-[state=active]:shadow-sm">
                   <LayoutList className="h-4 w-4" />
                   Ledger
@@ -401,13 +401,121 @@ export default function Trades() {
                   Screenbook
                 </TabsTrigger>
               </TabsList>
-              <p className="text-sm text-muted-foreground">
+              <p className="hidden text-sm text-muted-foreground lg:block">
                 Review the structured ledger or switch to a screenshot-first trade grid.
               </p>
             </div>
 
             <TabsContent value="ledger" className="mt-4">
-              <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+              <div className="space-y-4">
+                <div className="grid gap-3 2xl:hidden">
+                  {ledgerTrades.map((trade, index) => {
+                    const linkedReview = tradeReviewMap[trade.id];
+
+                    return (
+                      <motion.article
+                        key={trade.id}
+                        custom={index}
+                        variants={rowVariants}
+                        initial="hidden"
+                        animate="visible"
+                        className="rounded-2xl border bg-card p-4 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <button type="button" className="min-w-0 text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
+                            <div className="flex items-center gap-2">
+                              <p className="text-base font-semibold text-foreground">{trade.pair}</p>
+                              {trade.screenshots.length > 0 ? <Camera className="h-4 w-4 text-muted-foreground" /> : null}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{formatTradeDate(trade.date)}</p>
+                            <span className={cn("mt-3 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", directionStyles[trade.direction])}>
+                              {trade.direction}
+                            </span>
+                          </button>
+                          <div className="text-right">
+                            <ResultBadge result={trade.result} />
+                            <ProfitDisplay value={trade.profit} className="mt-3 text-base font-semibold" />
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border bg-background/60 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Context</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <SessionChip session={trade.session} />
+                              <EmotionChip emotion={trade.emotion} />
+                              {trade.setup ? <SetupChip label={trade.setup} /> : null}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border bg-background/60 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Review</p>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <TradeReviewStatusBadge trade={trade} reviewed={!!linkedReview} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border bg-background/60 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Account</p>
+                            <p className="mt-2 text-sm font-medium text-foreground">{accountNames[trade.accountId || ""] || "Main Account"}</p>
+                          </div>
+                          <div className="rounded-xl border bg-background/60 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Position</p>
+                            <p className="mt-2 font-mono-price text-sm text-foreground">
+                              {trade.entry} / {trade.stopLoss} / {trade.takeProfit}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={() => navigate(`/trades/${trade.id}`)}>
+                            <Eye className="mr-1.5 h-4 w-4" />
+                            Open Trade
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 rounded-xl px-3"
+                            onClick={() => linkedReview ? navigate(`/trades/${trade.id}`) : setReviewTrade(trade)}
+                          >
+                            <MessageSquarePlus className="mr-1.5 h-4 w-4" />
+                            {linkedReview ? "Open Journal" : "Add Journal"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 rounded-xl px-3"
+                            onClick={() => {
+                              setEditingTrade(trade);
+                              setFormOpen(true);
+                            }}
+                          >
+                            <Pencil className="mr-1.5 h-4 w-4" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 rounded-xl px-3 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteId(trade.id)}
+                          >
+                            <Trash2 className="mr-1.5 h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
+                      </motion.article>
+                    );
+                  })}
+                  {filteredTrades.length === 0 ? (
+                    <div className="rounded-2xl border bg-card px-6 py-16 text-center">
+                      <p className="text-base font-medium text-foreground">No trades match these filters.</p>
+                      <p className="mt-2 text-sm text-muted-foreground">Adjust your account, session, setup, or emotion filters to widen the ledger view.</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="hidden overflow-hidden rounded-2xl border bg-card shadow-sm 2xl:block">
                 <div className="overflow-x-hidden">
                   <table className="w-full table-fixed text-left">
                     <thead>
@@ -417,18 +525,18 @@ export default function Trades() {
                             key={header}
                             className={cn(
                               "sticky top-0 z-10 bg-muted/90 px-3 py-3 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground backdrop-blur",
-                              header === "Journal" && "w-[112px] text-center",
-                              header === "Actions" && "w-[88px] text-right",
-                              header === "Date" && "w-[82px]",
-                              header === "Pair" && "w-[120px]",
-                              header === "Result" && "w-[78px]",
-                              header === "Profit" && "w-[108px]",
-                              header === "Session" && "w-[102px]",
-                              header === "Setup" && "w-[92px]",
-                              header === "Emotion" && "w-[118px]",
-                              header === "Review" && "w-[132px]",
-                              header === "Account" && "w-[96px]",
-                              header === "Position" && "w-[116px]",
+                              header === "Journal" && "w-[100px] text-center",
+                              header === "Actions" && "w-[76px] text-right",
+                              header === "Date" && "w-[74px]",
+                              header === "Pair" && "w-[110px]",
+                              header === "Result" && "w-[72px]",
+                              header === "Profit" && "w-[96px]",
+                              header === "Session" && "w-[92px]",
+                              header === "Setup" && "w-[84px]",
+                              header === "Emotion" && "w-[108px]",
+                              header === "Review" && "w-[124px]",
+                              header === "Account" && "w-[88px]",
+                              header === "Position" && "w-[104px]",
                               header === "Profit" && "text-right",
                             )}
                           >
@@ -580,6 +688,7 @@ export default function Trades() {
                     </tbody>
                   </table>
                 </div>
+                </div>
                 <PaginationControls
                   currentPage={currentLedgerPage}
                   totalPages={ledgerTotalPages}
@@ -597,7 +706,7 @@ export default function Trades() {
                   <p className="mt-2 text-sm text-muted-foreground">Try broadening the ledger filters to bring more screenshot entries into view.</p>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {screenbookTrades.map((trade, index) => {
                     const preview = trade.screenshots[0];
                     const linkedReview = tradeReviewMap[trade.id];
@@ -672,7 +781,7 @@ export default function Trades() {
                           </div>
                         </button>
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-t px-5 py-3">
+                        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex flex-wrap items-center gap-2">
                             <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={() => navigate(`/trades/${trade.id}`)}>
                               <Eye className="mr-1.5 h-4 w-4" />
@@ -685,7 +794,7 @@ export default function Trades() {
                               </Button>
                             ) : null}
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 sm:justify-end">
                             <button
                               type="button"
                               title="Edit trade"

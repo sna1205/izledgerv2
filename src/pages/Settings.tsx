@@ -90,7 +90,7 @@ export default function Settings() {
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               {success ? <p className="text-sm text-emerald-700">{success}</p> : null}
 
-              <Button type="submit" className="rounded-xl">
+              <Button type="submit" className="w-full rounded-xl sm:w-auto">
                 <ShieldCheck className="h-4 w-4" />
                 Save Password
               </Button>
@@ -104,7 +104,7 @@ export default function Settings() {
             <CardDescription>Log out of your current account on this device.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="rounded-xl" onClick={handleLogout}>
+            <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />
               Logout
             </Button>

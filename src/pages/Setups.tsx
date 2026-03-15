@@ -121,10 +121,11 @@ export default function Setups() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-[1440px]">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Setups</h1>
+          <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Setups</h1>
           <p className="mt-1 text-sm text-muted-foreground">Create and manage your trading setups</p>
         </div>
 
@@ -151,9 +152,9 @@ export default function Setups() {
             return (
               <article key={setup.id} className="rounded-xl border bg-card p-5 shadow-sm">
                 <div className="mb-4 flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex items-start gap-3">
                     <span
-                      className="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+                      className="inline-flex max-w-full truncate rounded-full px-3 py-1 text-xs font-semibold"
                       style={{ backgroundColor: setup.color, color: contrastColor }}
                     >
                       {setup.name}
@@ -206,7 +207,7 @@ export default function Setups() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle>{editingSetup ? "Edit Setup" : "Create Setup"}</DialogTitle>
           </DialogHeader>
@@ -248,11 +249,11 @@ export default function Setups() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setOpen(false)}>
+          <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>{editingSetup ? "Save Changes" : "Save Setup"}</Button>
+            <Button className="w-full sm:w-auto" onClick={handleSave}>{editingSetup ? "Save Changes" : "Save Setup"}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -271,6 +272,7 @@ export default function Setups() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 }

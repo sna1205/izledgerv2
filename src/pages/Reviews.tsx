@@ -482,10 +482,11 @@ export default function Reviews() {
   const viewingScope = viewingReview ? (viewingReview.reviewScope || viewingReview.type) : undefined;
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-[1440px]">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Reviews</h1>
+          <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Reviews</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Reflect on your trading performance and improve your decision making.
           </p>
@@ -505,7 +506,7 @@ export default function Reviews() {
 
       <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)} className="w-full">
         <div className="mb-6">
-          <TabsList className="grid w-full grid-cols-2 gap-0 sm:w-[520px] sm:grid-cols-4">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl border bg-muted/40 p-1 sm:w-[520px] sm:grid-cols-4">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="trade">Trade Reviews</TabsTrigger>
             <TabsTrigger value="daily">Daily Reviews</TabsTrigger>
@@ -536,7 +537,7 @@ export default function Reviews() {
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingReview ? "Edit Review" : reviewType === "daily" ? "Create Daily Review" : "Create Weekly Review"}
@@ -606,7 +607,7 @@ export default function Reviews() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">Week start</Label>
                   <Input type="date" value={weeklyForm.weekStart} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekStart: event.target.value }))} />
@@ -659,11 +660,11 @@ export default function Reviews() {
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setOpen(false)}>
+          <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save Review</Button>
+            <Button className="w-full sm:w-auto" onClick={handleSave}>Save Review</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -684,7 +685,7 @@ export default function Reviews() {
       )}
 
       <Dialog open={!!viewingReview} onOpenChange={(nextOpen) => !nextOpen && setViewingReview(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle>
               {viewingScope === "trade"
@@ -755,6 +756,7 @@ export default function Reviews() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 }

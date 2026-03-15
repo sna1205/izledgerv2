@@ -82,7 +82,7 @@ export function TradeReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90svh] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto rounded-2xl p-4 sm:w-[calc(100vw-2rem)] sm:p-6">
         <DialogHeader>
           <DialogTitle>{review ? "Edit Trade Review" : "Review Trade"}</DialogTitle>
         </DialogHeader>
@@ -153,11 +153,11 @@ export function TradeReviewDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>{review ? "Save Review" : "Create Review"}</Button>
+          <Button className="w-full sm:w-auto" onClick={handleSave}>{review ? "Save Review" : "Create Review"}</Button>
         </div>
       </DialogContent>
     </Dialog>

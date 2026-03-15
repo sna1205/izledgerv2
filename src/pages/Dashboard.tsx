@@ -128,14 +128,17 @@ export default function Dashboard() {
   });
 
   return (
-    <div className="p-6 max-w-6xl">
+    <div className="p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-[1440px]">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Session Summary</h1>
-          <p className="text-xs text-muted-foreground">{today}</p>
+          <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Session Summary</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{today}</p>
         </div>
 
-        <AccountFilterSelect value={accountFilter} onValueChange={setAccountFilter} />
+        <div className="w-full lg:w-auto">
+          <AccountFilterSelect value={accountFilter} onValueChange={setAccountFilter} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 xl:grid-cols-4">
@@ -149,13 +152,13 @@ export default function Dashboard() {
       </div>
 
       <div className="mb-8 rounded-lg border bg-card p-4 sm:p-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-sm font-medium text-foreground">Equity Curve</h2>
             <p className="text-xs text-muted-foreground">Cumulative PnL after each logged trade.</p>
           </div>
           {equityCurve.length > 0 && (
-            <div className="text-right">
+            <div className="sm:text-right">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Current Equity</p>
               <p className="font-mono-price text-lg font-semibold text-foreground">
                 {formatCurrency(equityCurve[equityCurve.length - 1].equity)}
@@ -169,7 +172,7 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground">Log trades for this account to see your equity curve.</p>
           </div>
         ) : (
-          <ChartContainer config={equityChartConfig} className="h-[280px] w-full">
+          <ChartContainer config={equityChartConfig} className="h-[240px] w-full sm:h-[280px]">
             <AreaChart accessibilityLayer data={equityCurve} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
@@ -189,6 +192,7 @@ export default function Dashboard() {
               <XAxis
                 axisLine={false}
                 dataKey="shortDate"
+                fontSize={12}
                 minTickGap={28}
                 tickLine={false}
                 tickMargin={8}
@@ -197,7 +201,8 @@ export default function Dashboard() {
                 axisLine={false}
                 tickLine={false}
                 tickMargin={8}
-                width={72}
+                fontSize={12}
+                width={56}
                 domain={[equityRange.min, equityRange.max]}
                 tickFormatter={formatAxisCurrency}
               />
@@ -252,7 +257,36 @@ export default function Dashboard() {
             </Link>
           </div>
         ) : (
-          <div className="border rounded-lg overflow-x-auto">
+          <>
+            <div className="grid gap-3 md:hidden">
+              {recentTrades.map((trade, i) => (
+                <motion.div
+                  key={trade.id}
+                  custom={i}
+                  variants={rowVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="rounded-xl border bg-card p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{trade.date}</p>
+                    </div>
+                    <ProfitDisplay value={trade.profit} />
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <ResultBadge result={trade.result} />
+                    <span className="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                      {trade.direction}
+                    </span>
+                    {trade.setup ? <SetupTag label={trade.setup} /> : null}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-lg border md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b bg-muted/50">
@@ -284,8 +318,10 @@ export default function Dashboard() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
+      </div>
       </div>
     </div>
   );

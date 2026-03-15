@@ -106,12 +106,12 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90svh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto rounded-2xl p-4 sm:w-[calc(100vw-2rem)] sm:p-6">
         <DialogHeader>
           <DialogTitle>{editTrade ? 'Edit Trade' : 'New Trade'}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Account</Label>
             <Select value={form.accountId} onValueChange={v => setForm({ ...form, accountId: v })}>
@@ -170,7 +170,7 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Profit ($)</Label>
             <Input type="number" step="any" placeholder="0.00" value={form.profit} onChange={e => setForm({ ...form, profit: e.target.value })} />
           </div>
-          <div className="col-span-2 space-y-2">
+          <div className="space-y-2 sm:col-span-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Setup</Label>
             <Select value={form.setup || "__none"} onValueChange={v => setForm({ ...form, setup: v === "__none" ? "" : v })}>
               <SelectTrigger><SelectValue placeholder="Select setup..." /></SelectTrigger>
@@ -201,19 +201,19 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-2 space-y-2">
+          <div className="space-y-2 sm:col-span-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
             <Textarea placeholder="Trade notes..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={3} />
           </div>
-          <div className="col-span-2 space-y-2">
+          <div className="space-y-2 sm:col-span-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Screenshots</Label>
             <ScreenshotUpload screenshots={form.screenshots} onChange={s => setForm({ ...form, screenshots: s })} />
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} className="active:translate-y-[1px]">
+        <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
+          <Button className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} className="w-full active:translate-y-[1px] sm:w-auto">
             {editTrade ? 'Update' : 'Save Trade'}
           </Button>
         </div>

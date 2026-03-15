@@ -53,14 +53,15 @@ export default function LotCalculator() {
   const canCalculate = entry > 0 && sl > 0 && entry !== sl && balance > 0 && risk > 0;
 
   return (
-    <div className="p-6 max-w-xl">
-      <div className="flex items-center gap-2 mb-6">
+    <div className="p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-3xl">
+      <div className="mb-6 flex items-center gap-2">
         <Calculator className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold text-foreground">Lot Calculator</h1>
+        <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Lot Calculator</h1>
       </div>
 
-      <div className="border rounded-lg p-5 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-4 rounded-lg border p-4 sm:p-5">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Pair</Label>
             <Select value={pair} onValueChange={setPair}>
@@ -104,7 +105,7 @@ export default function LotCalculator() {
               <span className="text-xs uppercase tracking-wider text-muted-foreground">Recommended Lot Size</span>
               <span className="text-xl font-semibold text-foreground font-mono">{lotSize.toFixed(2)}</span>
             </div>
-            <div className="grid grid-cols-3 gap-3 pt-1">
+            <div className="grid gap-3 pt-1 sm:grid-cols-3">
               {[
                 ["Mini Lots", (lotSize * 10).toFixed(1)],
                 ["Micro Lots", (lotSize * 100).toFixed(0)],
@@ -118,6 +119,7 @@ export default function LotCalculator() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

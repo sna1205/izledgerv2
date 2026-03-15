@@ -26,7 +26,7 @@ const items = [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const { user } = useAuth();
   const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
@@ -36,9 +36,10 @@ export function AppSidebar() {
       <SidebarContent>
         <div className="px-4 py-5">
           {!collapsed && (
-            <h1 className="text-sm font-semibold tracking-tight text-foreground">
-              IZLedger
-            </h1>
+            <div className="space-y-1">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground">IZLedger</h1>
+              <p className="text-xs text-muted-foreground">Trading journal</p>
+            </div>
           )}
         </div>
         <SidebarGroup>
@@ -50,8 +51,13 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
-                      className="hover:bg-accent/50"
+                      className="min-h-11 rounded-xl px-2 py-2 hover:bg-accent/50"
                       activeClassName="bg-accent text-foreground font-medium"
+                      onClick={() => {
+                        if (isMobile) {
+                          setOpenMobile(false);
+                        }
+                      }}
                     >
                       <item.icon className="mr-2 h-4 w-4 shrink-0" />
                       {!collapsed && <span>{item.title}</span>}

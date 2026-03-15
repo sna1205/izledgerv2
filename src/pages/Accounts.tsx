@@ -203,10 +203,11 @@ export default function Accounts() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
+      <div className="mx-auto w-full max-w-[1440px]">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Accounts</h1>
+          <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Accounts</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Track each account like its own trading business with profit, win rate, and equity context.
           </p>
@@ -250,7 +251,7 @@ export default function Accounts() {
               className={accountCardClass}
               onClick={() => handleOpenDashboard(account.id)}
             >
-              <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-4">
                   <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${iconData.className}`}>
                     <Icon className="h-5 w-5" />
@@ -273,7 +274,7 @@ export default function Accounts() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="shrink-0"
+                  className="w-full shrink-0 sm:w-auto"
                   onClick={(event) => {
                     event.stopPropagation();
                     openEditModal(account);
@@ -343,7 +344,7 @@ export default function Accounts() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
                   Created {new Date(account.createdAt).toLocaleDateString("en-US")}
                 </p>
@@ -385,7 +386,7 @@ export default function Accounts() {
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle>{editingAccount ? "Edit Account" : "Add Account"}</DialogTitle>
           </DialogHeader>
@@ -460,14 +461,15 @@ export default function Accounts() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setOpen(false)}>
+          <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>{editingAccount ? "Save Changes" : "Save Account"}</Button>
+            <Button className="w-full sm:w-auto" onClick={handleSave}>{editingAccount ? "Save Changes" : "Save Account"}</Button>
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

@@ -290,12 +290,14 @@ export default function Analytics() {
       <Tabs defaultValue="overview" className="w-full">
         <div className="sticky top-0 z-20 mb-6 bg-background/95 pb-4 pt-1 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <TabsList className="grid w-full grid-cols-3 sm:w-[320px]">
+            <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-muted/40 p-1 sm:w-[320px]">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="chart">Chart</TabsTrigger>
               <TabsTrigger value="calendar">Calendar</TabsTrigger>
             </TabsList>
-            <AccountFilterSelect value={accountFilter} onValueChange={setAccountFilter} />
+            <div className="w-full lg:w-auto">
+              <AccountFilterSelect value={accountFilter} onValueChange={setAccountFilter} />
+            </div>
           </div>
         </div>
 
@@ -328,7 +330,23 @@ export default function Analytics() {
               {stats.setupStats.length > 0 && (
                 <div>
                   <h2 className="text-sm font-medium text-foreground mb-3">Setup Performance</h2>
-                  <div className="border rounded-lg overflow-x-auto">
+                  <div className="grid gap-3 md:hidden">
+                    {stats.setupStats
+                      .sort((a, b) => b.total - a.total)
+                      .map((setup) => (
+                        <div key={setup.setup} className="rounded-xl border bg-card p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{setup.setup}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{setup.total} trades</p>
+                            </div>
+                            <ProfitDisplay value={setup.profit} />
+                          </div>
+                          <p className="mt-3 text-sm text-muted-foreground">Win Rate: {formatPercent(setup.winRate)}</p>
+                        </div>
+                      ))}
+                  </div>
+                  <div className="hidden overflow-x-auto rounded-lg border md:block">
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b bg-muted/50">
@@ -385,7 +403,7 @@ export default function Analytics() {
                     </div>
 
                     <div className="grid gap-6 md:grid-cols-[minmax(0,1.2fr)_220px] md:items-center">
-                      <ChartContainer config={analyticsChartConfig} className="h-[280px] w-full">
+                      <ChartContainer config={analyticsChartConfig} className="h-[240px] w-full sm:h-[280px]">
                         <PieChart>
                           <ChartTooltip
                             cursor={false}
@@ -509,7 +527,7 @@ export default function Analytics() {
                               <TooltipTrigger asChild>
                                 <button
                                   type="button"
-                                  className="group grid w-full grid-cols-[minmax(0,120px)_minmax(0,1fr)_auto] items-center gap-4 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-24px_rgba(15,23,42,0.45)]"
+                                  className="group grid w-full gap-4 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-24px_rgba(15,23,42,0.45)] sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_auto] sm:items-center"
                                 >
                                   <div>
                                     <p className="text-sm font-medium text-foreground">{item.emotion}</p>
@@ -529,7 +547,7 @@ export default function Analytics() {
                                     />
                                   </div>
 
-                                  <div className={cn("text-right font-mono-price text-sm font-semibold", item.profit > 0 ? "text-success" : item.profit < 0 ? "text-danger" : "text-muted-foreground")}>
+                                  <div className={cn("font-mono-price text-sm font-semibold sm:text-right", item.profit > 0 ? "text-success" : item.profit < 0 ? "text-danger" : "text-muted-foreground")}>
                                     {formatCurrency(item.profit)}
                                   </div>
                                 </button>
@@ -578,7 +596,7 @@ export default function Analytics() {
                   </div>
 
                   {hasSessionData ? (
-                    <ChartContainer config={analyticsChartConfig} className="h-[320px] w-full">
+                    <ChartContainer config={analyticsChartConfig} className="h-[280px] w-full sm:h-[320px]">
                       <BarChart accessibilityLayer data={sessionPerformance} margin={{ left: 12, right: 12, top: 16, bottom: 8 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis axisLine={false} dataKey="session" tick={renderSessionTick} tickLine={false} tickMargin={18} />
@@ -682,7 +700,7 @@ export default function Analytics() {
             </div>
 
             <div className="overflow-x-auto pb-1">
-              <div className="min-w-[1040px] xl:min-w-0">
+              <div className="min-w-[840px] lg:min-w-[980px] xl:min-w-0">
                 <div className="mb-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_240px] xl:items-end">
                   <div className="grid grid-cols-7 gap-3">
                     {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
@@ -788,7 +806,7 @@ export default function Analytics() {
 
               <div className="mt-6 space-y-4">
                 {selectedDay && (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-xl border border-border/60 bg-background/80 p-3">
                       <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Trades</p>
                       <p className="mt-2 text-2xl font-semibold text-foreground">{selectedDay.tradeCount}</p>
@@ -831,7 +849,7 @@ export default function Analytics() {
                           {trade.setup && <SetupTag label={trade.setup} />}
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div className="grid gap-2 text-xs sm:grid-cols-3">
                           <div className="rounded-md bg-muted/50 p-2">
                             <p className="mb-1 uppercase tracking-wider text-muted-foreground">Entry</p>
                             <p className="font-mono-price text-foreground">{trade.entry}</p>
