@@ -3,6 +3,10 @@ export type Result = 'Win' | 'Loss';
 export type TradeSession = 'Asia' | 'London' | 'New York';
 export type TradeEmotion = 'Calm' | 'Focused' | 'Confident' | 'Anxious' | 'Frustrated';
 export type AccountType = 'Personal' | 'Funded' | 'Challenge' | 'Demo' | 'Crypto';
+export type ReviewType = 'daily' | 'weekly';
+export type ReviewRuleStatus = 'Yes' | 'Partially' | 'No';
+export type ReviewRiskStatus = 'Yes' | 'Partially' | 'No';
+export type ReviewEmotion = 'Calm' | 'Confident' | 'Hesitant' | 'FOMO' | 'Revenge' | 'Frustrated';
 
 export interface SetupDefinition {
   id: string;
@@ -10,6 +14,29 @@ export interface SetupDefinition {
   description: string;
   color: string;
   createdAt: string;
+}
+
+export interface Review {
+  id: string;
+  type: ReviewType;
+  reviewDate?: string;
+  weekStart?: string;
+  weekEnd?: string;
+  wentWell?: string;
+  mistakes?: string;
+  followedRules?: ReviewRuleStatus;
+  emotion?: ReviewEmotion;
+  lessonLearned?: string;
+  improvementPlan?: string;
+  disciplineScore?: number;
+  weeklySummary?: string;
+  biggestWin?: string;
+  biggestMistake?: string;
+  riskManagement?: ReviewRiskStatus;
+  nextGoal?: string;
+  weeklyRating?: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Account {
@@ -76,4 +103,25 @@ export const ACCOUNT_BROKERS = [
   'Binance',
   'Bybit',
   'Manual',
+];
+
+export const REVIEW_RULE_STATUSES: ReviewRuleStatus[] = [
+  'Yes',
+  'Partially',
+  'No',
+];
+
+export const REVIEW_RISK_STATUSES: ReviewRiskStatus[] = [
+  'Yes',
+  'Partially',
+  'No',
+];
+
+export const REVIEW_EMOTIONS: ReviewEmotion[] = [
+  'Calm',
+  'Confident',
+  'Hesitant',
+  'FOMO',
+  'Revenge',
+  'Frustrated',
 ];

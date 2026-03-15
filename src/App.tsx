@@ -10,6 +10,7 @@ import TradeDetail from "./pages/TradeDetail";
 import Analytics from "./pages/Analytics";
 import Accounts from "./pages/Accounts";
 import Setups from "./pages/Setups";
+import Reviews from "./pages/Reviews";
 import LotCalculator from "./pages/LotCalculator";
 import NotFound from "./pages/NotFound";
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
+            <Route path="/reviews" element={<Reviews />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/:id" element={<TradeDetail />} />
             <Route path="/analytics" element={<Analytics />} />
