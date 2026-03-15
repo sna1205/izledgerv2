@@ -9,6 +9,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   SESSION_COOKIE_NAME: z.string().default("izledger_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
+  SESSION_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   SESSION_COOKIE_DOMAIN: z.string().optional().transform((value) => value || undefined),
   SESSION_COOKIE_SECURE: z.coerce.boolean().default(false),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),

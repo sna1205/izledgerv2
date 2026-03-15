@@ -6,8 +6,8 @@ import { componentTagger } from "lovable-tagger";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
-    port: 8080,
+    host: "127.0.0.1",
+    port: 3000,
     watch: {
       // Polling is more reliable for WSL + Windows-mounted workspaces.
       usePolling: true,

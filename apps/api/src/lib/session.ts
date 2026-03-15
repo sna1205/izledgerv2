@@ -15,7 +15,7 @@ export function getSessionCookieOptions() {
   return {
     path: "/",
     httpOnly: true,
-    sameSite: "lax" as const,
+    sameSite: env.SESSION_COOKIE_SAME_SITE,
     secure: env.SESSION_COOKIE_SECURE,
     domain: env.SESSION_COOKIE_DOMAIN,
     maxAge: env.SESSION_TTL_DAYS * 24 * 60 * 60,
