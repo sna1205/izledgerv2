@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
 import Analytics from "./pages/Analytics";
+import LotCalculator from "./pages/LotCalculator";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
