@@ -3,10 +3,11 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth";
 
 const pageTitles: Record<string, string> = {
-  "/": "Dashboard",
+  "/dashboard": "Dashboard",
   "/accounts": "Accounts",
   "/setups": "Setups",
   "/reviews": "Reviews",
@@ -36,16 +37,19 @@ export function AppLayout() {
                 <p className="hidden text-xs text-muted-foreground sm:block">IZLedger</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              className="h-10 max-w-[180px] rounded-xl px-2 sm:px-3"
-              onClick={() => navigate("/settings")}
-            >
-              <Avatar className="h-8 w-8 border">
-                <AvatarFallback className="bg-muted text-xs font-medium">{initials}</AvatarFallback>
-              </Avatar>
-              <span className="hidden max-w-[120px] truncate text-sm font-medium sm:inline-block">{user?.username}</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                className="h-10 max-w-[180px] rounded-xl px-2 sm:px-3"
+                onClick={() => navigate("/settings")}
+              >
+                <Avatar className="h-8 w-8 border">
+                  <AvatarFallback className="bg-muted text-xs font-medium">{initials}</AvatarFallback>
+                </Avatar>
+                <span className="hidden max-w-[120px] truncate text-sm font-medium sm:inline-block">{user?.username}</span>
+              </Button>
+            </div>
           </header>
           <main className="flex-1 overflow-x-hidden overflow-y-auto">
             <Outlet />

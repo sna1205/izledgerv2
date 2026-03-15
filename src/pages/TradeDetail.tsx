@@ -475,8 +475,8 @@ export default function TradeDetail() {
                     key={`${insight.text}-${index}`}
                     className={cn(
                       "rounded-2xl border px-4 py-4 text-sm leading-relaxed",
-                      insight.tone === "good" && "border-emerald-200 bg-emerald-50/80 text-emerald-900",
-                      insight.tone === "warn" && "border-amber-200 bg-amber-50/80 text-amber-900",
+                      insight.tone === "good" && "border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100",
+                      insight.tone === "warn" && "border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
                       insight.tone === "neutral" && "bg-background/60 text-foreground",
                     )}
                   >

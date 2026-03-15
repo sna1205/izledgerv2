@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,13 +28,16 @@ export default function Register() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_35%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.75))] px-4 py-6 sm:py-10">
       <div className="w-full max-w-md">
+        <div className="mb-4 flex justify-end">
+          <ThemeToggle />
+        </div>
         <div className="mb-8 text-center">
           <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">IZLedger</p>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Create account</h1>
           <p className="mt-2 text-sm text-muted-foreground">Set up a username and password so you can get into the journal quickly.</p>
         </div>
 
-        <Card className="rounded-3xl border-border/70 bg-card/95 shadow-xl shadow-slate-200/60">
+        <Card className="rounded-3xl border-border/70 bg-card/95 shadow-xl shadow-slate-200/60 dark:shadow-black/40">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl">Minimal setup</CardTitle>
             <CardDescription>Only the essentials for an MVP trading workflow.</CardDescription>

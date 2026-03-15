@@ -194,7 +194,7 @@ export default function Accounts() {
 
   const handleOpenDashboard = (accountId: string) => {
     setStoredAccountFilter(accountId);
-    navigate("/");
+    navigate("/dashboard");
   };
 
   const handleOpenAnalytics = (accountId: string) => {

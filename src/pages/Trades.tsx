@@ -59,22 +59,22 @@ const LEDGER_PAGE_SIZE = 10;
 const SCREENBOOK_PAGE_SIZE = 9;
 
 const directionStyles = {
-  Buy: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  Sell: "border-rose-200 bg-rose-50 text-rose-700",
+  Buy: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+  Sell: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
 } as const;
 
 const emotionStyles: Record<TradeEmotion, string> = {
-  Calm: "border-sky-200 bg-sky-50 text-sky-700",
-  Focused: "border-teal-200 bg-teal-50 text-teal-700",
-  Confident: "border-violet-200 bg-violet-50 text-violet-700",
-  Anxious: "border-rose-200 bg-rose-50 text-rose-700",
-  Frustrated: "border-amber-200 bg-amber-50 text-amber-700",
+  Calm: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300",
+  Focused: "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300",
+  Confident: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300",
+  Anxious: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
+  Frustrated: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
 };
 
 const sessionStyles: Record<TradeSession, string> = {
-  Asia: "border-slate-200 bg-slate-50 text-slate-700",
-  London: "border-blue-200 bg-blue-50 text-blue-700",
-  "New York": "border-indigo-200 bg-indigo-50 text-indigo-700",
+  Asia: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300",
+  London: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300",
+  "New York": "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300",
 };
 
 function compactSetupLabel(setup: string) {
@@ -133,7 +133,7 @@ function FilterField({
 
 function SetupChip({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium tracking-[0.12em] text-slate-700">
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium tracking-[0.12em] text-slate-700 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300">
       {compactSetupLabel(label)}
     </span>
   );

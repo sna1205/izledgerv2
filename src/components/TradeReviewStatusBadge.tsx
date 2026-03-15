@@ -13,7 +13,7 @@ function getTradeReviewStatus(trade: Trade, reviewed: boolean) {
     return {
       label: "Reviewed",
       icon: CheckCircle2,
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-300",
     };
   }
 
@@ -23,14 +23,14 @@ function getTradeReviewStatus(trade: Trade, reviewed: boolean) {
     return {
       label: "Needs Review",
       icon: TriangleAlert,
-      className: "border-amber-200 bg-amber-50 text-amber-700",
+      className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/12 dark:text-amber-300",
     };
   }
 
   return {
     label: "Not Reviewed",
     icon: Clock3,
-    className: "border-slate-200 bg-slate-50 text-slate-600",
+    className: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300",
   };
 }
 

@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 const WIN_COLOR = "#10b981";
 const LOSS_COLOR = "#f43f5e";
 const NEUTRAL_COLOR = "#94a3b8";
-const fintechCardClass = "rounded-xl border border-border/60 bg-card p-6 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.28)]";
+const fintechCardClass = "rounded-xl border border-border/60 bg-card p-6 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.14)] dark:shadow-[0_22px_48px_-28px_rgba(0,0,0,0.55)]";
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -67,31 +67,31 @@ function formatPercent(value: number) {
 
 function getCalendarTone(totalProfit: number, tradeCount: number) {
   if (tradeCount === 0) {
-    return "border-slate-200 bg-slate-50 text-slate-500";
+    return "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-500/20 dark:bg-slate-500/8 dark:text-slate-400";
   }
 
   if (totalProfit > 0) {
-    return "border-emerald-300 bg-emerald-50 text-foreground";
+    return "border-emerald-300 bg-emerald-50 text-foreground dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-foreground";
   }
 
   if (totalProfit < 0) {
-    return "border-rose-300 bg-rose-50 text-foreground";
+    return "border-rose-300 bg-rose-50 text-foreground dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-foreground";
   }
 
-  return "border-slate-200 bg-slate-50 text-foreground";
+  return "border-slate-200 bg-slate-50 text-foreground dark:border-slate-500/20 dark:bg-slate-500/8 dark:text-foreground";
 }
 
 function getPnLTextTone(totalProfit: number, tradeCount: number) {
   if (tradeCount === 0) {
-    return "text-slate-500";
+    return "text-slate-500 dark:text-slate-400";
   }
 
   if (totalProfit > 0) {
-    return "text-emerald-600";
+    return "text-emerald-600 dark:text-emerald-300";
   }
 
   if (totalProfit < 0) {
-    return "text-rose-600";
+    return "text-rose-600 dark:text-rose-300";
   }
 
   return "text-foreground";
@@ -757,11 +757,11 @@ export default function Analytics() {
                                   </div>
                                   <div className="flex items-center justify-between gap-4">
                                     <span className="text-muted-foreground">Profit</span>
-                                    <span className="font-mono-price font-medium text-emerald-600">{`+$${day.grossProfit.toFixed(2)}`}</span>
+                                <span className="font-mono-price font-medium text-emerald-600 dark:text-emerald-300">{`+$${day.grossProfit.toFixed(2)}`}</span>
                                   </div>
                                   <div className="flex items-center justify-between gap-4">
                                     <span className="text-muted-foreground">Loss</span>
-                                    <span className="font-mono-price font-medium text-rose-600">{day.grossLoss < 0 ? `-$${Math.abs(day.grossLoss).toFixed(2)}` : "$0.00"}</span>
+                                    <span className="font-mono-price font-medium text-rose-600 dark:text-rose-300">{day.grossLoss < 0 ? `-$${Math.abs(day.grossLoss).toFixed(2)}` : "$0.00"}</span>
                                   </div>
                                 </div>
                               ) : (
