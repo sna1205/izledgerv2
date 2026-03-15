@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Trades from "./pages/Trades";
 import TradeDetail from "./pages/TradeDetail";
 import Analytics from "./pages/Analytics";
+import LotCalculator from "./pages/LotCalculator";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/:id" element={<TradeDetail />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/calculator" element={<LotCalculator />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
