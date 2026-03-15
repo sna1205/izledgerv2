@@ -1,4 +1,4 @@
-import { LayoutDashboard, Table2, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, Table2, BarChart3, Calculator } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
