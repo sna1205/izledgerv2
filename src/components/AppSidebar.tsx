@@ -16,6 +16,7 @@ const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Trades", url: "/trades", icon: Table2 },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "Lot Calculator", url: "/calculator", icon: Calculator },
 ];
 
 export function AppSidebar() {
