@@ -1,4 +1,5 @@
-import { Trade } from './types';
+import { getDefaultAccountId } from "./accounts";
+import { Trade } from "./types";
 
 const STORAGE_KEY = 'trading-journal-trades';
 
@@ -6,7 +7,10 @@ export function getTrades(): Trade[] {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as Trade[];
+    return (JSON.parse(raw) as Trade[]).map((trade) => ({
+      ...trade,
+      accountId: trade.accountId || getDefaultAccountId(),
+    }));
   } catch {
     return [];
   }

@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    watch: {
+      // Polling is more reliable for WSL + Windows-mounted workspaces.
+      usePolling: true,
+      interval: 100,
+    },
     hmr: {
       overlay: false,
     },

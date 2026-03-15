@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil, Trash2, CameraOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getAccountById } from "@/lib/accounts";
 import { getTradeById, updateTrade, deleteTrade } from "@/lib/trades";
 import { ResultBadge } from "@/components/ResultBadge";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
@@ -50,6 +51,7 @@ export default function TradeDetail() {
   const risk = Math.abs(trade.entry - trade.stopLoss);
   const reward = Math.abs(trade.takeProfit - trade.entry);
   const rr = risk > 0 ? (reward / risk).toFixed(2) : '—';
+  const accountName = getAccountById(trade.accountId || "")?.name || "Main Account";
 
   return (
     <div className="p-6 max-w-5xl">
@@ -83,7 +85,10 @@ export default function TradeDetail() {
 
           <div className="border rounded-lg divide-y">
             {[
+              ['Account', accountName],
               ['Direction', trade.direction],
+              ['Session', trade.session || '—'],
+              ['Emotion', trade.emotion || '—'],
               ['Entry', trade.entry],
               ['Stop Loss', trade.stopLoss],
               ['Take Profit', trade.takeProfit],

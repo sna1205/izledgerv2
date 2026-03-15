@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScreenshotUpload } from "./ScreenshotUpload";
-import { Trade, Direction, Result, PAIRS, SETUPS } from "@/lib/types";
+import { getAccounts, getDefaultAccountId } from "@/lib/accounts";
+import { getSetups } from "@/lib/setups";
+import { Trade, Direction, Result, PAIRS, SESSIONS, EMOTIONS, type TradeEmotion, type TradeSession } from "@/lib/types";
 import { generateId } from "@/lib/trades";
 
 interface TradeFormDialogProps {
@@ -17,8 +19,11 @@ interface TradeFormDialogProps {
 }
 
 export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: TradeFormDialogProps) {
+  const [accounts, setAccounts] = useState(() => getAccounts());
+  const [setups, setSetups] = useState(() => getSetups());
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
+    accountId: getDefaultAccountId(),
     pair: 'XAUUSD',
     direction: 'Buy' as Direction,
     entry: '',
@@ -27,14 +32,22 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
     profit: '',
     result: 'Win' as Result,
     setup: '',
+    session: 'London' as TradeSession,
+    emotion: 'Calm' as TradeEmotion,
     notes: '',
     screenshots: [] as string[],
   });
 
   useEffect(() => {
+    if (open) {
+      setAccounts(getAccounts());
+      setSetups(getSetups());
+    }
+
     if (editTrade) {
       setForm({
         date: editTrade.date,
+        accountId: editTrade.accountId || getDefaultAccountId(),
         pair: editTrade.pair,
         direction: editTrade.direction,
         entry: String(editTrade.entry),
@@ -43,12 +56,15 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
         profit: String(editTrade.profit),
         result: editTrade.result,
         setup: editTrade.setup,
+        session: editTrade.session || 'London',
+        emotion: editTrade.emotion || 'Calm',
         notes: editTrade.notes,
         screenshots: editTrade.screenshots,
       });
     } else {
       setForm({
         date: new Date().toISOString().split('T')[0],
+        accountId: getDefaultAccountId(),
         pair: 'XAUUSD',
         direction: 'Buy',
         entry: '',
@@ -57,6 +73,8 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
         profit: '',
         result: 'Win',
         setup: '',
+        session: 'London',
+        emotion: 'Calm',
         notes: '',
         screenshots: [],
       });
@@ -67,6 +85,7 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
     const trade: Trade = {
       id: editTrade?.id || generateId(),
       date: form.date,
+      accountId: form.accountId,
       pair: form.pair,
       direction: form.direction,
       entry: parseFloat(form.entry) || 0,
@@ -75,6 +94,8 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
       profit: parseFloat(form.profit) || 0,
       result: form.result,
       setup: form.setup,
+      session: form.session,
+      emotion: form.emotion,
       notes: form.notes,
       screenshots: form.screenshots,
       createdAt: editTrade?.createdAt || new Date().toISOString(),
@@ -91,6 +112,15 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Account</Label>
+            <Select value={form.accountId} onValueChange={v => setForm({ ...form, accountId: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {accounts.map(account => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
             <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -142,10 +172,32 @@ export function TradeFormDialog({ open, onOpenChange, onSave, editTrade }: Trade
           </div>
           <div className="col-span-2 space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Setup</Label>
-            <Select value={form.setup} onValueChange={v => setForm({ ...form, setup: v })}>
+            <Select value={form.setup || "__none"} onValueChange={v => setForm({ ...form, setup: v === "__none" ? "" : v })}>
               <SelectTrigger><SelectValue placeholder="Select setup..." /></SelectTrigger>
               <SelectContent>
-                {SETUPS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                <SelectItem value="__none">No setup</SelectItem>
+                {setups.map((setup) => <SelectItem key={setup.id} value={setup.name}>{setup.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {setups.length === 0 && (
+              <p className="text-xs text-muted-foreground">Create setups in the Setups page to use them here.</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Session</Label>
+            <Select value={form.session} onValueChange={v => setForm({ ...form, session: v as TradeSession })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SESSIONS.map(session => <SelectItem key={session} value={session}>{session}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Emotion</Label>
+            <Select value={form.emotion} onValueChange={v => setForm({ ...form, emotion: v as TradeEmotion })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {EMOTIONS.map(emotion => <SelectItem key={emotion} value={emotion}>{emotion}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
