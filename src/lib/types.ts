@@ -3,7 +3,7 @@ export type Result = 'Win' | 'Loss';
 export type TradeSession = 'Asia' | 'London' | 'New York';
 export type TradeEmotion = 'Calm' | 'Focused' | 'Confident' | 'Anxious' | 'Frustrated';
 export type AccountType = 'Personal' | 'Funded' | 'Challenge' | 'Demo' | 'Crypto';
-export type ReviewType = 'daily' | 'weekly';
+export type ReviewType = 'daily' | 'weekly' | 'trade';
 export type ReviewRuleStatus = 'Yes' | 'Partially' | 'No';
 export type ReviewRiskStatus = 'Yes' | 'Partially' | 'No';
 export type ReviewEmotion = 'Calm' | 'Confident' | 'Hesitant' | 'FOMO' | 'Revenge' | 'Frustrated';
@@ -19,6 +19,8 @@ export interface SetupDefinition {
 export interface Review {
   id: string;
   type: ReviewType;
+  reviewScope?: ReviewType;
+  tradeId?: string;
   reviewDate?: string;
   weekStart?: string;
   weekEnd?: string;
@@ -35,6 +37,13 @@ export interface Review {
   riskManagement?: ReviewRiskStatus;
   nextGoal?: string;
   weeklyRating?: number;
+  executionRating?: number;
+  emotionRating?: number;
+  whatWentWell?: string;
+  whatWentWrong?: string;
+  mistakesMade?: string;
+  improvementForNextTrade?: string;
+  wouldTakeAgain?: boolean;
   createdAt: string;
   updatedAt: string;
 }

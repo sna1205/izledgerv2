@@ -1,14 +1,18 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil, Trash2, CameraOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TradeReviewContent } from "@/components/TradeReviewContent";
+import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
 import { getAccountById } from "@/lib/accounts";
+import { addReview, getReviewByTradeId, updateReview } from "@/lib/reviews";
 import { getTradeById, updateTrade, deleteTrade } from "@/lib/trades";
 import { ResultBadge } from "@/components/ResultBadge";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { SetupTag } from "@/components/SetupTag";
 import { TradeFormDialog } from "@/components/TradeFormDialog";
-import { Trade } from "@/lib/types";
+import { Review, Trade } from "@/lib/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,8 +28,10 @@ export default function TradeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [trade, setTrade] = useState(() => getTradeById(id || ''));
+  const [review, setReview] = useState(() => getReviewByTradeId(id || ""));
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   if (!trade) {
     return (
@@ -52,6 +58,17 @@ export default function TradeDetail() {
   const reward = Math.abs(trade.takeProfit - trade.entry);
   const rr = risk > 0 ? (reward / risk).toFixed(2) : '—';
   const accountName = getAccountById(trade.accountId || "")?.name || "Main Account";
+
+  const handleSaveReview = (updatedReview: Review) => {
+    if (review) {
+      updateReview(updatedReview);
+    } else {
+      const { id, createdAt, updatedAt, ...draft } = updatedReview;
+      addReview(draft);
+    }
+
+    setReview(getReviewByTradeId(trade.id) || updatedReview);
+  };
 
   return (
     <div className="p-6 max-w-5xl">
@@ -81,6 +98,7 @@ export default function TradeDetail() {
             <ResultBadge result={trade.result} />
             <ProfitDisplay value={trade.profit} className="text-lg" />
             {trade.setup && <SetupTag label={trade.setup} />}
+            <TradeReviewStatusBadge trade={trade} reviewed={!!review} />
           </div>
 
           <div className="border rounded-lg divide-y">
@@ -107,6 +125,31 @@ export default function TradeDetail() {
               <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{trade.notes}</p>
             </div>
           )}
+
+          <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Trade Review</h3>
+                <p className="text-xs text-muted-foreground">
+                  Capture execution quality, mistakes, and what to improve next time.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>
+                {review ? "Edit Review" : "Write Review"}
+              </Button>
+            </div>
+
+            {review ? (
+              <TradeReviewContent review={review} />
+            ) : (
+              <div className="rounded-xl border border-dashed p-5 text-center">
+                <p className="text-sm text-muted-foreground">No trade review yet.</p>
+                <Button className="mt-3" size="sm" onClick={() => setReviewOpen(true)}>
+                  Write Review
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: Screenshots */}
@@ -136,11 +179,21 @@ export default function TradeDetail() {
         editTrade={trade}
       />
 
+      <TradeReviewDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        trade={trade}
+        review={review}
+        onSave={handleSaveReview}
+      />
+
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>
+              This action cannot be undone. Any linked trade review will be preserved in Reviews as journal history.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

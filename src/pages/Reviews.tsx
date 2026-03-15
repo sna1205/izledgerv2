@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { endOfWeek, format, parseISO, startOfWeek } from "date-fns";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
+import { TradeReviewContent } from "@/components/TradeReviewContent";
+import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { TradeReviewSummary } from "@/components/TradeReviewSummary";
 import { addReview, deleteReview, getReviews, updateReview } from "@/lib/reviews";
+import { getTrades } from "@/lib/trades";
 import {
   REVIEW_EMOTIONS,
   REVIEW_RISK_STATUSES,
@@ -29,7 +34,10 @@ import {
   ReviewRiskStatus,
   ReviewRuleStatus,
   ReviewType,
+  Trade,
 } from "@/lib/types";
+
+type ReviewScopeFilter = "all" | ReviewType;
 
 const emptyDailyForm = {
   reviewDate: new Date().toISOString().split("T")[0],
@@ -62,33 +70,36 @@ function formatWeeklyLabel(startDate: string, endDate: string) {
 }
 
 export default function Reviews() {
+  const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>(() => getReviews());
-  const [activeTab, setActiveTab] = useState<ReviewType>("daily");
+  const [trades] = useState<Trade[]>(() => getTrades());
+  const [scopeFilter, setScopeFilter] = useState<ReviewScopeFilter>("all");
   const [open, setOpen] = useState(false);
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [viewingReview, setViewingReview] = useState<Review | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [reviewType, setReviewType] = useState<ReviewType>("daily");
+  const [reviewType, setReviewType] = useState<Exclude<ReviewType, "trade">>("daily");
   const [dailyForm, setDailyForm] = useState(emptyDailyForm);
   const [weeklyForm, setWeeklyForm] = useState(emptyWeeklyForm);
+  const [tradeReviewTrade, setTradeReviewTrade] = useState<Trade | null>(null);
+  const [tradeReviewEditing, setTradeReviewEditing] = useState<Review | null>(null);
 
-  const dailyReviews = useMemo(
-    () =>
-      reviews
-        .filter((review) => review.type === "daily")
-        .sort((a, b) => (b.reviewDate || "").localeCompare(a.reviewDate || "")),
-    [reviews],
+  const tradeMap = useMemo(
+    () => Object.fromEntries(trades.map((trade) => [trade.id, trade])),
+    [trades],
   );
 
-  const weeklyReviews = useMemo(
-    () =>
-      reviews
-        .filter((review) => review.type === "weekly")
-        .sort((a, b) => (b.weekEnd || "").localeCompare(a.weekEnd || "")),
-    [reviews],
-  );
+  const filteredReviews = useMemo(() => {
+    const sorted = [...reviews].sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt));
 
-  const openCreateModal = (type: ReviewType) => {
+    if (scopeFilter === "all") {
+      return sorted;
+    }
+
+    return sorted.filter((review) => (review.reviewScope || review.type) === scopeFilter);
+  }, [reviews, scopeFilter]);
+
+  const openCreateModal = (type: Exclude<ReviewType, "trade">) => {
     setReviewType(type);
     setEditingReview(null);
     setDailyForm(emptyDailyForm);
@@ -97,10 +108,23 @@ export default function Reviews() {
   };
 
   const openEditModal = (review: Review) => {
-    setEditingReview(review);
-    setReviewType(review.type);
+    if ((review.reviewScope || review.type) === "trade") {
+      const linkedTrade = review.tradeId ? tradeMap[review.tradeId] : undefined;
 
-    if (review.type === "daily") {
+      if (!linkedTrade) {
+        toast.error("Linked trade not found. This orphaned review can still be viewed.");
+        return;
+      }
+
+      setTradeReviewTrade(linkedTrade);
+      setTradeReviewEditing(review);
+      return;
+    }
+
+    setEditingReview(review);
+    setReviewType((review.reviewScope || review.type) as Exclude<ReviewType, "trade">);
+
+    if ((review.reviewScope || review.type) === "daily") {
       setDailyForm({
         reviewDate: review.reviewDate || emptyDailyForm.reviewDate,
         wentWell: review.wentWell || "",
@@ -142,6 +166,7 @@ export default function Reviews() {
 
       const payload = {
         type: "daily" as const,
+        reviewScope: "daily" as const,
         reviewDate: dailyForm.reviewDate,
         weekStart: undefined,
         weekEnd: undefined,
@@ -181,6 +206,7 @@ export default function Reviews() {
 
       const payload = {
         type: "weekly" as const,
+        reviewScope: "weekly" as const,
         reviewDate: undefined,
         weekStart: weeklyForm.weekStart,
         weekEnd: weeklyForm.weekEnd,
@@ -220,11 +246,240 @@ export default function Reviews() {
 
   const handleDelete = () => {
     if (!deleteId) return;
+
     deleteReview(deleteId);
     setReviews((current) => current.filter((review) => review.id !== deleteId));
     setDeleteId(null);
     toast.success("Review deleted.");
   };
+
+  const handleSaveTradeReview = (review: Review) => {
+    if (tradeReviewEditing) {
+      updateReview(review);
+    } else {
+      const { id, createdAt, updatedAt, ...draft } = review;
+      addReview(draft);
+    }
+
+    setReviews(getReviews());
+    setTradeReviewTrade(null);
+    setTradeReviewEditing(null);
+  };
+
+  const renderDailyReviewCard = (review: Review) => (
+    <article
+      key={review.id}
+      className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-foreground">
+            Daily Review - {review.reviewDate ? formatDailyLabel(review.reviewDate) : "Untitled"}
+          </h2>
+
+          <div className="flex flex-wrap gap-3 text-sm">
+            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+              Discipline Score: {review.disciplineScore || 0}/5
+            </span>
+            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+              Emotion: {review.emotion || "-"}
+            </span>
+            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+              Rules Followed: {review.followedRules || "-"}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Lesson</p>
+            <p className="text-sm leading-relaxed text-foreground">
+              {review.lessonLearned || "No lesson recorded yet."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
+            <Eye className="mr-1 h-4 w-4" />
+            View
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
+            <Pencil className="mr-1 h-4 w-4" />
+            Edit
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
+      </div>
+    </article>
+  );
+
+  const renderWeeklyReviewCard = (review: Review) => (
+    <article
+      key={review.id}
+      className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-foreground">
+            Weekly Review - {review.weekStart && review.weekEnd ? formatWeeklyLabel(review.weekStart, review.weekEnd) : "Untitled"}
+          </h2>
+
+          <div className="flex flex-wrap gap-3 text-sm">
+            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+              Rating: {review.weeklyRating || 0}/10
+            </span>
+            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+              Risk Management: {review.riskManagement || "-"}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Biggest Mistake</p>
+            <p className="text-sm leading-relaxed text-foreground">
+              {review.biggestMistake || "No mistake recorded yet."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
+            <Eye className="mr-1 h-4 w-4" />
+            View
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
+            <Pencil className="mr-1 h-4 w-4" />
+            Edit
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
+      </div>
+    </article>
+  );
+
+  const renderTradeReviewCard = (review: Review) => {
+    const linkedTrade = review.tradeId ? tradeMap[review.tradeId] : undefined;
+    const orphaned = !linkedTrade;
+
+    return (
+      <article
+        key={review.id}
+        className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                Trade Review - {linkedTrade ? `${linkedTrade.pair} • ${formatDailyLabel(linkedTrade.date)}` : "Deleted Trade"}
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                {linkedTrade ? (
+                  <>
+                    <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+                      {linkedTrade.direction}
+                    </span>
+                    <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+                      {linkedTrade.result}
+                    </span>
+                    {linkedTrade.setup && (
+                      <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+                        {linkedTrade.setup}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-800">
+                    Trade deleted, review preserved
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-sm">
+              <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+                Execution: {review.executionRating || 0}/5
+              </span>
+              <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+                Discipline: {review.disciplineScore || 0}/5
+              </span>
+              <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
+                Emotion: {review.emotionRating || 0}/5
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Lesson</p>
+              <p className="text-sm leading-relaxed text-foreground">
+                {review.lessonLearned || "No lesson recorded yet."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {linkedTrade && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${linkedTrade.id}`)}>
+                View Trade
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
+              <Eye className="mr-1 h-4 w-4" />
+              View
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={orphaned}
+              onClick={() => openEditModal(review)}
+            >
+              <Pencil className="mr-1 h-4 w-4" />
+              Edit
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
+              <Trash2 className="mr-1 h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  const renderReviewList = (items: Review[], emptyCta?: () => void) => {
+    if (items.length === 0) {
+      return (
+        <div className="rounded-xl border bg-card p-10 text-center shadow-sm">
+          <p className="text-base font-medium text-foreground">No reviews yet.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Start reflecting on your trades to improve your performance.
+          </p>
+          {emptyCta && (
+            <Button className="mt-4" onClick={emptyCta}>
+              Create your first review
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {items.map((review) => {
+          const scope = review.reviewScope || review.type;
+
+          if (scope === "trade") return renderTradeReviewCard(review);
+          if (scope === "weekly") return renderWeeklyReviewCard(review);
+          return renderDailyReviewCard(review);
+        })}
+      </div>
+    );
+  };
+
+  const viewingTrade = viewingReview?.tradeId ? tradeMap[viewingReview.tradeId] : undefined;
+  const viewingScope = viewingReview ? (viewingReview.reviewScope || viewingReview.type) : undefined;
 
   return (
     <div className="p-6">
@@ -248,150 +503,27 @@ export default function Reviews() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReviewType)} className="w-full">
+      <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)} className="w-full">
         <div className="mb-6">
-          <TabsList className="grid w-full grid-cols-2 sm:w-[320px]">
+          <TabsList className="grid w-full grid-cols-2 gap-0 sm:w-[520px] sm:grid-cols-4">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="trade">Trade Reviews</TabsTrigger>
             <TabsTrigger value="daily">Daily Reviews</TabsTrigger>
             <TabsTrigger value="weekly">Weekly Reviews</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="daily" className="mt-0">
-          {dailyReviews.length === 0 ? (
-            <div className="rounded-xl border bg-card p-10 text-center shadow-sm">
-              <p className="text-base font-medium text-foreground">No reviews yet.</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Start reflecting on your trades to improve your performance.
-              </p>
-              <Button className="mt-4" onClick={() => openCreateModal("daily")}>
-                Create your first review
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {dailyReviews.map((review) => (
-                <article
-                  key={review.id}
-                  className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold text-foreground">
-                          Daily Review - {review.reviewDate ? formatDailyLabel(review.reviewDate) : "Untitled"}
-                        </h2>
-                      </div>
-
-                      <div className="flex flex-wrap gap-3 text-sm">
-                        <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                          Discipline Score: {review.disciplineScore || 0}/5
-                        </span>
-                        <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                          Emotion: {review.emotion || "-"}
-                        </span>
-                        <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                          Rules Followed: {review.followedRules || "-"}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Lesson</p>
-                        <p className="text-sm leading-relaxed text-foreground">
-                          {review.lessonLearned || "No lesson recorded yet."}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-                        <Eye className="mr-1 h-4 w-4" />
-                        View
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
-                        <Pencil className="mr-1 h-4 w-4" />
-                        Edit
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-                        <Trash2 className="mr-1 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+        <TabsContent value="all" className="mt-0">
+          {renderReviewList(filteredReviews)}
         </TabsContent>
-
+        <TabsContent value="trade" className="mt-0">
+          {renderReviewList(filteredReviews)}
+        </TabsContent>
+        <TabsContent value="daily" className="mt-0">
+          {renderReviewList(filteredReviews, () => openCreateModal("daily"))}
+        </TabsContent>
         <TabsContent value="weekly" className="mt-0">
-          {weeklyReviews.length === 0 ? (
-            <div className="rounded-xl border bg-card p-10 text-center shadow-sm">
-              <p className="text-base font-medium text-foreground">No reviews yet.</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Start reflecting on your trades to improve your performance.
-              </p>
-              <Button className="mt-4" onClick={() => openCreateModal("weekly")}>
-                Create your first review
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {weeklyReviews.map((review) => (
-                <article
-                  key={review.id}
-                  className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold text-foreground">
-                          Weekly Review - {review.weekStart && review.weekEnd ? formatWeeklyLabel(review.weekStart, review.weekEnd) : "Untitled"}
-                        </h2>
-                      </div>
-
-                      <div className="flex flex-wrap gap-3 text-sm">
-                        <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                          Rating: {review.weeklyRating || 0}/10
-                        </span>
-                        <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                          Risk Management: {review.riskManagement || "-"}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Biggest Mistake</p>
-                        <p className="text-sm leading-relaxed text-foreground">
-                          {review.biggestMistake || "No mistake recorded yet."}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Goal For Next Week</p>
-                        <p className="text-sm leading-relaxed text-foreground">
-                          {review.nextGoal || "No goal recorded yet."}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-                        <Eye className="mr-1 h-4 w-4" />
-                        View
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
-                        <Pencil className="mr-1 h-4 w-4" />
-                        Edit
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-                        <Trash2 className="mr-1 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          {renderReviewList(filteredReviews, () => openCreateModal("weekly"))}
         </TabsContent>
       </Tabs>
 
@@ -424,81 +556,50 @@ export default function Reviews() {
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">What went well</Label>
-                <Textarea
-                  rows={4}
-                  value={dailyForm.wentWell}
-                  onChange={(event) => setDailyForm((current) => ({ ...current, wentWell: event.target.value }))}
-                />
+                <Textarea rows={4} value={dailyForm.wentWell} onChange={(event) => setDailyForm((current) => ({ ...current, wentWell: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Mistakes made</Label>
-                <Textarea
-                  rows={4}
-                  value={dailyForm.mistakes}
-                  onChange={(event) => setDailyForm((current) => ({ ...current, mistakes: event.target.value }))}
-                />
+                <Textarea rows={4} value={dailyForm.mistakes} onChange={(event) => setDailyForm((current) => ({ ...current, mistakes: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Did I follow my trading rules?</Label>
-                <Select
-                  value={dailyForm.followedRules}
-                  onValueChange={(value) => setDailyForm((current) => ({ ...current, followedRules: value as ReviewRuleStatus }))}
-                >
+                <Select value={dailyForm.followedRules} onValueChange={(value) => setDailyForm((current) => ({ ...current, followedRules: value as ReviewRuleStatus }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {REVIEW_RULE_STATUSES.map((status) => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
+                    {REVIEW_RULE_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Main emotion during trading</Label>
-                <Select
-                  value={dailyForm.emotion}
-                  onValueChange={(value) => setDailyForm((current) => ({ ...current, emotion: value as ReviewEmotion }))}
-                >
+                <Select value={dailyForm.emotion} onValueChange={(value) => setDailyForm((current) => ({ ...current, emotion: value as ReviewEmotion }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {REVIEW_EMOTIONS.map((emotion) => (
-                      <SelectItem key={emotion} value={emotion}>{emotion}</SelectItem>
-                    ))}
+                    {REVIEW_EMOTIONS.map((emotion) => <SelectItem key={emotion} value={emotion}>{emotion}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Lesson learned</Label>
-                <Textarea
-                  rows={4}
-                  value={dailyForm.lessonLearned}
-                  onChange={(event) => setDailyForm((current) => ({ ...current, lessonLearned: event.target.value }))}
-                />
+                <Textarea rows={4} value={dailyForm.lessonLearned} onChange={(event) => setDailyForm((current) => ({ ...current, lessonLearned: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">What will I improve tomorrow?</Label>
-                <Textarea
-                  rows={4}
-                  value={dailyForm.improvementPlan}
-                  onChange={(event) => setDailyForm((current) => ({ ...current, improvementPlan: event.target.value }))}
-                />
+                <Textarea rows={4} value={dailyForm.improvementPlan} onChange={(event) => setDailyForm((current) => ({ ...current, improvementPlan: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discipline score</Label>
-                <Select
-                  value={dailyForm.disciplineScore}
-                  onValueChange={(value) => setDailyForm((current) => ({ ...current, disciplineScore: value }))}
-                >
+                <Select value={dailyForm.disciplineScore} onValueChange={(value) => setDailyForm((current) => ({ ...current, disciplineScore: value }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["1", "2", "3", "4", "5"].map((score) => (
-                      <SelectItem key={score} value={score}>{score}</SelectItem>
-                    ))}
+                    {["1", "2", "3", "4", "5"].map((score) => <SelectItem key={score} value={score}>{score}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -508,85 +609,50 @@ export default function Reviews() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">Week start</Label>
-                  <Input
-                    type="date"
-                    value={weeklyForm.weekStart}
-                    onChange={(event) => setWeeklyForm((current) => ({ ...current, weekStart: event.target.value }))}
-                  />
+                  <Input type="date" value={weeklyForm.weekStart} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekStart: event.target.value }))} />
                 </div>
-
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">Week end</Label>
-                  <Input
-                    type="date"
-                    value={weeklyForm.weekEnd}
-                    onChange={(event) => setWeeklyForm((current) => ({ ...current, weekEnd: event.target.value }))}
-                  />
+                  <Input type="date" value={weeklyForm.weekEnd} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekEnd: event.target.value }))} />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Weekly summary</Label>
-                <Textarea
-                  rows={4}
-                  value={weeklyForm.weeklySummary}
-                  onChange={(event) => setWeeklyForm((current) => ({ ...current, weeklySummary: event.target.value }))}
-                />
+                <Textarea rows={4} value={weeklyForm.weeklySummary} onChange={(event) => setWeeklyForm((current) => ({ ...current, weeklySummary: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Biggest win this week</Label>
-                <Textarea
-                  rows={3}
-                  value={weeklyForm.biggestWin}
-                  onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestWin: event.target.value }))}
-                />
+                <Textarea rows={3} value={weeklyForm.biggestWin} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestWin: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Biggest mistake this week</Label>
-                <Textarea
-                  rows={3}
-                  value={weeklyForm.biggestMistake}
-                  onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestMistake: event.target.value }))}
-                />
+                <Textarea rows={3} value={weeklyForm.biggestMistake} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestMistake: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Did I respect risk management?</Label>
-                <Select
-                  value={weeklyForm.riskManagement}
-                  onValueChange={(value) => setWeeklyForm((current) => ({ ...current, riskManagement: value as ReviewRiskStatus }))}
-                >
+                <Select value={weeklyForm.riskManagement} onValueChange={(value) => setWeeklyForm((current) => ({ ...current, riskManagement: value as ReviewRiskStatus }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {REVIEW_RISK_STATUSES.map((status) => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
+                    {REVIEW_RISK_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Goal for next week</Label>
-                <Textarea
-                  rows={3}
-                  value={weeklyForm.nextGoal}
-                  onChange={(event) => setWeeklyForm((current) => ({ ...current, nextGoal: event.target.value }))}
-                />
+                <Textarea rows={3} value={weeklyForm.nextGoal} onChange={(event) => setWeeklyForm((current) => ({ ...current, nextGoal: event.target.value }))} />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Weekly self rating</Label>
-                <Select
-                  value={weeklyForm.weeklyRating}
-                  onValueChange={(value) => setWeeklyForm((current) => ({ ...current, weeklyRating: value }))}
-                >
+                <Select value={weeklyForm.weeklyRating} onValueChange={(value) => setWeeklyForm((current) => ({ ...current, weeklyRating: value }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].map((score) => (
-                      <SelectItem key={score} value={score}>{score}</SelectItem>
-                    ))}
+                    {["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].map((score) => <SelectItem key={score} value={score}>{score}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -602,40 +668,54 @@ export default function Reviews() {
         </DialogContent>
       </Dialog>
 
+      {tradeReviewTrade && (
+        <TradeReviewDialog
+          open={!!tradeReviewTrade}
+          onOpenChange={(open) => {
+            if (!open) {
+              setTradeReviewTrade(null);
+              setTradeReviewEditing(null);
+            }
+          }}
+          trade={tradeReviewTrade}
+          review={tradeReviewEditing}
+          onSave={handleSaveTradeReview}
+        />
+      )}
+
       <Dialog open={!!viewingReview} onOpenChange={(nextOpen) => !nextOpen && setViewingReview(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {viewingReview?.type === "daily"
-                ? `Daily Review - ${viewingReview.reviewDate ? formatDailyLabel(viewingReview.reviewDate) : ""}`
-                : `Weekly Review - ${viewingReview?.weekStart && viewingReview?.weekEnd ? formatWeeklyLabel(viewingReview.weekStart, viewingReview.weekEnd) : ""}`}
+              {viewingScope === "trade"
+                ? "Trade Review"
+                : viewingScope === "weekly"
+                  ? `Weekly Review - ${viewingReview?.weekStart && viewingReview?.weekEnd ? formatWeeklyLabel(viewingReview.weekStart, viewingReview.weekEnd) : ""}`
+                  : `Daily Review - ${viewingReview?.reviewDate ? formatDailyLabel(viewingReview.reviewDate) : ""}`}
             </DialogTitle>
           </DialogHeader>
 
           {viewingReview && (
             <div className="space-y-4">
-              {viewingReview.type === "daily" ? (
+              {viewingScope === "trade" ? (
                 <>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Rules</p>
-                      <p className="mt-2 text-sm font-medium text-foreground">{viewingReview.followedRules || "-"}</p>
+                  {viewingTrade && <TradeReviewSummary trade={viewingTrade} />}
+                  <TradeReviewContent review={viewingReview} orphaned={!viewingTrade} />
+                  {viewingTrade && (
+                    <div className="flex justify-end">
+                      <Button variant="outline" onClick={() => navigate(`/trades/${viewingTrade.id}`)}>
+                        View Linked Trade
+                      </Button>
                     </div>
-                    <div className="rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Emotion</p>
-                      <p className="mt-2 text-sm font-medium text-foreground">{viewingReview.emotion || "-"}</p>
-                    </div>
-                    <div className="rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Discipline</p>
-                      <p className="mt-2 text-sm font-medium text-foreground">{viewingReview.disciplineScore || 0}/5</p>
-                    </div>
-                  </div>
-
+                  )}
+                </>
+              ) : viewingScope === "weekly" ? (
+                <>
                   {[
-                    ["What went well", viewingReview.wentWell],
-                    ["Mistakes made", viewingReview.mistakes],
-                    ["Lesson learned", viewingReview.lessonLearned],
-                    ["What will I improve tomorrow?", viewingReview.improvementPlan],
+                    ["Weekly summary", viewingReview.weeklySummary],
+                    ["Biggest win this week", viewingReview.biggestWin],
+                    ["Biggest mistake this week", viewingReview.biggestMistake],
+                    ["Goal for next week", viewingReview.nextGoal],
                   ].map(([label, value]) => (
                     <div key={label} className="space-y-2 rounded-xl border p-4">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
@@ -645,22 +725,11 @@ export default function Reviews() {
                 </>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Risk Management</p>
-                      <p className="mt-2 text-sm font-medium text-foreground">{viewingReview.riskManagement || "-"}</p>
-                    </div>
-                    <div className="rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Rating</p>
-                      <p className="mt-2 text-sm font-medium text-foreground">{viewingReview.weeklyRating || 0}/10</p>
-                    </div>
-                  </div>
-
                   {[
-                    ["Weekly summary", viewingReview.weeklySummary],
-                    ["Biggest win this week", viewingReview.biggestWin],
-                    ["Biggest mistake this week", viewingReview.biggestMistake],
-                    ["Goal for next week", viewingReview.nextGoal],
+                    ["What went well", viewingReview.wentWell],
+                    ["Mistakes made", viewingReview.mistakes],
+                    ["Lesson learned", viewingReview.lessonLearned],
+                    ["What will I improve tomorrow?", viewingReview.improvementPlan],
                   ].map(([label, value]) => (
                     <div key={label} className="space-y-2 rounded-xl border p-4">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>

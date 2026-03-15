@@ -1,12 +1,16 @@
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { CameraOff, Images, LayoutList, Plus, Pencil, Trash2 } from "lucide-react";
+import { CameraOff, Eye, Images, LayoutList, MessageSquarePlus, Pencil, Plus, Trash2 } from "lucide-react";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { filterTradesByAccount, useAccountFilter } from "@/lib/account-filter";
 import { getAccounts } from "@/lib/accounts";
+import { addReview, getReviews, updateReview } from "@/lib/reviews";
 import { getTrades, addTrade, updateTrade, deleteTrade } from "@/lib/trades";
-import { Trade } from "@/lib/types";
+import { Review, Trade } from "@/lib/types";
 import { TradeFormDialog } from "@/components/TradeFormDialog";
 import { ResultBadge } from "@/components/ResultBadge";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
@@ -37,6 +41,9 @@ export default function Trades() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Review[]>(() => getReviews());
+  const [reviewTrade, setReviewTrade] = useState<Trade | null>(null);
+  const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [accountFilter, setAccountFilter] = useAccountFilter();
   const navigate = useNavigate();
   const accountNames = useMemo(
@@ -44,10 +51,24 @@ export default function Trades() {
     [trades, accountFilter],
   );
   const filteredTrades = useMemo(() => filterTradesByAccount(trades, accountFilter), [accountFilter, trades]);
+  const tradeReviewMap = useMemo(
+    () =>
+      Object.fromEntries(
+        reviews
+          .filter((review) => review.reviewScope === "trade" && review.tradeId)
+          .map((review) => [review.tradeId as string, review]),
+      ),
+    [reviews],
+  );
 
-  const refresh = useCallback(() => setTrades(getTrades()), []);
+  const refresh = useCallback(() => {
+    setTrades(getTrades());
+    setReviews(getReviews());
+  }, []);
 
   const handleSave = (trade: Trade) => {
+    const isNewTrade = !editingTrade;
+
     if (editingTrade) {
       updateTrade(trade);
     } else {
@@ -55,6 +76,18 @@ export default function Trades() {
     }
     setEditingTrade(null);
     refresh();
+
+    if (isNewTrade) {
+      toast.success("Trade saved successfully.", {
+        action: {
+          label: "Review trade",
+          onClick: () => {
+            setReviewTrade(trade);
+            setEditingReview(null);
+          },
+        },
+      });
+    }
   };
 
   const handleDelete = () => {
@@ -63,6 +96,30 @@ export default function Trades() {
       setDeleteId(null);
       refresh();
     }
+  };
+
+  const handleSaveTradeReview = (review: Review) => {
+    if (editingReview) {
+      updateReview(review);
+    } else {
+      const { id, createdAt, updatedAt, ...draft } = review;
+      addReview(draft);
+    }
+
+    setReviewTrade(null);
+    setEditingReview(null);
+    setReviews(getReviews());
+    toast.success(editingReview ? "Trade review updated." : "Trade review created.");
+  };
+
+  const openCreateReview = (trade: Trade) => {
+    setReviewTrade(trade);
+    setEditingReview(null);
+  };
+
+  const openEditReview = (trade: Trade) => {
+    setReviewTrade(trade);
+    setEditingReview(tradeReviewMap[trade.id] || null);
   };
 
   return (
@@ -117,8 +174,11 @@ export default function Trades() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    {['Date','Pair','Account','Session','Direction','Entry','SL','TP','Setup','Emotion','Result','Profit',''].map(h => (
-                      <th key={h} className="text-xs font-medium uppercase tracking-wider text-muted-foreground py-2 px-4">
+                    {['Date','Pair','Account','Session','Direction','Entry','SL','TP','Setup','Emotion','Review','Result','Profit','Actions'].map(h => (
+                      <th
+                        key={h}
+                        className={`py-2 px-4 text-xs font-medium uppercase tracking-wider text-muted-foreground ${h === 'Actions' ? 'min-w-[220px] text-right' : ''}`}
+                      >
                         {h}
                       </th>
                     ))}
@@ -145,17 +205,45 @@ export default function Trades() {
                       <td className="py-2 px-4 text-sm font-mono-price">{trade.takeProfit}</td>
                       <td className="py-2 px-4">{trade.setup && <SetupTag label={trade.setup} />}</td>
                       <td className="py-2 px-4 text-sm text-muted-foreground">{trade.emotion || '—'}</td>
+                      <td className="py-2 px-4"><TradeReviewStatusBadge trade={trade} reviewed={!!tradeReviewMap[trade.id]} /></td>
                       <td className="py-2 px-4"><ResultBadge result={trade.result} /></td>
                       <td className="py-2 px-4 text-right"><ProfitDisplay value={trade.profit} /></td>
-                      <td className="py-2 px-4">
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                      <td className="min-w-[220px] py-2 px-4">
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          {tradeReviewMap[trade.id] ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-3"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/trades/${trade.id}`); }}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              Open Review
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-3"
+                              onClick={(e) => { e.stopPropagation(); openCreateReview(trade); }}
+                            >
+                              <MessageSquarePlus className="h-3.5 w-3.5" />
+                              Write Review
+                            </Button>
+                          )}
                           <button
+                            type="button"
+                            title="Edit trade"
+                            aria-label="Edit trade"
                             className="p-1 rounded hover:bg-accent transition-colors"
                             onClick={(e) => { e.stopPropagation(); setEditingTrade(trade); setFormOpen(true); }}
                           >
                             <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                           </button>
                           <button
+                            type="button"
+                            title="Delete trade"
+                            aria-label="Delete trade"
                             className="p-1 rounded hover:bg-destructive/10 transition-colors"
                             onClick={(e) => { e.stopPropagation(); setDeleteId(trade.id); }}
                           >
@@ -167,7 +255,7 @@ export default function Trades() {
                   ))}
                   {filteredTrades.length === 0 && (
                     <tr>
-                      <td colSpan={13} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      <td colSpan={14} className="px-4 py-12 text-center text-sm text-muted-foreground">
                         No trades found for the selected account.
                       </td>
                     </tr>
@@ -186,6 +274,7 @@ export default function Trades() {
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredTrades.map((trade, i) => {
                   const preview = trade.screenshots[0];
+                  const linkedReview = tradeReviewMap[trade.id];
 
                   return (
                     <motion.article
@@ -239,6 +328,10 @@ export default function Trades() {
                             <ProfitDisplay value={trade.profit} />
                           </div>
 
+                          <div className="mb-3">
+                            <TradeReviewStatusBadge trade={trade} reviewed={!!linkedReview} />
+                          </div>
+
                           <div className="mb-3 flex flex-wrap items-center gap-2">
                             {trade.setup && <SetupTag label={trade.setup} />}
                             <span className="text-xs text-muted-foreground">{trade.direction}</span>
@@ -261,14 +354,43 @@ export default function Trades() {
                         </div>
                       </button>
 
-                      <div className="flex items-center justify-end gap-1 border-t px-4 py-2" onClick={e => e.stopPropagation()}>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {linkedReview ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-3"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/trades/${trade.id}`); }}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              Open Review
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-3"
+                              onClick={(e) => { e.stopPropagation(); openCreateReview(trade); }}
+                            >
+                              <MessageSquarePlus className="h-3.5 w-3.5" />
+                              Write Review
+                            </Button>
+                          )}
+                        </div>
                         <button
+                          type="button"
+                          title="Edit trade"
+                          aria-label="Edit trade"
                           className="p-1 rounded hover:bg-accent transition-colors"
                           onClick={(e) => { e.stopPropagation(); setEditingTrade(trade); setFormOpen(true); }}
                         >
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </button>
                         <button
+                          type="button"
+                          title="Delete trade"
+                          aria-label="Delete trade"
                           className="p-1 rounded hover:bg-destructive/10 transition-colors"
                           onClick={(e) => { e.stopPropagation(); setDeleteId(trade.id); }}
                         >
@@ -291,11 +413,28 @@ export default function Trades() {
         editTrade={editingTrade}
       />
 
+      {reviewTrade && (
+        <TradeReviewDialog
+          open={!!reviewTrade}
+          onOpenChange={(open) => {
+            if (!open) {
+              setReviewTrade(null);
+              setEditingReview(null);
+            }
+          }}
+          trade={reviewTrade}
+          review={editingReview}
+          onSave={handleSaveTradeReview}
+        />
+      )}
+
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>
+              This action cannot be undone. Any linked trade review will be preserved in Reviews as journal history.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
