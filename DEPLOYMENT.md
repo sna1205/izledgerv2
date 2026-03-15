@@ -50,7 +50,7 @@ Create a Railway service from this repo with:
 
 The Railway config already defines:
 
-- Railpack builder
+- Dockerfile builder
 - `npm run start`
 - `npx prisma migrate deploy` before deploy
 - health check at `/health`
