@@ -1,73 +1,60 @@
-# Welcome to your Lovable project
+# IZLedger Monorepo
 
-## Project info
+IZLedger is now organized as a workspace-based monorepo so the frontend, backend, and future shared packages can evolve together without the old mixed root layout.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Structure
 
-## How can I edit this code?
+```text
+apps/
+  web/      React + Vite frontend
+  api/      Fastify + Prisma backend
+packages/
+  shared/   Shared types and contracts
+```
 
-There are several ways of editing your application.
+## Workspace commands
 
-**Use Lovable**
+Install everything from the root:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+```bash
+npm install
+```
 
-Changes made via Lovable will be committed automatically to this repo.
+Run both apps together:
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Run one app at a time:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm run dev:web
+npm run dev:api
+```
 
-**Use GitHub Codespaces**
+Build:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+npm run build
+```
 
-## What technologies are used for this project?
+Backend Prisma helpers:
 
-This project is built with:
+```bash
+npm run prisma:generate
+npm run prisma:migrate:dev
+npm run prisma:seed
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## App docs
 
-## How can I deploy this project?
+- Web app: [apps/web](/mnt/c/Users/PCM/Documents/IZledgerV2/chart-mate-log/apps/web)
+- API app: [apps/api/README.md](/mnt/c/Users/PCM/Documents/IZledgerV2/chart-mate-log/apps/api/README.md)
+- Frontend integration notes: [apps/api/FRONTEND_INTEGRATION.md](/mnt/c/Users/PCM/Documents/IZledgerV2/chart-mate-log/apps/api/FRONTEND_INTEGRATION.md)
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Notes
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- The frontend lives entirely under `apps/web`.
+- The backend lives entirely under `apps/api`.
+- Shared code can now move into `packages/shared` without cross-app path hacks.

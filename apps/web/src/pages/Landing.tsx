@@ -81,6 +81,7 @@ const showcaseItems = [
     heading: "A dashboard that turns scattered execution into one clear performance view.",
     body: "Track your session activity, equity curve, and recent trades without digging through spreadsheets or screenshots. IZLedger gives serious traders an overview that feels operational, not decorative.",
     image: "/img/Dashboard.png",
+    darkImage: "/img/Dashboard-dark.png",
     imageAlt: "IZLedger dashboard overview",
   },
   {
@@ -88,6 +89,7 @@ const showcaseItems = [
     heading: "A premium journal ledger built to scan context, result, and review status in seconds.",
     body: "Trade logs are organized like a real execution dashboard. Pair, session, setup, emotion, review status, and position context stay visible so traders can move fast without losing detail.",
     image: "/img/Tradelog1.png",
+    darkImage: "/img/Tradelog1-dark.png",
     imageAlt: "IZLedger trade log ledger",
   },
   {
@@ -95,6 +97,7 @@ const showcaseItems = [
     heading: "From ledger to screenbook, every trade stays reviewable and visually grounded.",
     body: "Switch into a screenshot-first view when you want chart context and pattern recognition, not just rows. This makes journaling easier for traders who review visually.",
     image: "/img/Tradelog2.png",
+    darkImage: "/img/Tradelog2-dark.png",
     imageAlt: "IZLedger trade screenbook",
   },
   {
@@ -102,6 +105,7 @@ const showcaseItems = [
     heading: "Trade detail pages built like execution reports, not flat data sheets.",
     body: "Bring screenshots, notes, review scores, emotional context, and structured reflection into one premium workspace that helps lessons stick.",
     image: "/img/Tradedetail.png",
+    darkImage: "/img/Tradedetail-dark.png",
     imageAlt: "IZLedger trade detail review page",
   },
   {
@@ -109,6 +113,7 @@ const showcaseItems = [
     heading: "Calendar-based feedback that makes consistency visible day by day.",
     body: "See profitable days, losing days, inactivity, and weekly rhythm in one glance. The calendar makes behavior patterns obvious before they become expensive.",
     image: "/img/Calendar.png",
+    darkImage: "/img/Calendar-dark.png",
     imageAlt: "IZLedger analytics calendar",
   },
 ];
@@ -135,10 +140,12 @@ function SectionHeading({
 
 function BrowserFrame({
   src,
+  darkSrc,
   alt,
   className,
 }: {
   src: string;
+  darkSrc?: string;
   alt: string;
   className?: string;
 }) {
@@ -150,7 +157,8 @@ function BrowserFrame({
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
         <div className="ml-3 h-8 flex-1 rounded-full border border-border/60 bg-muted/50" />
       </div>
-      <img src={src} alt={alt} className="h-full w-full object-cover object-top" />
+      <img src={src} alt={alt} className={cn("h-full w-full object-cover object-top", darkSrc && "dark:hidden")} />
+      {darkSrc ? <img src={darkSrc} alt={alt} className="hidden h-full w-full object-cover object-top dark:block" /> : null}
     </div>
   );
 }
@@ -239,16 +247,17 @@ export default function Landing() {
               <div className="relative">
                 <BrowserFrame
                   src="/img/Dashboard.png"
+                  darkSrc="/img/Dashboard-dark.png"
                   alt="IZLedger dashboard"
                   className="rotate-[-1.5deg] bg-card/95"
                 />
 
                 <div className="absolute -left-6 bottom-8 hidden w-[220px] lg:block">
-                  <BrowserFrame src="/img/Tradedetail.png" alt="IZLedger trade detail" className="rotate-[-7deg]" />
+                  <BrowserFrame src="/img/Tradedetail.png" darkSrc="/img/Tradedetail-dark.png" alt="IZLedger trade detail" className="rotate-[-7deg]" />
                 </div>
 
                 <div className="absolute -right-4 top-10 hidden w-[210px] lg:block">
-                  <BrowserFrame src="/img/Calendar.png" alt="IZLedger calendar" className="rotate-[6deg]" />
+                  <BrowserFrame src="/img/Calendar.png" darkSrc="/img/Calendar-dark.png" alt="IZLedger calendar" className="rotate-[6deg]" />
                 </div>
               </div>
             </div>
@@ -365,7 +374,7 @@ export default function Landing() {
 
                   <div className={cn("relative", index % 2 === 1 && "lg:order-1")}>
                     <div className="absolute inset-0 rounded-[34px] bg-primary/10 blur-3xl" />
-                    <BrowserFrame src={item.image} alt={item.imageAlt} className="relative" />
+                    <BrowserFrame src={item.image} darkSrc={item.darkImage} alt={item.imageAlt} className="relative" />
                   </div>
                 </div>
               ))}

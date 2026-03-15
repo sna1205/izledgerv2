@@ -67,7 +67,7 @@ function formatPercent(value: number) {
 
 function getCalendarTone(totalProfit: number, tradeCount: number) {
   if (tradeCount === 0) {
-    return "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-500/20 dark:bg-slate-500/8 dark:text-slate-400";
+    return "border-border/70 bg-card/70 text-muted-foreground shadow-none hover:border-border hover:bg-card/90 dark:bg-card/60";
   }
 
   if (totalProfit > 0) {
@@ -78,7 +78,7 @@ function getCalendarTone(totalProfit: number, tradeCount: number) {
     return "border-rose-300 bg-rose-50 text-foreground dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-foreground";
   }
 
-  return "border-slate-200 bg-slate-50 text-foreground dark:border-slate-500/20 dark:bg-slate-500/8 dark:text-foreground";
+  return "border-border/70 bg-card/80 text-foreground hover:border-border hover:bg-card/95 dark:bg-card/70";
 }
 
 function getPnLTextTone(totalProfit: number, tradeCount: number) {
@@ -727,19 +727,19 @@ export default function Analytics() {
                                 className={cn(
                                   "min-h-[90px] rounded-xl border p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-20px_rgba(15,23,42,0.32)]",
                                   getCalendarTone(day.totalProfit, day.tradeCount),
-                                  !day.inCurrentMonth && "border-slate-200 bg-slate-50/70 text-slate-400 opacity-60 shadow-none",
+                                  !day.inCurrentMonth && "border-border/60 bg-muted/35 text-muted-foreground opacity-60 shadow-none hover:translate-y-0 hover:bg-muted/35 hover:shadow-none",
                                   selectedDateKey === day.dateKey && "ring-2 ring-primary/30",
                                 )}
                               >
                                 <div className="mb-3">
-                                  <span className={cn("text-xs font-medium", day.inCurrentMonth ? "text-muted-foreground" : "text-slate-400")}>
+                                  <span className={cn("text-xs font-medium", day.inCurrentMonth ? "text-muted-foreground" : "text-muted-foreground/80")}>
                                     {format(day.date, "d")}
                                   </span>
                                 </div>
-                                <p className={cn("max-w-full break-words font-mono-price text-[11px] font-semibold leading-snug tracking-[-0.03em] sm:text-[13px]", day.inCurrentMonth ? getPnLTextTone(day.totalProfit, day.tradeCount) : "text-slate-400")}>
+                                <p className={cn("max-w-full break-words font-mono-price text-[11px] font-semibold leading-snug tracking-[-0.03em] sm:text-[13px]", day.inCurrentMonth ? getPnLTextTone(day.totalProfit, day.tradeCount) : "text-muted-foreground/80")}>
                                   {day.tradeCount > 0 ? formatCurrency(day.totalProfit) : "$0.00"}
                                 </p>
-                                <p className={cn("mt-3 text-xs", day.inCurrentMonth ? "text-muted-foreground" : "text-slate-400")}>
+                                <p className={cn("mt-3 text-xs", day.inCurrentMonth ? "text-muted-foreground" : "text-muted-foreground/80")}>
                                   {day.tradeCount > 0 ? `${day.tradeCount} trade${day.tradeCount === 1 ? "" : "s"}` : "No trades"}
                                 </p>
                               </button>
