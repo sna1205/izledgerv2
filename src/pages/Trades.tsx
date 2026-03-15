@@ -423,10 +423,11 @@ export default function Trades() {
                               header === "Pair" && "w-[120px]",
                               header === "Result" && "w-[78px]",
                               header === "Profit" && "w-[108px]",
-                              header === "Session" && "w-[112px]",
+                              header === "Session" && "w-[102px]",
                               header === "Setup" && "w-[92px]",
-                              header === "Emotion" && "w-[128px]",
-                              header === "Account" && "w-[92px]",
+                              header === "Emotion" && "w-[118px]",
+                              header === "Review" && "w-[132px]",
+                              header === "Account" && "w-[96px]",
                               header === "Position" && "w-[116px]",
                               header === "Profit" && "text-right",
                             )}
@@ -481,11 +482,11 @@ export default function Trades() {
                             <td className="px-3 py-4 align-top">
                               <EmotionChip emotion={trade.emotion} />
                             </td>
-                            <td className="px-3 py-4 align-top">
+                            <td className="overflow-hidden px-3 py-4 align-top">
                               <TradeReviewStatusBadge trade={trade} reviewed={!!linkedReview} />
                             </td>
                             <td className="px-3 py-4 align-top">
-                              <p className="text-sm font-medium text-foreground">{accountNames[trade.accountId || ""] || "Main Account"}</p>
+                              <p className="truncate text-sm font-medium text-foreground">{accountNames[trade.accountId || ""] || "Main Account"}</p>
                             </td>
                             <td className="px-3 py-4 align-top">
                               <div className="space-y-1 text-xs">

@@ -1,9 +1,10 @@
-import { LayoutDashboard, Table2, BarChart3, Calculator, Landmark, Tags, FileText } from "lucide-react";
+import { LayoutDashboard, Table2, BarChart3, Calculator, Landmark, Tags, FileText, Settings as SettingsIcon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
@@ -11,6 +12,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/lib/auth";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -20,11 +22,14 @@ const items = [
   { title: "Trades", url: "/trades", icon: Table2 },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Lot Calculator", url: "/calculator", icon: Calculator },
+  { title: "Settings", url: "/settings", icon: SettingsIcon },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { user } = useAuth();
+  const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
 
   return (
     <Sidebar collapsible="icon">
@@ -32,7 +37,7 @@ export function AppSidebar() {
         <div className="px-4 py-5">
           {!collapsed && (
             <h1 className="text-sm font-semibold tracking-tight text-foreground">
-              TradeLog
+              IZLedger
             </h1>
           )}
         </div>
@@ -58,6 +63,19 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className="flex items-center gap-3 rounded-xl border bg-background/70 px-3 py-3">
+          <Avatar className="h-9 w-9 border">
+            <AvatarFallback className="bg-muted text-xs font-medium">{initials}</AvatarFallback>
+          </Avatar>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-foreground">{user?.username}</p>
+              <p className="text-xs text-muted-foreground">Logged in</p>
+            </div>
+          )}
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

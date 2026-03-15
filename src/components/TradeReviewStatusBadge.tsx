@@ -39,8 +39,8 @@ export function TradeReviewStatusBadge({ trade, reviewed }: TradeReviewStatusBad
   const Icon = status.icon;
 
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium", status.className)}>
-      <Icon className="mr-1.5 h-3.5 w-3.5" />
+    <span className={cn("inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[11px] font-medium leading-tight", status.className)}>
+      <Icon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
       {status.label}
     </span>
   );
