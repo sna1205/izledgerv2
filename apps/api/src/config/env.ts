@@ -1,6 +1,42 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+
+    if (["false", "0", "no", "off", ""].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean());
+
+const optionalStringFromEnv = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined;
+  }
+
+  return value;
+}, z.string().optional());
+
+const optionalUrlFromEnv = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined;
+  }
+
+  return value;
+}, z.string().url().optional());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -11,20 +47,57 @@ const envSchema = z.object({
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   SESSION_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   SESSION_COOKIE_DOMAIN: z.string().optional().transform((value) => value || undefined),
-  SESSION_COOKIE_SECURE: z.coerce.boolean().default(false),
+  SESSION_COOKIE_SECURE: booleanFromEnv.default(false),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(1),
-  STORAGE_BUCKET: z.string().min(1),
+  STORAGE_ENABLED: booleanFromEnv.default(true),
+  STORAGE_BUCKET: optionalStringFromEnv,
   STORAGE_REGION: z.string().default("auto"),
-  STORAGE_ENDPOINT: z.string().url(),
-  STORAGE_ACCESS_KEY: z.string().min(1),
-  STORAGE_SECRET_KEY: z.string().min(1),
-  STORAGE_PUBLIC_BASE_URL: z.string().optional().transform((value) => value || undefined),
-  STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
-  STORAGE_SIGNED_READS: z.coerce.boolean().default(true),
+  STORAGE_ENDPOINT: optionalUrlFromEnv,
+  STORAGE_ACCESS_KEY: optionalStringFromEnv,
+  STORAGE_SECRET_KEY: optionalStringFromEnv,
+  STORAGE_PUBLIC_BASE_URL: optionalUrlFromEnv,
+  STORAGE_FORCE_PATH_STYLE: booleanFromEnv.default(true),
+  STORAGE_SIGNED_READS: booleanFromEnv.default(true),
   STORAGE_SIGNED_READ_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+}).superRefine((data, ctx) => {
+  if (!data.STORAGE_ENABLED) {
+    return;
+  }
+
+  if (!data.STORAGE_BUCKET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_BUCKET"],
+      message: "STORAGE_BUCKET is required when STORAGE_ENABLED=true",
+    });
+  }
+
+  if (!data.STORAGE_ENDPOINT) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_ENDPOINT"],
+      message: "STORAGE_ENDPOINT is required when STORAGE_ENABLED=true",
+    });
+  }
+
+  if (!data.STORAGE_ACCESS_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_ACCESS_KEY"],
+      message: "STORAGE_ACCESS_KEY is required when STORAGE_ENABLED=true",
+    });
+  }
+
+  if (!data.STORAGE_SECRET_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["STORAGE_SECRET_KEY"],
+      message: "STORAGE_SECRET_KEY is required when STORAGE_ENABLED=true",
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

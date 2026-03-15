@@ -95,6 +95,45 @@ If the frontend stays on Vercel and the API stays on a different Railway domain,
 
 If you later proxy API requests through the Vercel domain, you may be able to relax that setup.
 
+## Recommended object storage
+
+The easiest production fit for the current backend is Cloudflare R2 because it exposes an S3-compatible API and works with the existing storage client shape.
+
+Cloudflare R2 setup flow:
+
+1. Create an R2 bucket in Cloudflare.
+2. Create an R2 API token with Object Read & Write access to that bucket.
+3. Copy the Access Key ID, Secret Access Key, and S3 endpoint.
+4. Put those values into the Railway backend variables.
+
+Example Railway values for Cloudflare R2:
+
+```bash
+STORAGE_BUCKET=your-bucket-name
+STORAGE_REGION=auto
+STORAGE_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+STORAGE_ACCESS_KEY=<R2_ACCESS_KEY_ID>
+STORAGE_SECRET_KEY=<R2_SECRET_ACCESS_KEY>
+STORAGE_PUBLIC_BASE_URL=
+STORAGE_FORCE_PATH_STYLE=false
+STORAGE_SIGNED_READS=true
+STORAGE_SIGNED_READ_TTL_SECONDS=900
+```
+
+## No storage yet
+
+If you want to get Railway live first and skip screenshot uploads for now, set:
+
+```bash
+STORAGE_ENABLED=false
+```
+
+With that setting:
+
+- the backend can boot without storage credentials
+- screenshot upload URLs are disabled
+- the rest of the API can still run
+
 ## Deploy order
 
 1. Provision the production database and object storage.
