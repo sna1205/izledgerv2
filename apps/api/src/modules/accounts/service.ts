@@ -151,6 +151,7 @@ export async function deleteAccount(userId: string, accountId: string) {
   const tradeCount = await prisma.trade.count({
     where: {
       accountId,
+      deletedAt: null,
     },
   });
 

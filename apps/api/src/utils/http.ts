@@ -1,11 +1,20 @@
 import { ZodType } from "zod";
-import { AppError } from "./errors.js";
+import { AppError, ErrorDetail } from "./errors.js";
+
+function formatZodIssues(value: {
+  issues: Array<{ path: Array<string | number>; message: string }>;
+}): ErrorDetail[] {
+  return value.issues.map((issue) => ({
+    field: issue.path.length > 0 ? issue.path.join(".") : undefined,
+    message: issue.message,
+  }));
+}
 
 export function parseOrThrow<T>(schema: ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
 
   if (!parsed.success) {
-    throw new AppError(400, "VALIDATION_ERROR", "Request validation failed.", parsed.error.flatten());
+    throw new AppError(400, "VALIDATION_ERROR", "Invalid request", formatZodIssues(parsed.error));
   }
 
   return parsed.data;

@@ -4,7 +4,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { env } from "./config/env.js";
-import { AppError, toAppError } from "./utils/errors.js";
+import { AppError, toAppError, toErrorResponse } from "./utils/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
 import { setupRoutes } from "./modules/setups/routes.js";
@@ -47,6 +47,11 @@ export async function buildApp() {
 
   await app.register(rateLimit, {
     global: false,
+    errorResponseBuilder: (_request, context) => new AppError(
+      context.statusCode,
+      context.ban ? "FORBIDDEN" : "RATE_LIMIT_EXCEEDED",
+      context.ban ? "Forbidden." : "Too many requests.",
+    ),
   });
 
   app.get("/health", async () => ({
@@ -65,35 +70,19 @@ export async function buildApp() {
   await app.register(tradeShareRoutes, { prefix: "/" });
 
   app.setNotFoundHandler((_request, reply) => {
-    reply.status(404).send({
-      error: {
-        code: "NOT_FOUND",
-        message: "Route not found.",
-      },
-    });
+    reply.status(404).send(toErrorResponse(new AppError(404, "NOT_FOUND", "Resource not found.")));
   });
 
   app.setErrorHandler((error, _request, reply) => {
     const appError = toAppError(error);
 
     if (appError instanceof AppError) {
-      reply.status(appError.statusCode).send({
-        error: {
-          code: appError.code,
-          message: appError.message,
-          details: appError.details,
-        },
-      });
+      reply.status(appError.statusCode).send(toErrorResponse(appError));
       return;
     }
 
     app.log.error(error);
-    reply.status(500).send({
-      error: {
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Something went wrong.",
-      },
-    });
+    reply.status(500).send(toErrorResponse(new AppError(500, "INTERNAL_SERVER_ERROR", "Internal server error.")));
   });
 
   return app;

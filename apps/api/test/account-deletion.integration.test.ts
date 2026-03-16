@@ -12,13 +12,91 @@ const [{ buildApp }, { prisma }] = await Promise.all([
   import("../src/lib/prisma.js"),
 ]);
 
+const defaultPassword = "Password123!";
+
 function getSessionCookie(setCookieHeader: string | string[] | undefined) {
   const rawCookie = Array.isArray(setCookieHeader) ? setCookieHeader[0] : setCookieHeader;
   assert.ok(rawCookie, "Expected auth response to set a session cookie.");
   return rawCookie.split(";", 1)[0];
 }
 
-test("account deletion is blocked when only soft-deleted trades remain", async (t) => {
+async function registerAndGetSession(app: Awaited<ReturnType<typeof buildApp>>, username: string, password = defaultPassword) {
+  const registerResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      username,
+      password,
+    },
+  });
+
+  assert.equal(registerResponse.statusCode, 201);
+
+  return getSessionCookie(registerResponse.headers["set-cookie"]);
+}
+
+async function getFirstAccountId(username: string) {
+  const account = await prisma.account.findFirst({
+    where: {
+      user: {
+        username,
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  assert.ok(account, "Expected the default account created during registration.");
+  return account.id;
+}
+
+async function createAccount(app: Awaited<ReturnType<typeof buildApp>>, sessionCookie: string, name: string) {
+  const createAccountResponse = await app.inject({
+    method: "POST",
+    url: "/accounts",
+    headers: {
+      cookie: sessionCookie,
+    },
+    payload: {
+      name,
+      broker: "Manual",
+      type: "Personal",
+      balance: 1000,
+      currency: "USD",
+    },
+  });
+
+  assert.equal(createAccountResponse.statusCode, 201);
+  return createAccountResponse.json().account.id as string;
+}
+
+async function createTrade(app: Awaited<ReturnType<typeof buildApp>>, sessionCookie: string, accountId: string, today: string, notes: string) {
+  const createTradeResponse = await app.inject({
+    method: "POST",
+    url: "/trades",
+    headers: {
+      cookie: sessionCookie,
+    },
+    payload: {
+      date: today,
+      accountId,
+      pair: "GBPUSD",
+      direction: "Sell",
+      entry: 1.2745,
+      stopLoss: 1.28,
+      takeProfit: 1.26,
+      profit: -42.5,
+      result: "Loss",
+      notes,
+    },
+  });
+
+  assert.equal(createTradeResponse.statusCode, 201);
+  return createTradeResponse.json().trade.id as string;
+}
+
+test("account deletion succeeds when only soft-deleted trades remain", async (t) => {
   try {
     await prisma.$connect();
   } catch {
@@ -28,77 +106,13 @@ test("account deletion is blocked when only soft-deleted trades remain", async (
 
   const app = await buildApp();
   const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const password = "Password123!";
   const today = new Date().toISOString().slice(0, 10);
 
   try {
-    const registerResponse = await app.inject({
-      method: "POST",
-      url: "/auth/register",
-      payload: {
-        username,
-        password,
-      },
-    });
-
-    assert.equal(registerResponse.statusCode, 201);
-
-    const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const defaultAccount = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
-
-    assert.ok(defaultAccount, "Expected the default account created during registration.");
-
-    const createAccountResponse = await app.inject({
-      method: "POST",
-      url: "/accounts",
-      headers: {
-        cookie: sessionCookie,
-      },
-      payload: {
-        name: "Delete Target",
-        broker: "Manual",
-        type: "Personal",
-        balance: 1000,
-        currency: "USD",
-      },
-    });
-
-    assert.equal(createAccountResponse.statusCode, 201);
-
-    const targetAccountId = createAccountResponse.json().account.id as string;
-
-    const createTradeResponse = await app.inject({
-      method: "POST",
-      url: "/trades",
-      headers: {
-        cookie: sessionCookie,
-      },
-      payload: {
-        date: today,
-        accountId: targetAccountId,
-        pair: "GBPUSD",
-        direction: "Sell",
-        entry: 1.2745,
-        stopLoss: 1.28,
-        takeProfit: 1.26,
-        profit: -42.5,
-        result: "Loss",
-        notes: "Soft delete account protection",
-      },
-    });
-
-    assert.equal(createTradeResponse.statusCode, 201);
-
-    const tradeId = createTradeResponse.json().trade.id as string;
+    const sessionCookie = await registerAndGetSession(app, username);
+    await getFirstAccountId(username);
+    const targetAccountId = await createAccount(app, sessionCookie, "Delete Target");
+    const tradeId = await createTrade(app, sessionCookie, targetAccountId, today, "Soft delete account protection");
 
     const deleteTradeResponse = await app.inject({
       method: "DELETE",
@@ -109,6 +123,51 @@ test("account deletion is blocked when only soft-deleted trades remain", async (
     });
 
     assert.equal(deleteTradeResponse.statusCode, 204);
+
+    const deleteAccountResponse = await app.inject({
+      method: "DELETE",
+      url: `/accounts/${targetAccountId}`,
+      headers: {
+        cookie: sessionCookie,
+      },
+    });
+
+    assert.equal(deleteAccountResponse.statusCode, 204);
+
+    const stillExists = await prisma.account.findUnique({
+      where: {
+        id: targetAccountId,
+      },
+    });
+
+    assert.equal(stillExists, null);
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("account deletion remains blocked when active trades exist", async (t) => {
+  try {
+    await prisma.$connect();
+  } catch {
+    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
+    return;
+  }
+
+  const app = await buildApp();
+  const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const sessionCookie = await registerAndGetSession(app, username);
+    const targetAccountId = await createAccount(app, sessionCookie, "Delete Target");
+    await createTrade(app, sessionCookie, targetAccountId, today, "Active trade account protection");
 
     const deleteAccountResponse = await app.inject({
       method: "DELETE",
@@ -129,7 +188,153 @@ test("account deletion is blocked when only soft-deleted trades remain", async (
       },
     });
 
-    assert.ok(stillExists, "Expected account to remain when soft-deleted trades exist.");
+    assert.ok(stillExists, "Expected account to remain when active trades exist.");
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("account with no trades can be deleted", async (t) => {
+  try {
+    await prisma.$connect();
+  } catch {
+    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
+    return;
+  }
+
+  const app = await buildApp();
+  const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+  try {
+    const sessionCookie = await registerAndGetSession(app, username);
+    const targetAccountId = await createAccount(app, sessionCookie, "No Trades");
+
+    const deleteAccountResponse = await app.inject({
+      method: "DELETE",
+      url: `/accounts/${targetAccountId}`,
+      headers: {
+        cookie: sessionCookie,
+      },
+    });
+
+    assert.equal(deleteAccountResponse.statusCode, 204);
+
+    const deletedAccount = await prisma.account.findUnique({
+      where: {
+        id: targetAccountId,
+      },
+    });
+
+    assert.equal(deletedAccount, null);
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("user cannot delete another user's account", async (t) => {
+  try {
+    await prisma.$connect();
+  } catch {
+    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
+    return;
+  }
+
+  const app = await buildApp();
+  const usernameA = `ad${Date.now().toString(36)}a${Math.random().toString(36).slice(2, 5)}`;
+  const usernameB = `ad${Date.now().toString(36)}b${Math.random().toString(36).slice(2, 5)}`;
+
+  try {
+    const ownerSessionCookie = await registerAndGetSession(app, usernameA);
+    const attackerSessionCookie = await registerAndGetSession(app, usernameB);
+    const targetAccountId = await createAccount(app, ownerSessionCookie, "Private Account");
+
+    const deleteAccountResponse = await app.inject({
+      method: "DELETE",
+      url: `/accounts/${targetAccountId}`,
+      headers: {
+        cookie: attackerSessionCookie,
+      },
+    });
+
+    assert.equal(deleteAccountResponse.statusCode, 404);
+    const payload = deleteAccountResponse.json();
+    assert.equal(payload.error.code, "ACCOUNT_NOT_FOUND");
+    assert.equal(payload.error.message, "Account not found.");
+
+    const account = await prisma.account.findUnique({
+      where: {
+        id: targetAccountId,
+      },
+    });
+
+    assert.ok(account, "Expected the target account to remain when another user tries to delete it.");
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username: {
+          in: [usernameA, usernameB],
+        },
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("deleting one account does not affect other accounts", async (t) => {
+  try {
+    await prisma.$connect();
+  } catch {
+    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
+    return;
+  }
+
+  const app = await buildApp();
+  const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+  try {
+    const sessionCookie = await registerAndGetSession(app, username);
+    const originalDefaultAccountId = await getFirstAccountId(username);
+    const deletedAccountId = await createAccount(app, sessionCookie, "Delete Me");
+    const remainingAccountId = await createAccount(app, sessionCookie, "Keep Me");
+
+    const deleteAccountResponse = await app.inject({
+      method: "DELETE",
+      url: `/accounts/${deletedAccountId}`,
+      headers: {
+        cookie: sessionCookie,
+      },
+    });
+
+    assert.equal(deleteAccountResponse.statusCode, 204);
+
+    const accounts = await prisma.account.findMany({
+      where: {
+        user: {
+          username,
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    assert.equal(accounts.some((account) => account.id === deletedAccountId), false);
+    assert.equal(accounts.some((account) => account.id === originalDefaultAccountId), true);
+    assert.equal(accounts.some((account) => account.id === remainingAccountId), true);
+    assert.equal(accounts.length, 2);
   } finally {
     await app.close();
     await prisma.user.deleteMany({

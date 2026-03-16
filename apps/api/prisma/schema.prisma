@@ -75,6 +75,7 @@ model User {
   accounts     Account[]
   setups       Setup[]
   trades       Trade[]
+  screenshotUploads TradeScreenshotUpload[]
   tradeShares  TradeShare[]
   reviews      Review[]
   sessions     Session[]
@@ -156,6 +157,7 @@ model Trade {
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   account           Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
   setup             Setup?          @relation(fields: [setupId], references: [id], onDelete: SetNull)
+  screenshotUploads TradeScreenshotUpload[]
   screenshots       TradeScreenshot[]
   shares            TradeShare[]
   review            Review?
@@ -166,6 +168,26 @@ model Trade {
   @@index([userId, emotion])
   @@index([userId, result])
   @@map("trades")
+}
+
+model TradeScreenshotUpload {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tradeId     String    @map("trade_id") @db.Uuid
+  storageKey  String    @unique @map("storage_key")
+  fileName    String    @map("file_name")
+  contentType String    @map("content_type")
+  fileSize    Int       @map("file_size")
+  expiresAt   DateTime  @map("expires_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trade       Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tradeId])
+  @@index([tradeId, createdAt])
+  @@index([expiresAt])
+  @@map("trade_screenshot_uploads")
 }
 
 model TradeScreenshot {

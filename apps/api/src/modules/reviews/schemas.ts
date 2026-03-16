@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { reviewEmotions, reviewRiskStatuses, reviewRuleStatuses } from "../../config/domain.js";
+import { boundedIntSchema, numericBounds } from "../../utils/validation.js";
 
 export const reviewParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
 const reviewText = z.string().trim().max(10000).optional().nullable();
+const dailyScoreSchema = boundedIntSchema(1, 10).optional().nullable();
+const tradeScoreSchema = boundedIntSchema(1, 5).optional().nullable();
 
 export const createReviewSchema = z.discriminatedUnion("type", [
   z.object({
@@ -17,7 +20,7 @@ export const createReviewSchema = z.discriminatedUnion("type", [
     emotion: z.enum(reviewEmotions).optional().nullable(),
     lessonLearned: reviewText,
     improvementPlan: reviewText,
-    disciplineScore: z.coerce.number().int().min(1).max(10).optional().nullable(),
+    disciplineScore: dailyScoreSchema,
   }),
   z.object({
     type: z.literal("weekly"),
@@ -28,16 +31,16 @@ export const createReviewSchema = z.discriminatedUnion("type", [
     biggestMistake: reviewText,
     riskManagement: z.enum(reviewRiskStatuses).optional().nullable(),
     nextGoal: reviewText,
-    weeklyRating: z.coerce.number().int().min(1).max(10).optional().nullable(),
+    weeklyRating: dailyScoreSchema,
   }),
   z.object({
     type: z.literal("trade"),
     tradeId: z.string().uuid(),
     reviewDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
     lessonLearned: reviewText,
-    disciplineScore: z.coerce.number().int().min(1).max(5).optional().nullable(),
-    executionRating: z.coerce.number().int().min(1).max(5).optional().nullable(),
-    emotionRating: z.coerce.number().int().min(1).max(5).optional().nullable(),
+    disciplineScore: tradeScoreSchema,
+    executionRating: tradeScoreSchema,
+    emotionRating: tradeScoreSchema,
     whatWentWell: reviewText,
     whatWentWrong: reviewText,
     mistakesMade: reviewText,
@@ -58,15 +61,15 @@ export const updateReviewSchema = z.object({
   emotion: z.enum(reviewEmotions).optional().nullable(),
   lessonLearned: reviewText,
   improvementPlan: reviewText,
-  disciplineScore: z.coerce.number().int().min(1).max(10).optional().nullable(),
+  disciplineScore: dailyScoreSchema,
   weeklySummary: reviewText,
   biggestWin: reviewText,
   biggestMistake: reviewText,
   riskManagement: z.enum(reviewRiskStatuses).optional().nullable(),
   nextGoal: reviewText,
-  weeklyRating: z.coerce.number().int().min(1).max(10).optional().nullable(),
-  executionRating: z.coerce.number().int().min(1).max(5).optional().nullable(),
-  emotionRating: z.coerce.number().int().min(1).max(5).optional().nullable(),
+  weeklyRating: dailyScoreSchema,
+  executionRating: tradeScoreSchema,
+  emotionRating: tradeScoreSchema,
   whatWentWell: reviewText,
   whatWentWrong: reviewText,
   mistakesMade: reviewText,
@@ -77,6 +80,6 @@ export const updateReviewSchema = z.object({
 export const listReviewsQuerySchema = z.object({
   type: z.enum(["daily", "weekly", "trade"]).optional(),
   tradeId: z.string().uuid().optional(),
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(20),
+  page: boundedIntSchema(1, numericBounds.maxPage).default(1),
+  pageSize: boundedIntSchema(1, numericBounds.maxPageSize).default(20),
 });
