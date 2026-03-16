@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
@@ -61,6 +61,36 @@ export async function getReadUrl(key: string) {
   });
 
   return getSignedUrl(s3, command, { expiresIn: env.STORAGE_SIGNED_READ_TTL_SECONDS });
+}
+
+export async function objectExists(key: string) {
+  const s3 = getStorageClient();
+
+  try {
+    await s3.send(
+      new HeadObjectCommand({
+        Bucket: env.STORAGE_BUCKET!,
+        Key: key,
+      }),
+    );
+
+    return true;
+  } catch (error) {
+    const statusCode =
+      typeof error === "object" && error !== null && "$metadata" in error
+        ? ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ?? null)
+        : null;
+    const errorName =
+      typeof error === "object" && error !== null && "name" in error
+        ? String((error as { name?: string }).name)
+        : "";
+
+    if (statusCode === 404 || errorName === "NotFound" || errorName === "NoSuchKey") {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 export function storageObjectUrl(key: string) {

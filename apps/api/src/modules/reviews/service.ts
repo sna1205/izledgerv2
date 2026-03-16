@@ -12,6 +12,7 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
     where: {
       id: tradeId,
       userId,
+      deletedAt: null,
     },
     include: {
       screenshots: {
@@ -23,8 +24,6 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
   if (!trade) {
     throw new AppError(404, "TRADE_NOT_FOUND", "Linked trade not found.");
   }
-
-  const screenshots = await Promise.all(trade.screenshots.map((item) => getReadUrl(item.storageKey)));
 
   return {
     id: trade.id,
@@ -40,17 +39,52 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
     session: sessionFromDb(trade.session),
     emotion: trade.emotion,
     notes: trade.notes,
+    screenshots: trade.screenshots.map((item) => item.storageKey),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+export async function hydrateTradeSnapshot(snapshot: Prisma.JsonValue | null) {
+  if (!isRecord(snapshot)) {
+    return snapshot;
+  }
+
+  const screenshotsValue = snapshot.screenshots;
+
+  if (!Array.isArray(screenshotsValue)) {
+    return snapshot;
+  }
+
+  const screenshots = await Promise.all(
+    screenshotsValue.map(async (item) => {
+      if (typeof item !== "string" || isHttpUrl(item)) {
+        return item;
+      }
+
+      return getReadUrl(item);
+    }),
+  );
+
+  return {
+    ...snapshot,
     screenshots,
   };
 }
 
-function toReviewDto(review: Prisma.ReviewGetPayload<Record<string, never>>) {
+async function toReviewDto(review: Prisma.ReviewGetPayload<Record<string, never>>) {
   return {
     id: review.id,
     type: review.type,
     reviewScope: review.type,
     tradeId: review.tradeId,
-    tradeSnapshot: review.tradeSnapshot,
+    tradeSnapshot: await hydrateTradeSnapshot(review.tradeSnapshot),
     reviewDate: review.reviewDate?.toISOString().slice(0, 10),
     weekStart: review.weekStart?.toISOString().slice(0, 10),
     weekEnd: review.weekEnd?.toISOString().slice(0, 10),
@@ -117,14 +151,14 @@ export async function listReviews(userId: string, query: {
   ]);
 
   return {
-    items: reviews.map(toReviewDto),
+    items: await Promise.all(reviews.map((review) => toReviewDto(review))),
     pagination: buildPagination(query.page, query.pageSize, total),
   };
 }
 
 export async function getReview(userId: string, reviewId: string) {
   const review = await getOwnedReview(userId, reviewId);
-  return toReviewDto(review);
+  return await toReviewDto(review);
 }
 
 export async function createReview(userId: string, input: unknown) {
@@ -168,7 +202,7 @@ export async function createReview(userId: string, input: unknown) {
       },
     });
 
-    return toReviewDto(review);
+    return await toReviewDto(review);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       throw new AppError(409, "TRADE_REVIEW_EXISTS", "This trade already has a review.");
@@ -181,7 +215,7 @@ export async function createReview(userId: string, input: unknown) {
 export async function updateReview(userId: string, reviewId: string, patch: Record<string, unknown>) {
   const existing = await getOwnedReview(userId, reviewId);
   const merged = {
-    ...toReviewDto(existing),
+    ...(await toReviewDto(existing)),
     ...patch,
   };
 
@@ -226,7 +260,7 @@ export async function updateReview(userId: string, reviewId: string, patch: Reco
     },
   });
 
-  return toReviewDto(review);
+  return await toReviewDto(review);
 }
 
 export async function deleteReview(userId: string, reviewId: string) {

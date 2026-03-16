@@ -1,9 +1,9 @@
 import { Prisma, TradeSession } from "@prisma/client";
+import { toNumber } from "../../lib/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { buildPagination } from "../../utils/http.js";
 import { AppError } from "../../utils/errors.js";
-import { toNumber } from "../../utils/decimal.js";
 import { sessionFromDb, sessionToDb } from "../../utils/domain-mappers.js";
 
 const tradeInclude = Prisma.validator<Prisma.TradeInclude>()({

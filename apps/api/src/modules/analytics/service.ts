@@ -1,5 +1,5 @@
 import { prisma } from "../../lib/prisma.js";
-import { toNumber } from "../../utils/decimal.js";
+import { toNumber } from "../../lib/decimal.js";
 import { sessionFromDb, sessionToDb } from "../../utils/domain-mappers.js";
 
 type PlainTrade = {
@@ -20,13 +20,17 @@ type PlainTrade = {
   createdAt: string;
 };
 
+function buildAnalyticsTradeWhere(userId: string, accountId?: string) {
+  return {
+    userId,
+    accountId,
+    deletedAt: null,
+  };
+}
+
 async function getTradesForAnalytics(userId: string, accountId?: string) {
   const trades = await prisma.trade.findMany({
-    where: {
-      userId,
-      accountId,
-      deletedAt: null,
-    },
+    where: buildAnalyticsTradeWhere(userId, accountId),
     include: {
       account: true,
     },
@@ -41,10 +45,83 @@ async function getTradesForAnalytics(userId: string, accountId?: string) {
     date: trade.tradeDate.toISOString().slice(0, 10),
     pair: trade.pair,
     direction: trade.direction,
-    entry: toNumber(trade.entry) ?? 0,
-    stopLoss: toNumber(trade.stopLoss) ?? 0,
-    takeProfit: toNumber(trade.takeProfit) ?? 0,
-    profit: toNumber(trade.profit) ?? 0,
+    entry: toNumber(trade.entry),
+    stopLoss: toNumber(trade.stopLoss),
+    takeProfit: toNumber(trade.takeProfit),
+    profit: toNumber(trade.profit),
+    result: trade.result,
+    session: sessionFromDb(trade.session) as PlainTrade["session"],
+    emotion: trade.emotion as PlainTrade["emotion"],
+    setup: trade.setupNameSnapshot ?? "",
+    accountId: trade.accountId,
+    accountName: trade.account.name,
+    createdAt: trade.createdAt.toISOString(),
+  }));
+}
+
+async function getDashboardSummaryStats(userId: string, accountId?: string) {
+  const where = buildAnalyticsTradeWhere(userId, accountId);
+  const today = new Date();
+  const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+  const [aggregate, winCount, todayTrades] = await Promise.all([
+    prisma.trade.aggregate({
+      where,
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        profit: true,
+      },
+    }),
+    prisma.trade.count({
+      where: {
+        ...where,
+        result: "Win",
+      },
+    }),
+    prisma.trade.count({
+      where: {
+        ...where,
+        tradeDate: todayStart,
+      },
+    }),
+  ]);
+
+  const totalTrades = aggregate._count._all;
+  const totalProfit = toNumber(aggregate._sum.profit);
+  const winRate = totalTrades > 0 ? Number(((winCount / totalTrades) * 100).toFixed(2)) : 0;
+
+  return {
+    todayTrades,
+    totalTrades,
+    winRate,
+    totalProfit: Number(totalProfit.toFixed(2)),
+  };
+}
+
+async function getRecentTrades(userId: string, accountId?: string) {
+  const trades = await prisma.trade.findMany({
+    where: buildAnalyticsTradeWhere(userId, accountId),
+    include: {
+      account: true,
+    },
+    orderBy: [
+      { tradeDate: "desc" },
+      { createdAt: "desc" },
+    ],
+    take: 8,
+  });
+
+  return trades.map<PlainTrade>((trade) => ({
+    id: trade.id,
+    date: trade.tradeDate.toISOString().slice(0, 10),
+    pair: trade.pair,
+    direction: trade.direction,
+    entry: toNumber(trade.entry),
+    stopLoss: toNumber(trade.stopLoss),
+    takeProfit: toNumber(trade.takeProfit),
+    profit: toNumber(trade.profit),
     result: trade.result,
     session: sessionFromDb(trade.session) as PlainTrade["session"],
     emotion: trade.emotion as PlainTrade["emotion"],
@@ -114,34 +191,40 @@ function buildGroupedPerformance<T extends string>(trades: PlainTrade[], selecto
 }
 
 export async function getDashboardSummary(userId: string, accountId?: string) {
-  const trades = await getTradesForAnalytics(userId, accountId);
-  const stats = computeStats(trades);
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const todayTrades = trades.filter((trade) => trade.date === todayKey);
+  const [summary, recentTrades, equityTrades] = await Promise.all([
+    getDashboardSummaryStats(userId, accountId),
+    getRecentTrades(userId, accountId),
+    prisma.trade.findMany({
+      where: buildAnalyticsTradeWhere(userId, accountId),
+      select: {
+        tradeDate: true,
+        pair: true,
+        profit: true,
+      },
+      orderBy: [
+        { tradeDate: "asc" },
+        { createdAt: "asc" },
+      ],
+    }),
+  ]);
 
   let runningEquity = 0;
-  const equityCurve = trades.map((trade, index) => {
-    runningEquity += trade.profit;
+  const equityCurve = equityTrades.map((trade, index) => {
+    const profit = toNumber(trade.profit);
+    runningEquity += profit;
 
     return {
       tradeNumber: index + 1,
-      date: trade.date,
+      date: trade.tradeDate.toISOString().slice(0, 10),
       pair: trade.pair,
-      profit: trade.profit,
+      profit,
       equity: Number(runningEquity.toFixed(2)),
     };
   });
 
   return {
-    summary: {
-      todayTrades: todayTrades.length,
-      totalTrades: stats.totalTrades,
-      winRate: stats.winRate,
-      totalProfit: stats.totalProfit,
-    },
-    recentTrades: [...trades]
-      .sort((a, b) => (b.date === a.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)))
-      .slice(0, 8),
+    summary,
+    recentTrades,
     equityCurve,
   };
 }

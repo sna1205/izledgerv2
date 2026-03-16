@@ -1,3 +1,4 @@
+import { format, isValid, parseISO } from "date-fns";
 import { z } from "zod";
 import { tradeDirections, tradeEmotions, tradeResults, tradeSessions } from "../../config/domain.js";
 
@@ -6,9 +7,13 @@ export const tradeParamsSchema = z.object({
 });
 
 const optionalString = z.string().trim().optional().nullable();
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = parseISO(value);
+  return isValid(date) && value === format(date, "yyyy-MM-dd");
+}, "Invalid trade date");
 
 export const createTradeSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: isoDateSchema,
   accountId: z.string().uuid(),
   pair: z.string().trim().min(1).max(20),
   direction: z.enum(tradeDirections),
@@ -33,8 +38,8 @@ export const listTradesQuerySchema = z.object({
   accountId: z.string().uuid().optional(),
   setupId: z.string().uuid().optional(),
   pair: z.string().trim().optional(),
-  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateFrom: isoDateSchema.optional(),
+  dateTo: isoDateSchema.optional(),
   direction: z.enum(tradeDirections).optional(),
   result: z.enum(tradeResults).optional(),
   session: z.enum(tradeSessions).optional(),

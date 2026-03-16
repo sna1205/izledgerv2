@@ -4,7 +4,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { env } from "./config/env.js";
-import { AppError } from "./utils/errors.js";
+import { AppError, toAppError } from "./utils/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
 import { setupRoutes } from "./modules/setups/routes.js";
@@ -72,12 +72,14 @@ export async function buildApp() {
   });
 
   app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof AppError) {
-      reply.status(error.statusCode).send({
+    const appError = toAppError(error);
+
+    if (appError instanceof AppError) {
+      reply.status(appError.statusCode).send({
         error: {
-          code: error.code,
-          message: error.message,
-          details: error.details,
+          code: appError.code,
+          message: appError.message,
+          details: appError.details,
         },
       });
       return;

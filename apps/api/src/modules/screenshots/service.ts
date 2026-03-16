@@ -1,8 +1,79 @@
 import crypto from "node:crypto";
 import { prisma } from "../../lib/prisma.js";
-import { createPresignedUpload, getReadUrl } from "../../lib/storage.js";
+import { env } from "../../config/env.js";
+import { createPresignedUpload, getReadUrl, objectExists } from "../../lib/storage.js";
 import { AppError } from "../../utils/errors.js";
 import { safeFileName } from "../../utils/strings.js";
+
+const SCREENSHOT_UPLOAD_TOKEN_TTL_MS = 5 * 60 * 1000;
+
+function getUploadTokenSecret() {
+  return env.STORAGE_SECRET_KEY ?? env.DATABASE_URL;
+}
+
+function createUploadToken(payload: {
+  userId: string;
+  tradeId: string;
+  storageKey: string;
+  expiresAt: number;
+}) {
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", getUploadTokenSecret())
+    .update(encodedPayload)
+    .digest("base64url");
+
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyUploadToken(uploadToken: string, expected: {
+  userId: string;
+  tradeId: string;
+  storageKey: string;
+}) {
+  const [encodedPayload, providedSignature] = uploadToken.split(".");
+
+  if (!encodedPayload || !providedSignature) {
+    throw new AppError(400, "INVALID_UPLOAD_TOKEN", "Upload token is invalid.");
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", getUploadTokenSecret())
+    .update(encodedPayload)
+    .digest("base64url");
+
+  const providedSignatureBuffer = Buffer.from(providedSignature);
+  const expectedSignatureBuffer = Buffer.from(expectedSignature);
+
+  if (
+    providedSignatureBuffer.length !== expectedSignatureBuffer.length ||
+    !crypto.timingSafeEqual(providedSignatureBuffer, expectedSignatureBuffer)
+  ) {
+    throw new AppError(400, "INVALID_UPLOAD_TOKEN", "Upload token is invalid.");
+  }
+
+  let payload: {
+    userId: string;
+    tradeId: string;
+    storageKey: string;
+    expiresAt: number;
+  };
+
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as typeof payload;
+  } catch {
+    throw new AppError(400, "INVALID_UPLOAD_TOKEN", "Upload token is invalid.");
+  }
+
+  if (
+    payload.userId !== expected.userId ||
+    payload.tradeId !== expected.tradeId ||
+    payload.storageKey !== expected.storageKey ||
+    payload.expiresAt < Date.now()
+  ) {
+    throw new AppError(400, "INVALID_UPLOAD_TOKEN", "Upload token is invalid.");
+  }
+}
 
 async function ensureOwnedTrade(userId: string, tradeId: string) {
   const trade = await prisma.trade.findFirst({
@@ -28,6 +99,19 @@ function assertTradeStorageKey(userId: string, tradeId: string, storageKey: stri
   }
 }
 
+export function isValidScreenshotReorder(allScreenshotIds: string[], requestedScreenshotIds: string[]) {
+  if (new Set(requestedScreenshotIds).size !== requestedScreenshotIds.length) {
+    return false;
+  }
+
+  if (allScreenshotIds.length !== requestedScreenshotIds.length) {
+    return false;
+  }
+
+  const screenshotIdSet = new Set(allScreenshotIds);
+  return requestedScreenshotIds.every((screenshotId) => screenshotIdSet.has(screenshotId));
+}
+
 export async function presignTradeScreenshot(userId: string, tradeId: string, input: {
   fileName: string;
   contentType: string;
@@ -43,6 +127,12 @@ export async function presignTradeScreenshot(userId: string, tradeId: string, in
 
   return {
     storageKey,
+    uploadToken: createUploadToken({
+      userId,
+      tradeId,
+      storageKey,
+      expiresAt: Date.now() + SCREENSHOT_UPLOAD_TOKEN_TTL_MS,
+    }),
     sortOrder: input.sortOrder,
     ...upload,
   };
@@ -50,10 +140,22 @@ export async function presignTradeScreenshot(userId: string, tradeId: string, in
 
 export async function completeTradeScreenshot(userId: string, tradeId: string, input: {
   storageKey: string;
+  uploadToken: string;
   sortOrder: number;
 }) {
   await ensureOwnedTrade(userId, tradeId);
   assertTradeStorageKey(userId, tradeId, input.storageKey);
+  verifyUploadToken(input.uploadToken, {
+    userId,
+    tradeId,
+    storageKey: input.storageKey,
+  });
+
+  const uploadedObjectExists = await objectExists(input.storageKey);
+
+  if (!uploadedObjectExists) {
+    throw new AppError(400, "SCREENSHOT_UPLOAD_MISSING", "Uploaded screenshot file was not found.");
+  }
 
   const existing = await prisma.tradeScreenshot.findFirst({
     where: {
@@ -112,12 +214,11 @@ export async function reorderTradeScreenshots(userId: string, tradeId: string, s
   const screenshots = await prisma.tradeScreenshot.findMany({
     where: {
       tradeId,
-      id: { in: screenshotIds },
       trade: { userId },
     },
   });
 
-  if (screenshots.length !== screenshotIds.length) {
+  if (!isValidScreenshotReorder(screenshots.map((screenshot) => screenshot.id), screenshotIds)) {
     throw new AppError(400, "SCREENSHOT_REORDER_INVALID", "Screenshot reorder payload is invalid.");
   }
 

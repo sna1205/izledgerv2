@@ -1,6 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
+import { toNumber } from "../../lib/decimal.js";
 import { AppError } from "../../utils/errors.js";
-import { toNumber } from "../../utils/decimal.js";
 
 function toAccountDto(account: {
   id: string;
@@ -18,7 +18,7 @@ function toAccountDto(account: {
     name: account.name,
     broker: account.broker,
     type: account.type,
-    balance: toNumber(account.balance as never),
+    balance: toNumber(account.balance as string | number | null | undefined),
     currency: account.currency,
     isDefault: account.isDefault,
     createdAt: account.createdAt.toISOString(),
@@ -101,17 +101,27 @@ export async function updateAccount(userId: string, accountId: string, input: {
   currency?: string;
   isDefault?: boolean;
 }) {
-  await getOwnedAccount(userId, accountId);
+  const existingAccount = await getOwnedAccount(userId, accountId);
 
   const account = await prisma.$transaction(async (tx) => {
     if (input.isDefault) {
       await tx.account.updateMany({
-        where: {
-          userId,
-          NOT: { id: accountId },
-        },
+        where: { userId },
         data: { isDefault: false },
       });
+    }
+
+    if (input.isDefault === false && existingAccount.isDefault) {
+      const defaultAccountCount = await tx.account.count({
+        where: {
+          userId,
+          isDefault: true,
+        },
+      });
+
+      if (defaultAccountCount <= 1) {
+        throw new AppError(409, "DEFAULT_ACCOUNT_REQUIRED", "You must have at least one default account");
+      }
     }
 
     return tx.account.update({
@@ -138,16 +148,14 @@ export async function deleteAccount(userId: string, accountId: string) {
     throw new AppError(409, "LAST_ACCOUNT", "At least one account must remain.");
   }
 
-  const activeTradeCount = await prisma.trade.count({
+  const tradeCount = await prisma.trade.count({
     where: {
-      userId,
       accountId,
-      deletedAt: null,
     },
   });
 
-  if (activeTradeCount > 0) {
-    throw new AppError(409, "ACCOUNT_IN_USE", "This account has trades and cannot be deleted.");
+  if (tradeCount > 0) {
+    throw new AppError(409, "ACCOUNT_IN_USE", "Account cannot be deleted while trades exist.");
   }
 
   await prisma.$transaction(async (tx) => {
