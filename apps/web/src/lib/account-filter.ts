@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAccounts } from "@/lib/accounts";
-import { Trade } from "@/lib/types";
+import type { Account, Trade } from "@/lib/types";
 
-const STORAGE_KEY = "trading-journal-active-account-filter";
-const EVENT_NAME = "trading-journal-active-account-filter-change";
+const STORAGE_KEY = "izledger-active-account-filter";
+const EVENT_NAME = "izledger-active-account-filter-change";
 
 export type AccountFilterValue = "all" | string;
 
 function normalizeAccountFilter(value: string | null): AccountFilterValue {
-  if (!value || value === "all") {
-    return "all";
-  }
-
-  const accountExists = getAccounts().some((account) => account.id === value);
-  return accountExists ? value : "all";
+  return !value || value === "all" ? "all" : value;
 }
 
 export function getStoredAccountFilter(): AccountFilterValue {
   return normalizeAccountFilter(localStorage.getItem(STORAGE_KEY));
+}
+
+export function resolveAccountFilter(value: AccountFilterValue, accounts: Account[]): AccountFilterValue {
+  if (value === "all") {
+    return value;
+  }
+
+  return accounts.some((account) => account.id === value) ? value : "all";
 }
 
 export function setStoredAccountFilter(value: AccountFilterValue): void {

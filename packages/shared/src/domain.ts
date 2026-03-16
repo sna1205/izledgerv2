@@ -14,6 +14,8 @@ export interface SetupDefinition {
   description: string;
   color: string;
   createdAt: string;
+  updatedAt?: string;
+  isArchived?: boolean;
 }
 
 export interface Review {
@@ -21,6 +23,7 @@ export interface Review {
   type: ReviewType;
   reviewScope?: ReviewType;
   tradeId?: string;
+  tradeSnapshot?: unknown;
   reviewDate?: string;
   weekStart?: string;
   weekEnd?: string;
@@ -56,25 +59,53 @@ export interface Account {
   balance: number;
   currency: string;
   createdAt: string;
+  updatedAt?: string;
+  isDefault?: boolean;
+}
+
+export interface TradeScreenshotAsset {
+  id: string;
+  storageKey: string;
+  sortOrder: number;
+  createdAt: string;
+  url: string;
 }
 
 export interface Trade {
   id: string;
   date: string;
   pair: string;
-  accountId?: string;
+  accountId: string;
   direction: Direction;
   entry: number;
   stopLoss: number;
   takeProfit: number;
   profit: number;
   result: Result;
+  setupId?: string | null;
   setup: string;
   session?: TradeSession;
   emotion?: TradeEmotion;
   notes: string;
   screenshots: string[];
   createdAt: string;
+  updatedAt?: string;
+  screenshotAssets?: TradeScreenshotAsset[];
+  account?: {
+    id: string;
+    name: string;
+    broker: string;
+    type: AccountType;
+    currency: string;
+    isDefault?: boolean;
+  };
+}
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const PAIRS = [

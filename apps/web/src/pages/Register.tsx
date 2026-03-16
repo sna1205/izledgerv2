@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { AuthPageShell } from "@/components/AuthPageShell";
 import { Button } from "@/components/ui/button";
@@ -8,19 +8,29 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 
 export default function Register() {
+  const navigate = useNavigate();
   const { register } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsSubmitting(true);
 
-    const result = register(username, password);
+    try {
+      const result = await register(username, password);
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      
+      setError("");
+      navigate("/dashboard", { replace: true });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -56,8 +66,8 @@ export default function Register() {
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        <Button type="submit" className="h-11 w-full rounded-xl">
-          Create account
+        <Button type="submit" className="h-11 w-full rounded-xl" disabled={isSubmitting}>
+          {isSubmitting ? "Creating account..." : "Create account"}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </form>

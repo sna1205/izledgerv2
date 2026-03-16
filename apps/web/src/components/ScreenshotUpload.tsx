@@ -1,100 +1,170 @@
-import { useCallback, useState, useRef } from "react";
-import { CameraOff, Upload, X } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { CameraOff, Loader2, Upload, X } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
+import { deleteTradeScreenshot, uploadTradeScreenshot } from "@/lib/api/screenshots";
+import type { TradeScreenshotAsset } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface ScreenshotUploadProps {
-  screenshots: string[];
-  onChange: (screenshots: string[]) => void;
+  tradeId?: string;
+  screenshots: TradeScreenshotAsset[];
+  onChange: (screenshots: TradeScreenshotAsset[]) => void;
   maxFiles?: number;
 }
 
-export function ScreenshotUpload({ screenshots, onChange, maxFiles = 3 }: ScreenshotUploadProps) {
+export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 }: ScreenshotUploadProps) {
   const [dragOver, setDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadsDisabled = !tradeId || isUploading;
 
-  const handleFiles = useCallback((files: FileList | null) => {
-    if (!files) return;
-    const remaining = maxFiles - screenshots.length;
-    const toProcess = Array.from(files).slice(0, remaining);
-    
-    toProcess.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        onChange([...screenshots, result]);
-      };
-      reader.readAsDataURL(file);
-    });
-  }, [screenshots, onChange, maxFiles]);
-
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData.items;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) handleFiles(new DataTransfer().files); // trick
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          onChange([...screenshots, ev.target?.result as string]);
-        };
-        if (file) reader.readAsDataURL(file);
-      }
+  const handleFiles = useCallback(async (files: FileList | null) => {
+    if (!files || !tradeId) {
+      return;
     }
-  }, [screenshots, onChange]);
 
-  const removeScreenshot = (index: number) => {
-    onChange(screenshots.filter((_, i) => i !== index));
-  };
+    const remaining = Math.max(maxFiles - screenshots.length, 0);
+    const toProcess = Array.from(files).slice(0, remaining);
+
+    if (toProcess.length === 0) {
+      toast.error("Screenshot limit reached.");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      let nextScreenshots = [...screenshots];
+
+      for (const file of toProcess) {
+        const screenshot = await uploadTradeScreenshot({
+          tradeId,
+          file,
+          sortOrder: nextScreenshots.length,
+        });
+
+        nextScreenshots = [...nextScreenshots, screenshot];
+        onChange(nextScreenshots);
+      }
+
+      toast.success("Screenshot uploaded.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Screenshot upload failed.";
+      toast.error(message);
+    } finally {
+      setIsUploading(false);
+    }
+  }, [maxFiles, onChange, screenshots, tradeId]);
+
+  const handlePaste = useCallback(async (event: React.ClipboardEvent) => {
+    if (!tradeId) {
+      return;
+    }
+
+    const files = Array.from(event.clipboardData.items)
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+    await handleFiles(transfer.files);
+  }, [handleFiles, tradeId]);
+
+  const removeScreenshot = useCallback(async (screenshot: TradeScreenshotAsset) => {
+    if (!tradeId) {
+      return;
+    }
+
+    setDeletingId(screenshot.id);
+
+    try {
+      await deleteTradeScreenshot(tradeId, screenshot.id);
+      onChange(screenshots.filter((item) => item.id !== screenshot.id));
+      toast.success("Screenshot removed.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not remove the screenshot.";
+      toast.error(message);
+    } finally {
+      setDeletingId(null);
+    }
+  }, [onChange, screenshots, tradeId]);
 
   return (
-    <div className="space-y-3" onPaste={handlePaste}>
-      {screenshots.length < maxFiles && (
+    <div className="space-y-3" onPaste={(event) => void handlePaste(event)}>
+      {!tradeId ? (
+        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          Save the trade first, then reopen it to upload screenshots securely.
+        </div>
+      ) : null}
+
+      {screenshots.length < maxFiles ? (
         <div
           className={cn(
-            "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
-            dragOver ? "border-foreground bg-accent" : "border-border hover:border-muted-foreground"
+            "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+            uploadsDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
+            dragOver ? "border-foreground bg-accent" : "border-border hover:border-muted-foreground",
           )}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!uploadsDisabled) {
+              setDragOver(true);
+            }
+          }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-          onClick={() => inputRef.current?.click()}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragOver(false);
+            if (!uploadsDisabled) {
+              void handleFiles(event.dataTransfer.files);
+            }
+          }}
+          onClick={() => {
+            if (!uploadsDisabled) {
+              inputRef.current?.click();
+            }
+          }}
         >
-          <Upload className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+          {isUploading ? <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-muted-foreground" /> : <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />}
           <p className="text-sm text-muted-foreground">
-            Drop, paste, or click to upload
+            {isUploading ? "Uploading screenshot..." : "Drop, paste, or click to upload"}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="mt-1 text-xs text-muted-foreground">
             {screenshots.length}/{maxFiles} screenshots
           </p>
           <input
             ref={inputRef}
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             multiple
             className="hidden"
-            onChange={(e) => handleFiles(e.target.files)}
+            onChange={(event) => void handleFiles(event.target.files)}
           />
         </div>
-      )}
+      ) : null}
 
-      {screenshots.length > 0 && (
+      {screenshots.length > 0 ? (
         <div className="grid grid-cols-3 gap-3">
-          {screenshots.map((src, i) => (
-            <div key={i} className="relative group rounded-lg overflow-hidden border">
-              <img src={src} alt={`Screenshot ${i + 1}`} className="w-full h-32 object-cover" />
+          {screenshots.map((screenshot, index) => (
+            <div key={screenshot.id} className="group relative overflow-hidden rounded-lg border">
+              <img src={screenshot.url} alt={`Screenshot ${index + 1}`} className="h-32 w-full object-cover" />
               <button
                 type="button"
-                onClick={() => removeScreenshot(i)}
-                className="absolute top-1 right-1 p-1 rounded bg-foreground/80 text-background opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => void removeScreenshot(screenshot)}
+                disabled={deletingId === screenshot.id}
+                className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
               >
-                <X className="h-3 w-3" />
+                {deletingId === screenshot.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
               </button>
             </div>
           ))}
         </div>
-      )}
-
-      {screenshots.length === 0 && (
+      ) : (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <CameraOff className="h-3 w-3" />
           <span>No screenshots uploaded</span>

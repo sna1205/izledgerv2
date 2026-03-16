@@ -1,46 +1,27 @@
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import {
-  ArrowLeft,
-  Camera,
-  CameraOff,
-  CheckCircle2,
-  Clock3,
-  ImagePlus,
-  Pencil,
-  Share2,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Camera, CameraOff, CheckCircle2, Clock3, ImagePlus, Pencil, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
-import { TradeReviewContent } from "@/components/TradeReviewContent";
-import { TradeReviewDialog } from "@/components/TradeReviewDialog";
-import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { toast } from "@/components/ui/sonner";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ResultBadge } from "@/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
-import { TradeFormDialog } from "@/components/TradeFormDialog";
 import { ShareTradeModal } from "@/components/ShareTradeModal";
-import { getAccountById } from "@/lib/accounts";
-import { addReview, getReviewByTradeId, updateReview } from "@/lib/reviews";
-import { deleteTrade, getTradeById, updateTrade } from "@/lib/trades";
+import { TradeFormDialog } from "@/components/TradeFormDialog";
+import { TradeReviewContent } from "@/components/TradeReviewContent";
+import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { listAccounts } from "@/lib/api/accounts";
+import { ApiError } from "@/lib/api/client";
+import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
+import { listSetups } from "@/lib/api/setups";
+import { deleteTrade, getTrade, updateTrade } from "@/lib/api/trades";
+import type { Review, Trade } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Review, Trade } from "@/lib/types";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 function formatTradeDate(date: string) {
   return format(parseISO(date), "MMMM d, yyyy");
@@ -64,9 +45,7 @@ function SectionCard({
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-foreground sm:text-lg">{title}</h2>
-          {description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-          ) : null}
+          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {action}
       </div>
@@ -115,6 +94,7 @@ function ScreenshotGalleryCard({
   onAddScreenshot: () => void;
 }) {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const screenshots = trade.screenshotAssets ?? [];
 
   return (
     <>
@@ -124,38 +104,21 @@ function ScreenshotGalleryCard({
         action={
           <Button variant="outline" size="sm" onClick={onAddScreenshot}>
             <ImagePlus className="mr-1 h-4 w-4" />
-            Add Screenshot
+            Manage Screenshots
           </Button>
         }
       >
-        {trade.screenshots.length > 0 ? (
+        {screenshots.length > 0 ? (
           <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setPreviewSrc(trade.screenshots[0])}
-              className="group block w-full overflow-hidden rounded-2xl border bg-muted/20 text-left"
-            >
-              <img
-                src={trade.screenshots[0]}
-                alt={`${trade.pair} screenshot 1`}
-                className="aspect-[16/10] w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-              />
+            <button type="button" onClick={() => setPreviewSrc(screenshots[0].url)} className="group block w-full overflow-hidden rounded-2xl border bg-muted/20 text-left">
+              <img src={screenshots[0].url} alt={`${trade.pair} screenshot 1`} className="aspect-[16/10] w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
             </button>
 
-            {trade.screenshots.length > 1 ? (
+            {screenshots.length > 1 ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {trade.screenshots.slice(1).map((src, index) => (
-                  <button
-                    key={src + index}
-                    type="button"
-                    onClick={() => setPreviewSrc(src)}
-                    className="overflow-hidden rounded-xl border bg-muted/20"
-                  >
-                    <img
-                      src={src}
-                      alt={`${trade.pair} screenshot ${index + 2}`}
-                      className="aspect-[4/3] w-full object-cover transition-transform duration-300 hover:scale-[1.03]"
-                    />
+                {screenshots.slice(1).map((screenshot, index) => (
+                  <button key={screenshot.id} type="button" onClick={() => setPreviewSrc(screenshot.url)} className="overflow-hidden rounded-xl border bg-muted/20">
+                    <img src={screenshot.url} alt={`${trade.pair} screenshot ${index + 2}`} className="aspect-[4/3] w-full object-cover transition-transform duration-300 hover:scale-[1.03]" />
                   </button>
                 ))}
               </div>
@@ -178,7 +141,7 @@ function ScreenshotGalleryCard({
         )}
       </SectionCard>
 
-      <Dialog open={!!previewSrc} onOpenChange={(open) => !open && setPreviewSrc(null)}>
+      <Dialog open={Boolean(previewSrc)} onOpenChange={(open) => !open && setPreviewSrc(null)}>
         <DialogContent className="max-w-5xl border-0 bg-transparent p-4 shadow-none sm:p-6">
           {previewSrc ? (
             <div className="overflow-hidden rounded-2xl border bg-background shadow-2xl">
@@ -191,13 +154,7 @@ function ScreenshotGalleryCard({
   );
 }
 
-function buildInsights({
-  trade,
-  review,
-}: {
-  trade: Trade;
-  review?: Review;
-}) {
+function buildInsights({ trade, review }: { trade: Trade; review?: Review | null }) {
   const insights: Array<{ tone: "neutral" | "good" | "warn"; text: string }> = [];
 
   if (trade.profit > 0 && review && (review.disciplineScore || 0) <= 2) {
@@ -208,7 +165,7 @@ function buildInsights({
     insights.push({ tone: "good", text: "Reviewed trade with a clear lesson captured." });
   }
 
-  if (!trade.screenshots.length) {
+  if (!(trade.screenshotAssets?.length ?? 0)) {
     insights.push({ tone: "warn", text: "No screenshot added. Chart evidence is missing for future review." });
   }
 
@@ -223,17 +180,118 @@ function buildInsights({
   return insights.slice(0, 3);
 }
 
+function invalidateTradeQueries(queryClient: ReturnType<typeof useQueryClient>, tradeId: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["trades"] }),
+    queryClient.invalidateQueries({ queryKey: ["reviews"] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] }),
+    queryClient.invalidateQueries({ queryKey: ["analytics-breakdowns"] }),
+    queryClient.invalidateQueries({ queryKey: ["analytics-calendar"] }),
+    queryClient.invalidateQueries({ queryKey: ["trades", "detail", tradeId] }),
+  ]);
+}
+
 export default function TradeDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [trade, setTrade] = useState(() => getTradeById(id || ""));
-  const [review, setReview] = useState(() => getReviewByTradeId(id || ""));
+  const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
 
-  if (!trade) {
+  const tradeQuery = useQuery({
+    queryKey: ["trades", "detail", id],
+    queryFn: async () => {
+      const response = await getTrade(id);
+      return response.trade;
+    },
+    enabled: Boolean(id),
+  });
+  const reviewQuery = useQuery({
+    queryKey: ["reviews", "trade", id],
+    queryFn: async () => {
+      const response = await listReviews({ type: "trade", tradeId: id, page: 1, pageSize: 10 });
+      return response.items[0] ?? null;
+    },
+    enabled: Boolean(id),
+  });
+  const accountsQuery = useQuery({
+    queryKey: ["accounts"],
+    queryFn: async () => {
+      const response = await listAccounts();
+      return response.items;
+    },
+  });
+  const setupsQuery = useQuery({
+    queryKey: ["setups"],
+    queryFn: async () => {
+      const response = await listSetups();
+      return response.items;
+    },
+  });
+
+  const updateTradeMutation = useMutation({
+    mutationFn: async (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => updateTrade(id, payload),
+    onSuccess: async () => {
+      await invalidateTradeQueries(queryClient, id);
+      toast.success("Trade updated successfully.");
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not update the trade right now.";
+      toast.error(message);
+    },
+  });
+  const deleteTradeMutation = useMutation({
+    mutationFn: async () => deleteTrade(id),
+    onSuccess: async () => {
+      await invalidateTradeQueries(queryClient, id);
+      navigate("/trades");
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not delete the trade right now.";
+      toast.error(message);
+    },
+  });
+  const saveReviewMutation = useMutation({
+    mutationFn: async (review: Review) => {
+      const payload = {
+        type: "trade" as const,
+        tradeId: review.tradeId!,
+        reviewDate: review.reviewDate ?? null,
+        lessonLearned: review.lessonLearned ?? null,
+        disciplineScore: review.disciplineScore ?? null,
+        executionRating: review.executionRating ?? null,
+        emotionRating: review.emotionRating ?? null,
+        whatWentWell: review.whatWentWell ?? null,
+        whatWentWrong: review.whatWentWrong ?? null,
+        mistakesMade: review.mistakesMade ?? null,
+        improvementForNextTrade: review.improvementForNextTrade ?? null,
+        wouldTakeAgain: review.wouldTakeAgain ?? null,
+      };
+
+      if (reviewQuery.data?.id) {
+        return updateReview(reviewQuery.data.id, payload);
+      }
+
+      return createReview(payload);
+    },
+    onSuccess: async () => {
+      await invalidateTradeQueries(queryClient, id);
+      toast.success(reviewQuery.data ? "Trade review updated." : "Trade review created.");
+      setReviewOpen(false);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not save the trade review right now.";
+      toast.error(message);
+    },
+  });
+
+  if (tradeQuery.isLoading && !tradeQuery.data) {
+    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading trade...</div>;
+  }
+
+  if (tradeQuery.isError || !tradeQuery.data) {
     return (
       <div className="p-4 sm:p-6">
         <Button variant="ghost" size="sm" onClick={() => navigate("/trades")}>
@@ -244,28 +302,9 @@ export default function TradeDetail() {
     );
   }
 
-  const handleSave = (updated: Trade) => {
-    updateTrade(updated);
-    setTrade(updated);
-  };
-
-  const handleDelete = () => {
-    deleteTrade(trade.id);
-    navigate("/trades");
-  };
-
-  const handleSaveReview = (updatedReview: Review) => {
-    if (review) {
-      updateReview(updatedReview);
-    } else {
-      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = updatedReview;
-      addReview(draft);
-    }
-
-    setReview(getReviewByTradeId(trade.id) || updatedReview);
-  };
-
-  const accountName = getAccountById(trade.accountId || "")?.name || "Main Account";
+  const trade = tradeQuery.data;
+  const review = reviewQuery.data;
+  const accountName = trade.account?.name ?? accountsQuery.data?.find((account) => account.id === trade.accountId)?.name ?? "Unassigned";
   const risk = Math.abs(trade.entry - trade.stopLoss);
   const reward = Math.abs(trade.takeProfit - trade.entry);
   const rrValue = risk > 0 ? reward / risk : null;
@@ -289,7 +328,7 @@ export default function TradeDetail() {
                     {trade.pair}
                   </h1>
                   <ResultBadge result={trade.result} />
-                  <TradeReviewStatusBadge trade={trade} reviewed={!!review} />
+                  <TradeReviewStatusBadge trade={trade} reviewed={Boolean(review)} />
                   {trade.session ? (
                     <span className="inline-flex items-center rounded-full border bg-background px-3 py-1 text-xs font-medium text-foreground">
                       {trade.session}
@@ -350,12 +389,7 @@ export default function TradeDetail() {
                   <Share2 className="mr-1 h-4 w-4" />
                   Share Trade
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-destructive hover:text-destructive xl:w-auto"
-                  onClick={() => setDeleteOpen(true)}
-                >
+                <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive xl:w-auto" onClick={() => setDeleteOpen(true)}>
                   <Trash2 className="mr-1 h-4 w-4" />
                   Delete
                 </Button>
@@ -366,10 +400,7 @@ export default function TradeDetail() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
           <div className="space-y-6">
-            <SectionCard
-              title="Trade Overview"
-              description="Core context for this execution, account, and trader state."
-            >
+            <SectionCard title="Trade Overview" description="Core context for this execution, account, and trader state.">
               <div className="grid gap-4 md:grid-cols-2">
                 <MetricTile label="Account" value={accountName} />
                 <MetricTile label="Direction" value={trade.direction} />
@@ -378,38 +409,22 @@ export default function TradeDetail() {
               </div>
             </SectionCard>
 
-            <SectionCard
-              title="Execution Metrics"
-              description="Price levels, structure, and trade quality inputs."
-            >
+            <SectionCard title="Execution Metrics" description="Price levels, structure, and trade quality inputs.">
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <MetricTile label="Entry" value={<span className="font-mono-price">{trade.entry}</span>} />
                   <MetricTile label="Stop Loss" value={<span className="font-mono-price">{trade.stopLoss}</span>} />
                   <MetricTile label="Take Profit" value={<span className="font-mono-price">{trade.takeProfit}</span>} />
-                  <MetricTile
-                    label="Risk : Reward"
-                    value={rrValue ? `1:${rrValue.toFixed(2)}` : "—"}
-                    valueClassName="font-mono-price"
-                  />
+                  <MetricTile label="Risk : Reward" value={rrValue ? `1:${rrValue.toFixed(2)}` : "—"} valueClassName="font-mono-price" />
                 </div>
 
                 <div className="rounded-2xl border bg-background/60 p-4">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Performance</p>
                   <div className="mt-3 space-y-1">
                     <InsightRow label="Result" value={<ResultBadge result={trade.result} />} />
-                    <InsightRow
-                      label="Setup"
-                      value={trade.setup ? <SetupTag label={trade.setup} /> : "No setup tagged"}
-                    />
-                    <InsightRow
-                      label="Screenshot Count"
-                      value={`${trade.screenshots.length} ${trade.screenshots.length === 1 ? "image" : "images"}`}
-                    />
-                    <InsightRow
-                      label="Review Status"
-                      value={review ? "Completed" : "Pending"}
-                    />
+                    <InsightRow label="Setup" value={trade.setup ? <SetupTag label={trade.setup} /> : "No setup tagged"} />
+                    <InsightRow label="Screenshot Count" value={`${trade.screenshotAssets?.length ?? 0} ${(trade.screenshotAssets?.length ?? 0) === 1 ? "image" : "images"}`} />
+                    <InsightRow label="Review Status" value={review ? "Completed" : "Pending"} />
                   </div>
                 </div>
               </div>
@@ -418,20 +433,14 @@ export default function TradeDetail() {
             <SectionCard
               title="Trade Review"
               description="Capture execution quality, discipline, and the lesson while it is still fresh."
-              action={
-                <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>
-                  {review ? "Edit Review" : "Write Review"}
-                </Button>
-              }
+              action={<Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>{review ? "Edit Review" : "Write Review"}</Button>}
             >
               {review ? (
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-background/60 px-4 py-3">
                     <div>
                       <p className="text-sm font-medium text-foreground">Review completed</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {reviewUpdatedLabel || "Recently updated"}
-                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{reviewUpdatedLabel || "Recently updated"}</p>
                     </div>
                     <TradeReviewStatusBadge trade={trade} reviewed />
                   </div>
@@ -457,13 +466,10 @@ export default function TradeDetail() {
           <div className="space-y-6">
             <ScreenshotGalleryCard trade={trade} onAddScreenshot={() => setEditOpen(true)} />
 
-            <SectionCard
-              title="Journal Notes"
-              description="Execution context, planning notes, or post-trade comments."
-            >
+            <SectionCard title="Journal Notes" description="Execution context, planning notes, or post-trade comments.">
               {trade.notes ? (
                 <div className="rounded-2xl border bg-background/60 p-5">
-                  <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">{trade.notes}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{trade.notes}</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
@@ -472,10 +478,7 @@ export default function TradeDetail() {
               )}
             </SectionCard>
 
-            <SectionCard
-              title="Quick Insights"
-              description="A lightweight summary of what stands out in this trade journal entry."
-            >
+            <SectionCard title="Quick Insights" description="A lightweight summary of what stands out in this trade journal entry.">
               <div className="space-y-3">
                 {insights.map((insight, index) => (
                   <div
@@ -499,24 +502,21 @@ export default function TradeDetail() {
       <TradeFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}
-        onSave={handleSave}
+        onSave={async (payload) => {
+          await updateTradeMutation.mutateAsync(payload);
+        }}
         editTrade={trade}
+        accounts={accountsQuery.data ?? []}
+        setups={setupsQuery.data ?? []}
+        isSaving={updateTradeMutation.isPending}
+        onScreenshotsChange={(updatedTrade) => {
+          queryClient.setQueryData(["trades", "detail", id], updatedTrade);
+        }}
       />
 
-      <TradeReviewDialog
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        trade={trade}
-        review={review}
-        onSave={handleSaveReview}
-      />
+      <TradeReviewDialog open={reviewOpen} onOpenChange={setReviewOpen} trade={trade} review={review} onSave={(nextReview) => saveReviewMutation.mutate(nextReview)} />
 
-      <ShareTradeModal
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-        trade={trade}
-        accountName={accountName}
-      />
+      <ShareTradeModal open={shareOpen} onOpenChange={setShareOpen} trade={trade} accountName={accountName} />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
@@ -528,7 +528,9 @@ export default function TradeDetail() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteTradeMutation.mutate()} disabled={deleteTradeMutation.isPending}>
+              {deleteTradeMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -14,20 +14,27 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const nextPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
+  const nextPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/dashboard";
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsSubmitting(true);
 
-    const result = login(username, password);
+    try {
+      const result = await login(username, password);
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      setError("");
+      navigate(nextPath, { replace: true });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    navigate(nextPath, { replace: true });
   };
 
   return (
@@ -62,8 +69,8 @@ export default function Login() {
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        <Button type="submit" className="h-11 w-full rounded-xl">
-          Log in
+        <Button type="submit" className="h-11 w-full rounded-xl" disabled={isSubmitting}>
+          {isSubmitting ? "Logging in..." : "Log in"}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </form>

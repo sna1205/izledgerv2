@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Database, LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth";
-import { seedMockData } from "@/lib/mock-data";
-import { toast } from "@/components/ui/sonner";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -17,32 +15,40 @@ export default function Settings() {
   const [nextPassword, setNextPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleChangePassword = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setIsSavingPassword(true);
 
-    const result = changePassword(currentPassword, nextPassword);
+    try {
+      const result = await changePassword(currentPassword, nextPassword);
 
-    if (result.error) {
-      setSuccess("");
-      setError(result.error);
-      return;
+      if (result.error) {
+        setSuccess("");
+        setError(result.error);
+        return;
+      }
+
+      setError("");
+      setSuccess("Password updated.");
+      setCurrentPassword("");
+      setNextPassword("");
+    } finally {
+      setIsSavingPassword(false);
     }
-
-    setError("");
-    setSuccess("Password updated.");
-    setCurrentPassword("");
-    setNextPassword("");
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
-  };
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
 
-  const handleLoadMockData = () => {
-    seedMockData();
-    toast.success("Mock data loaded for screenshots.");
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -108,9 +114,9 @@ export default function Settings() {
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               {success ? <p className="text-sm text-emerald-700">{success}</p> : null}
 
-              <Button type="submit" className="w-full rounded-xl sm:w-auto">
+              <Button type="submit" className="w-full rounded-xl sm:w-auto" disabled={isSavingPassword}>
                 <ShieldCheck className="h-4 w-4" />
-                Save Password
+                {isSavingPassword ? "Saving..." : "Save Password"}
               </Button>
             </form>
           </CardContent>
@@ -122,27 +128,9 @@ export default function Settings() {
             <CardDescription>Log out of your current account on this device.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={handleLogout}>
+            <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={handleLogout} disabled={isLoggingOut}>
               <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl">
-          <CardHeader>
-            <CardTitle className="text-lg">Mock Data</CardTitle>
-            <CardDescription>Load a polished demo journal with accounts, trades, reviews, analytics, and screenshots for landing page captures.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl border bg-background/60 px-4 py-4">
-              <p className="text-sm text-muted-foreground">
-                This replaces the current local journal data on this device with demo trading content for screenshots.
-              </p>
-            </div>
-            <Button className="w-full rounded-xl sm:w-auto" onClick={handleLoadMockData}>
-              <Database className="h-4 w-4" />
-              Load Mock Data
+              {isLoggingOut ? "Logging out..." : "Logout"}
             </Button>
           </CardContent>
         </Card>

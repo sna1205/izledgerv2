@@ -1,59 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import {
-  Camera,
-  CameraOff,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  Images,
-  LayoutList,
-  MessageSquarePlus,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { CameraOff, ChevronLeft, ChevronRight, Images, LayoutList, Pencil, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
-import { TradeReviewDialog } from "@/components/TradeReviewDialog";
-import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ResultBadge } from "@/components/ResultBadge";
 import { TradeFormDialog } from "@/components/TradeFormDialog";
-import { filterTradesByAccount, useAccountFilter } from "@/lib/account-filter";
-import { getAccounts } from "@/lib/accounts";
-import { getReviews, addReview } from "@/lib/reviews";
-import { getSetups } from "@/lib/setups";
-import { addTrade, deleteTrade, getTrades, updateTrade } from "@/lib/trades";
-import { EMOTIONS, Review, SESSIONS, Trade, TradeEmotion, TradeSession } from "@/lib/types";
+import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { listAccounts } from "@/lib/api/accounts";
+import { ApiError } from "@/lib/api/client";
+import { listReviews, createReview, updateReview } from "@/lib/api/reviews";
+import { listSetups } from "@/lib/api/setups";
+import { createTrade, deleteTrade, listTrades, updateTrade } from "@/lib/api/trades";
+import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
-const rowVariants = {
-  hidden: { opacity: 0, y: 5 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.2,
-      ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
-      delay: i * 0.03,
-    },
-  }),
-};
 
 const LEDGER_PAGE_SIZE = 10;
 const SCREENBOOK_PAGE_SIZE = 9;
@@ -63,39 +30,19 @@ const directionStyles = {
   Sell: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
 } as const;
 
-const emotionStyles: Record<TradeEmotion, string> = {
+const emotionStyles = {
   Calm: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300",
   Focused: "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300",
   Confident: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300",
   Anxious: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
   Frustrated: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
-};
+} as const;
 
-const sessionStyles: Record<TradeSession, string> = {
+const sessionStyles = {
   Asia: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300",
   London: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300",
   "New York": "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300",
-};
-
-function compactSetupLabel(setup: string) {
-  const normalized = setup.trim();
-  const lower = normalized.toLowerCase();
-
-  if (!normalized) return "";
-  if (lower === "support/resistance") return "S/R";
-  if (lower === "support resistance") return "S/R";
-  if (lower === "breakout") return "BO";
-  if (lower === "pullback") return "PB";
-
-  const parts = normalized.split(/[\s/-]+/).filter(Boolean);
-
-  if (parts.length === 1) {
-    return parts[0].length <= 10 ? parts[0] : `${parts[0].slice(0, 8)}…`;
-  }
-
-  const initials = parts.map((part) => part[0]?.toUpperCase()).join("");
-  return initials.length <= 4 ? initials : initials.slice(0, 4);
-}
+} as const;
 
 function formatTradeDate(date: string) {
   return format(parseISO(date), "MMM d, yyyy");
@@ -128,38 +75,6 @@ function FilterField({
         </SelectContent>
       </Select>
     </div>
-  );
-}
-
-function SetupChip({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium tracking-[0.12em] text-slate-700 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300">
-      {compactSetupLabel(label)}
-    </span>
-  );
-}
-
-function EmotionChip({ emotion }: { emotion?: TradeEmotion }) {
-  if (!emotion) {
-    return <span className="text-sm text-muted-foreground">—</span>;
-  }
-
-  return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium", emotionStyles[emotion])}>
-      {emotion}
-    </span>
-  );
-}
-
-function SessionChip({ session }: { session?: TradeSession }) {
-  if (!session) {
-    return <span className="text-sm text-muted-foreground">—</span>;
-  }
-
-  return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium", sessionStyles[session])}>
-      {session}
-    </span>
   );
 }
 
@@ -200,12 +115,22 @@ function PaginationControls({
   );
 }
 
+function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["trades"] }),
+    queryClient.invalidateQueries({ queryKey: ["reviews"] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] }),
+    queryClient.invalidateQueries({ queryKey: ["analytics-breakdowns"] }),
+    queryClient.invalidateQueries({ queryKey: ["analytics-calendar"] }),
+  ]);
+}
+
 export default function Trades() {
-  const [trades, setTrades] = useState<Trade[]>(() => getTrades());
-  const [reviews, setReviews] = useState<Review[]>(() => getReviews());
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
-  const [reviewTrade, setReviewTrade] = useState<Trade | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{ trade: Trade; review?: Review | null } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [accountFilter, setAccountFilter] = useAccountFilter();
   const [sessionFilter, setSessionFilter] = useState<string>("all");
@@ -214,10 +139,51 @@ export default function Trades() {
   const [activeView, setActiveView] = useState<"ledger" | "screenbook">("ledger");
   const [ledgerPage, setLedgerPage] = useState(1);
   const [screenbookPage, setScreenbookPage] = useState(1);
-  const navigate = useNavigate();
 
-  const accounts = useMemo(() => getAccounts(), [trades, accountFilter]);
-  const setups = useMemo(() => getSetups(), [trades]);
+  const accountsQuery = useQuery({
+    queryKey: ["accounts"],
+    queryFn: async () => {
+      const response = await listAccounts();
+      return response.items;
+    },
+  });
+  const setupsQuery = useQuery({
+    queryKey: ["setups"],
+    queryFn: async () => {
+      const response = await listSetups();
+      return response.items;
+    },
+  });
+  const tradesQuery = useQuery({
+    queryKey: ["trades", "list"],
+    queryFn: async () => {
+      const response = await listTrades({ page: 1, pageSize: 100, sortBy: "date", sortOrder: "desc" });
+      return response.items;
+    },
+  });
+  const reviewsQuery = useQuery({
+    queryKey: ["reviews", "list"],
+    queryFn: async () => {
+      const response = await listReviews({ page: 1, pageSize: 100 });
+      return response.items;
+    },
+  });
+
+  const accounts = accountsQuery.data ?? [];
+  const setups = setupsQuery.data ?? [];
+  const trades = tradesQuery.data ?? [];
+  const reviews = reviewsQuery.data ?? [];
+  const resolvedAccountFilter = useMemo(
+    () => resolveAccountFilter(accountFilter, accounts),
+    [accountFilter, accounts],
+  );
+
+  useEffect(() => {
+    if (resolvedAccountFilter !== accountFilter) {
+      setAccountFilter(resolvedAccountFilter);
+    }
+  }, [accountFilter, resolvedAccountFilter, setAccountFilter]);
+
   const accountNames = useMemo(
     () => Object.fromEntries(accounts.map((account) => [account.id, account.name])),
     [accounts],
@@ -226,95 +192,117 @@ export default function Trades() {
     () =>
       Object.fromEntries(
         reviews
-          .filter((review) => review.reviewScope === "trade" && review.tradeId)
+          .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
           .map((review) => [review.tradeId as string, review]),
       ),
     [reviews],
   );
 
   const filteredTrades = useMemo(() => {
-    return filterTradesByAccount(trades, accountFilter).filter((trade) => {
+    return trades.filter((trade) => {
+      if (resolvedAccountFilter !== "all" && trade.accountId !== resolvedAccountFilter) return false;
       if (sessionFilter !== "all" && trade.session !== sessionFilter) return false;
       if (setupFilter !== "all" && trade.setup !== setupFilter) return false;
       if (emotionFilter !== "all" && trade.emotion !== emotionFilter) return false;
       return true;
     });
-  }, [accountFilter, emotionFilter, sessionFilter, setupFilter, trades]);
+  }, [emotionFilter, resolvedAccountFilter, sessionFilter, setupFilter, trades]);
 
   const ledgerTotalPages = Math.max(1, Math.ceil(filteredTrades.length / LEDGER_PAGE_SIZE));
   const screenbookTotalPages = Math.max(1, Math.ceil(filteredTrades.length / SCREENBOOK_PAGE_SIZE));
   const currentLedgerPage = Math.min(ledgerPage, ledgerTotalPages);
   const currentScreenbookPage = Math.min(screenbookPage, screenbookTotalPages);
-  const ledgerTrades = useMemo(() => {
-    const startIndex = (currentLedgerPage - 1) * LEDGER_PAGE_SIZE;
-    return filteredTrades.slice(startIndex, startIndex + LEDGER_PAGE_SIZE);
-  }, [currentLedgerPage, filteredTrades]);
-  const screenbookTrades = useMemo(() => {
-    const startIndex = (currentScreenbookPage - 1) * SCREENBOOK_PAGE_SIZE;
-    return filteredTrades.slice(startIndex, startIndex + SCREENBOOK_PAGE_SIZE);
-  }, [currentScreenbookPage, filteredTrades]);
+  const ledgerTrades = filteredTrades.slice((currentLedgerPage - 1) * LEDGER_PAGE_SIZE, currentLedgerPage * LEDGER_PAGE_SIZE);
+  const screenbookTrades = filteredTrades.slice((currentScreenbookPage - 1) * SCREENBOOK_PAGE_SIZE, currentScreenbookPage * SCREENBOOK_PAGE_SIZE);
 
   useEffect(() => {
     setLedgerPage(1);
     setScreenbookPage(1);
-  }, [accountFilter, emotionFilter, sessionFilter, setupFilter]);
+  }, [resolvedAccountFilter, emotionFilter, sessionFilter, setupFilter]);
 
-  useEffect(() => {
-    if (ledgerPage > ledgerTotalPages) {
-      setLedgerPage(ledgerTotalPages);
-    }
-  }, [ledgerPage, ledgerTotalPages]);
+  const saveTradeMutation = useMutation({
+    mutationFn: async (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => {
+      if (editingTrade) {
+        return updateTrade(editingTrade.id, payload);
+      }
 
-  useEffect(() => {
-    if (screenbookPage > screenbookTotalPages) {
-      setScreenbookPage(screenbookTotalPages);
-    }
-  }, [screenbookPage, screenbookTotalPages]);
+      return createTrade(payload);
+    },
+    onSuccess: async () => {
+      await invalidateJournalQueries(queryClient);
+      toast.success(editingTrade ? "Trade updated successfully." : "Trade saved successfully.");
+      setEditingTrade(null);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not save the trade right now.";
+      toast.error(message);
+    },
+  });
 
-  const refresh = useCallback(() => {
-    setTrades(getTrades());
-    setReviews(getReviews());
-  }, []);
+  const deleteTradeMutation = useMutation({
+    mutationFn: async (tradeId: string) => deleteTrade(tradeId),
+    onSuccess: async () => {
+      await invalidateJournalQueries(queryClient);
+      toast.success("Trade deleted.");
+      setDeleteId(null);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not delete the trade right now.";
+      toast.error(message);
+    },
+  });
 
-  const handleSave = (trade: Trade) => {
-    const isNewTrade = !editingTrade;
+  const saveReviewMutation = useMutation({
+    mutationFn: async (review: Review) => {
+      const payload = {
+        type: "trade" as const,
+        tradeId: review.tradeId!,
+        reviewDate: review.reviewDate ?? null,
+        lessonLearned: review.lessonLearned ?? null,
+        disciplineScore: review.disciplineScore ?? null,
+        executionRating: review.executionRating ?? null,
+        emotionRating: review.emotionRating ?? null,
+        whatWentWell: review.whatWentWell ?? null,
+        whatWentWrong: review.whatWentWrong ?? null,
+        mistakesMade: review.mistakesMade ?? null,
+        improvementForNextTrade: review.improvementForNextTrade ?? null,
+        wouldTakeAgain: review.wouldTakeAgain ?? null,
+      };
 
-    if (editingTrade) {
-      updateTrade(trade);
-    } else {
-      addTrade(trade);
-    }
+      if (reviewTarget?.review?.id) {
+        return updateReview(reviewTarget.review.id, payload);
+      }
 
-    setEditingTrade(null);
-    refresh();
+      return createReview(payload);
+    },
+    onSuccess: async () => {
+      await invalidateJournalQueries(queryClient);
+      toast.success(reviewTarget?.review ? "Trade review updated." : "Trade review created.");
+      setReviewTarget(null);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not save the trade review right now.";
+      toast.error(message);
+    },
+  });
 
-    if (isNewTrade) {
-      toast.success("Trade saved successfully.", {
-        action: {
-          label: "Review trade",
-          onClick: () => {
-            setReviewTrade(trade);
-          },
-        },
-      });
-    }
-  };
+  const isLoading = [accountsQuery, setupsQuery, tradesQuery, reviewsQuery].some((query) => query.isLoading && !query.data);
+  const hasError = [accountsQuery, setupsQuery, tradesQuery, reviewsQuery].some((query) => query.isError);
 
-  const handleDelete = () => {
-    if (!deleteId) return;
+  if (isLoading) {
+    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading trades...</div>;
+  }
 
-    deleteTrade(deleteId);
-    setDeleteId(null);
-    refresh();
-  };
-
-  const handleSaveTradeReview = (review: Review) => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = review;
-    addReview(draft);
-    setReviewTrade(null);
-    setReviews(getReviews());
-    toast.success("Trade review created.");
-  };
+  if (hasError) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="mx-auto max-w-3xl rounded-2xl border bg-card p-8 text-center">
+          <h1 className="text-lg font-semibold text-foreground">Trades unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">We could not load your trading journal right now.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6">
@@ -345,7 +333,7 @@ export default function Trades() {
             <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <FilterField
                 label="Account"
-                value={accountFilter}
+                value={resolvedAccountFilter}
                 onValueChange={setAccountFilter}
                 options={[
                   { label: "All Accounts", value: "all" },
@@ -401,435 +389,152 @@ export default function Trades() {
                   Screenbook
                 </TabsTrigger>
               </TabsList>
-              <p className="hidden text-sm text-muted-foreground lg:block">
-                Review the structured ledger or switch to a screenshot-first trade grid.
-              </p>
             </div>
 
             <TabsContent value="ledger" className="mt-4">
-              <div className="space-y-4">
-                <div className="grid gap-3 2xl:hidden">
-                  {ledgerTrades.map((trade, index) => {
-                    const linkedReview = tradeReviewMap[trade.id];
-
-                    return (
-                      <motion.article
-                        key={trade.id}
-                        custom={index}
-                        variants={rowVariants}
-                        initial="hidden"
-                        animate="visible"
-                        className="rounded-2xl border bg-card p-4 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <button type="button" className="min-w-0 text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                            <div className="flex items-center gap-2">
-                              <p className="text-base font-semibold text-foreground">{trade.pair}</p>
-                              {trade.screenshots.length > 0 ? <Camera className="h-4 w-4 text-muted-foreground" /> : null}
-                            </div>
-                            <p className="mt-1 text-xs text-muted-foreground">{formatTradeDate(trade.date)}</p>
-                            <span className={cn("mt-3 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", directionStyles[trade.direction])}>
-                              {trade.direction}
-                            </span>
-                          </button>
-                          <div className="text-right">
-                            <ResultBadge result={trade.result} />
-                            <ProfitDisplay value={trade.profit} className="mt-3 text-base font-semibold" />
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-xl border bg-background/60 p-3">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Context</p>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <SessionChip session={trade.session} />
-                              <EmotionChip emotion={trade.emotion} />
-                              {trade.setup ? <SetupChip label={trade.setup} /> : null}
-                            </div>
-                          </div>
-                          <div className="rounded-xl border bg-background/60 p-3">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Review</p>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <TradeReviewStatusBadge trade={trade} reviewed={!!linkedReview} />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-xl border bg-background/60 p-3">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Account</p>
-                            <p className="mt-2 text-sm font-medium text-foreground">{accountNames[trade.accountId || ""] || "Main Account"}</p>
-                          </div>
-                          <div className="rounded-xl border bg-background/60 p-3">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Position</p>
-                            <p className="mt-2 font-mono-price text-sm text-foreground">
-                              {trade.entry} / {trade.stopLoss} / {trade.takeProfit}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                          <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={() => navigate(`/trades/${trade.id}`)}>
-                            <Eye className="mr-1.5 h-4 w-4" />
-                            Open Trade
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9 rounded-xl px-3"
-                            onClick={() => linkedReview ? navigate(`/trades/${trade.id}`) : setReviewTrade(trade)}
-                          >
-                            <MessageSquarePlus className="mr-1.5 h-4 w-4" />
-                            {linkedReview ? "Open Journal" : "Add Journal"}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 rounded-xl px-3"
-                            onClick={() => {
-                              setEditingTrade(trade);
-                              setFormOpen(true);
-                            }}
-                          >
-                            <Pencil className="mr-1.5 h-4 w-4" />
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 rounded-xl px-3 text-destructive hover:text-destructive"
-                            onClick={() => setDeleteId(trade.id)}
-                          >
-                            <Trash2 className="mr-1.5 h-4 w-4" />
-                            Delete
-                          </Button>
-                        </div>
-                      </motion.article>
-                    );
-                  })}
-                  {filteredTrades.length === 0 ? (
-                    <div className="rounded-2xl border bg-card px-6 py-16 text-center">
-                      <p className="text-base font-medium text-foreground">No trades match these filters.</p>
-                      <p className="mt-2 text-sm text-muted-foreground">Adjust your account, session, setup, or emotion filters to widen the ledger view.</p>
-                    </div>
-                  ) : null}
+              {filteredTrades.length === 0 ? (
+                <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
+                  <p className="text-base font-medium text-foreground">No trades match these filters.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Adjust the filters or log a new trade.</p>
                 </div>
-
-                <div className="hidden overflow-hidden rounded-2xl border bg-card shadow-sm 2xl:block">
-                <div className="overflow-x-hidden">
-                  <table className="w-full table-fixed text-left">
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
+                  <table className="w-full text-left">
                     <thead>
-                      <tr className="border-b border-border/70 bg-muted/35">
-                        {["Date", "Pair", "Result", "Profit", "Session", "Setup", "Emotion", "Review", "Account", "Position", "Journal", "Actions"].map((header) => (
-                          <th
-                            key={header}
-                            className={cn(
-                              "sticky top-0 z-10 bg-muted/90 px-3 py-3 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground backdrop-blur",
-                              header === "Journal" && "w-[100px] text-center",
-                              header === "Actions" && "w-[76px] text-right",
-                              header === "Date" && "w-[74px]",
-                              header === "Pair" && "w-[110px]",
-                              header === "Result" && "w-[72px]",
-                              header === "Profit" && "w-[96px]",
-                              header === "Session" && "w-[92px]",
-                              header === "Setup" && "w-[84px]",
-                              header === "Emotion" && "w-[108px]",
-                              header === "Review" && "w-[124px]",
-                              header === "Account" && "w-[88px]",
-                              header === "Position" && "w-[104px]",
-                              header === "Profit" && "text-right",
-                            )}
-                          >
-                            {header}
-                          </th>
-                        ))}
+                      <tr className="border-b bg-muted/40">
+                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Date</th>
+                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Pair</th>
+                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Account</th>
+                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Context</th>
+                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Review</th>
+                        <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted-foreground">PnL</th>
+                        <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {ledgerTrades.map((trade, index) => {
+                      {ledgerTrades.map((trade) => {
                         const linkedReview = tradeReviewMap[trade.id];
 
                         return (
-                          <motion.tr
-                            key={trade.id}
-                            custom={index}
-                            variants={rowVariants}
-                            initial="hidden"
-                            animate="visible"
-                            className="group border-b border-border/60 last:border-b-0 transition-colors hover:bg-muted/20"
-                          >
-                            <td className="px-3 py-4 align-top">
+                          <tr key={trade.id} className="border-b last:border-b-0">
+                            <td className="px-4 py-4 text-sm">{formatTradeDate(trade.date)}</td>
+                            <td className="px-4 py-4">
                               <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                                <p className="text-sm font-medium text-foreground">{format(parseISO(trade.date), "MMM d")}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">{format(parseISO(trade.date), "yyyy")}</p>
+                                <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium", directionStyles[trade.direction])}>
+                                    {trade.direction}
+                                  </span>
+                                  <ResultBadge result={trade.result} />
+                                </div>
                               </button>
                             </td>
-                            <td className="px-3 py-4 align-top">
-                              <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm font-semibold text-foreground xl:text-base">{trade.pair}</p>
-                                  {trade.screenshots.length > 0 ? <Camera className="h-4 w-4 text-muted-foreground" /> : null}
-                                </div>
-                                <span className={cn("mt-2 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", directionStyles[trade.direction])}>
-                                  {trade.direction}
-                                </span>
-                              </button>
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              <ResultBadge result={trade.result} />
-                            </td>
-                            <td className="px-3 py-4 text-right align-top">
-                              <ProfitDisplay value={trade.profit} className="text-base font-semibold xl:text-lg" />
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              <SessionChip session={trade.session} />
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              {trade.setup ? <SetupChip label={trade.setup} /> : <span className="text-sm text-muted-foreground">—</span>}
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              <EmotionChip emotion={trade.emotion} />
-                            </td>
-                            <td className="overflow-hidden px-3 py-4 align-top">
-                              <TradeReviewStatusBadge trade={trade} reviewed={!!linkedReview} />
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              <p className="truncate text-sm font-medium text-foreground">{accountNames[trade.accountId || ""] || "Main Account"}</p>
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              <div className="space-y-1 text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="min-w-9 uppercase tracking-[0.14em] text-muted-foreground">EN</span>
-                                  <span className="font-mono-price text-xs text-foreground xl:text-sm">{trade.entry}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="min-w-9 uppercase tracking-[0.14em] text-muted-foreground">SL</span>
-                                  <span className="font-mono-price text-xs text-foreground xl:text-sm">{trade.stopLoss}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="min-w-9 uppercase tracking-[0.14em] text-muted-foreground">TP</span>
-                                  <span className="font-mono-price text-xs text-foreground xl:text-sm">{trade.takeProfit}</span>
-                                </div>
+                            <td className="px-4 py-4 text-sm text-muted-foreground">{accountNames[trade.accountId] ?? "Unknown Account"}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap gap-2">
+                                {trade.setup ? <span className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{trade.setup}</span> : null}
+                                {trade.session ? <span className={cn("rounded-full border px-2.5 py-1 text-[11px]", sessionStyles[trade.session])}>{trade.session}</span> : null}
+                                {trade.emotion ? <span className={cn("rounded-full border px-2.5 py-1 text-[11px]", emotionStyles[trade.emotion])}>{trade.emotion}</span> : null}
                               </div>
                             </td>
-                            <td className="px-3 py-4 align-top">
-                              <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  title="View trade"
-                                  className="h-9 rounded-xl px-2.5"
-                                  onClick={() => navigate(`/trades/${trade.id}`)}
-                                >
-                                  <Eye className="h-4 w-4" />
+                            <td className="px-4 py-4">
+                              <button type="button" onClick={() => setReviewTarget({ trade, review: linkedReview })}>
+                                <TradeReviewStatusBadge trade={trade} reviewed={Boolean(linkedReview)} />
+                              </button>
+                            </td>
+                            <td className="px-4 py-4 text-right"><ProfitDisplay value={trade.profit} /></td>
+                            <td className="px-4 py-4">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="outline" size="sm" onClick={() => { setEditingTrade(trade); setFormOpen(true); }}>
+                                  <Pencil className="h-4 w-4" />
                                 </Button>
-                                {!linkedReview ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    title="Add review"
-                                    className="h-9 rounded-xl px-2.5"
-                                    onClick={() => setReviewTrade(trade)}
-                                  >
-                                    <MessageSquarePlus className="h-4 w-4" />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    title="Open review"
-                                    className="h-9 rounded-xl px-2.5"
-                                    onClick={() => navigate(`/trades/${trade.id}`)}
-                                  >
-                                    <MessageSquarePlus className="h-4 w-4" />
-                                  </Button>
-                                )}
+                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(trade.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </td>
-                            <td className="px-3 py-4 align-top">
-                              <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  title="Edit trade"
-                                  aria-label="Edit trade"
-                                  className="rounded-lg p-2 transition-colors hover:bg-accent"
-                                  onClick={() => {
-                                    setEditingTrade(trade);
-                                    setFormOpen(true);
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4 text-muted-foreground" />
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Delete trade"
-                                  aria-label="Delete trade"
-                                  className="rounded-lg p-2 transition-colors hover:bg-destructive/10"
-                                  onClick={() => setDeleteId(trade.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </button>
-                              </div>
-                            </td>
-                          </motion.tr>
+                          </tr>
                         );
                       })}
-                      {filteredTrades.length === 0 ? (
-                        <tr>
-                          <td colSpan={12} className="px-6 py-16 text-center">
-                            <p className="text-base font-medium text-foreground">No trades match these filters.</p>
-                            <p className="mt-2 text-sm text-muted-foreground">Adjust your account, session, setup, or emotion filters to widen the ledger view.</p>
-                          </td>
-                        </tr>
-                      ) : null}
                     </tbody>
                   </table>
+
+                  <PaginationControls
+                    currentPage={currentLedgerPage}
+                    totalPages={ledgerTotalPages}
+                    itemLabel="ledger pages"
+                    onPrevious={() => setLedgerPage((page) => Math.max(1, page - 1))}
+                    onNext={() => setLedgerPage((page) => Math.min(ledgerTotalPages, page + 1))}
+                  />
                 </div>
-                </div>
-                <PaginationControls
-                  currentPage={currentLedgerPage}
-                  totalPages={ledgerTotalPages}
-                  itemLabel="in ledger"
-                  onPrevious={() => setLedgerPage((page) => Math.max(1, page - 1))}
-                  onNext={() => setLedgerPage((page) => Math.min(ledgerTotalPages, page + 1))}
-                />
-              </div>
+              )}
             </TabsContent>
 
             <TabsContent value="screenbook" className="mt-4">
               {filteredTrades.length === 0 ? (
-                <div className="rounded-2xl border bg-card p-12 text-center shadow-sm">
+                <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
                   <p className="text-base font-medium text-foreground">No trades match these filters.</p>
-                  <p className="mt-2 text-sm text-muted-foreground">Try broadening the ledger filters to bring more screenshot entries into view.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Adjust the filters or log a new trade.</p>
                 </div>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {screenbookTrades.map((trade, index) => {
-                    const preview = trade.screenshots[0];
-                    const linkedReview = tradeReviewMap[trade.id];
+                <div className="rounded-2xl border bg-card shadow-sm">
+                  <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+                    {screenbookTrades.map((trade) => {
+                      const screenshots = trade.screenshotAssets ?? [];
 
-                    return (
-                      <motion.article
-                        key={trade.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
-                        className="group overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                      >
-                        <button type="button" className="block w-full text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                          <div className="relative aspect-[4/3] bg-muted/40">
-                            {preview ? (
-                              <img
-                                src={preview}
-                                alt={`${trade.pair} trade screenshot`}
-                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center text-muted-foreground">
-                                <div className="text-center">
-                                  <CameraOff className="mx-auto mb-2 h-6 w-6" />
-                                  <p className="text-sm">No screenshot</p>
-                                </div>
-                              </div>
-                            )}
-                            <div className="absolute left-3 top-3 flex items-center gap-2">
-                              <ResultBadge result={trade.result} />
-                              {trade.screenshots.length > 0 ? (
-                                <span className="inline-flex items-center rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-medium text-foreground shadow-sm">
-                                  <Camera className="mr-1 h-3.5 w-3.5" />
-                                  {trade.screenshots.length}
-                                </span>
-                              ) : null}
+                      return (
+                        <article key={trade.id} className="overflow-hidden rounded-2xl border bg-background/60">
+                          {screenshots.length > 0 ? (
+                            <button type="button" className="block w-full text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
+                              <img src={screenshots[0].url} alt={`${trade.pair} screenshot`} className="aspect-[16/10] w-full object-cover" />
+                            </button>
+                          ) : (
+                            <div className="flex aspect-[16/10] items-center justify-center bg-muted/40 text-sm text-muted-foreground">
+                              <CameraOff className="mr-2 h-4 w-4" />
+                              No screenshots
                             </div>
-                          </div>
+                          )}
 
-                          <div className="space-y-4 p-5">
+                          <div className="space-y-4 p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div>
-                                <div className="flex items-center gap-2">
-                                  <h2 className="text-base font-semibold text-foreground">{trade.pair}</h2>
-                                  <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]", directionStyles[trade.direction])}>
-                                    {trade.direction}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {formatTradeDate(trade.date)}
-                                  {` • ${accountNames[trade.accountId || ""] || "Main Account"}`}
-                                </p>
+                                <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
+                                  <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                                </button>
+                                <p className="mt-1 text-xs text-muted-foreground">{formatTradeDate(trade.date)}</p>
                               </div>
-                              <ProfitDisplay value={trade.profit} className="text-base font-semibold" />
+                              <ProfitDisplay value={trade.profit} />
                             </div>
-
                             <div className="flex flex-wrap gap-2">
-                              <SessionChip session={trade.session} />
-                              {trade.setup ? <SetupChip label={trade.setup} /> : null}
-                              <EmotionChip emotion={trade.emotion} />
+                              <ResultBadge result={trade.result} />
+                              {trade.setup ? <span className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{trade.setup}</span> : null}
+                              <TradeReviewStatusBadge trade={trade} reviewed={Boolean(tradeReviewMap[trade.id])} />
                             </div>
-
-                            <div className="flex items-center justify-between gap-3 rounded-2xl border bg-background/60 px-3 py-3">
-                              <TradeReviewStatusBadge trade={trade} reviewed={!!linkedReview} />
-                              <div className="text-right text-xs">
-                                <p className="uppercase tracking-[0.18em] text-muted-foreground">EN / SL / TP</p>
-                                <p className="mt-1 font-mono-price text-sm text-foreground">
-                                  {trade.entry} / {trade.stopLoss} / {trade.takeProfit}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-
-                        <div className="flex flex-col gap-3 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={() => navigate(`/trades/${trade.id}`)}>
-                              <Eye className="mr-1.5 h-4 w-4" />
-                              View Trade
-                            </Button>
-                            {!linkedReview ? (
-                              <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={() => setReviewTrade(trade)}>
-                                <MessageSquarePlus className="mr-1.5 h-4 w-4" />
-                                Add Review
+                            <div className="flex justify-between gap-2">
+                              <Button variant="outline" size="sm" onClick={() => { setEditingTrade(trade); setFormOpen(true); }}>
+                                <Pencil className="mr-1 h-4 w-4" />
+                                Edit
                               </Button>
-                            ) : null}
+                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(trade.id)}>
+                                <Trash2 className="mr-1 h-4 w-4" />
+                                Delete
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1 sm:justify-end">
-                            <button
-                              type="button"
-                              title="Edit trade"
-                              aria-label="Edit trade"
-                              className="rounded-lg p-2 transition-colors hover:bg-accent"
-                              onClick={() => {
-                                setEditingTrade(trade);
-                                setFormOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4 text-muted-foreground" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Delete trade"
-                              aria-label="Delete trade"
-                              className="rounded-lg p-2 transition-colors hover:bg-destructive/10"
-                              onClick={() => setDeleteId(trade.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </button>
-                          </div>
-                        </div>
-                      </motion.article>
-                    );
-                  })}
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  <PaginationControls
+                    currentPage={currentScreenbookPage}
+                    totalPages={screenbookTotalPages}
+                    itemLabel="screenbook pages"
+                    onPrevious={() => setScreenbookPage((page) => Math.max(1, page - 1))}
+                    onNext={() => setScreenbookPage((page) => Math.min(screenbookTotalPages, page + 1))}
+                  />
                 </div>
               )}
-              <PaginationControls
-                currentPage={currentScreenbookPage}
-                totalPages={screenbookTotalPages}
-                itemLabel="in screenbook"
-                onPrevious={() => setScreenbookPage((page) => Math.max(1, page - 1))}
-                onNext={() => setScreenbookPage((page) => Math.min(screenbookTotalPages, page + 1))}
-              />
             </TabsContent>
           </Tabs>
         )}
@@ -837,27 +542,33 @@ export default function Trades() {
 
       <TradeFormDialog
         open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open);
-          if (!open) setEditingTrade(null);
+        onOpenChange={setFormOpen}
+        onSave={async (payload) => {
+          await saveTradeMutation.mutateAsync(payload);
         }}
-        onSave={handleSave}
         editTrade={editingTrade}
+        accounts={accounts}
+        setups={setups}
+        isSaving={saveTradeMutation.isPending}
+        onScreenshotsChange={(trade) => {
+          queryClient.setQueryData<Trade[]>(["trades", "list"], (current) =>
+            current?.map((item) => (item.id === trade.id ? trade : item)) ?? current,
+          );
+          setEditingTrade(trade);
+        }}
       />
 
-      {reviewTrade ? (
+      {reviewTarget ? (
         <TradeReviewDialog
-          open={!!reviewTrade}
-          onOpenChange={(open) => {
-            if (!open) setReviewTrade(null);
-          }}
-          trade={reviewTrade}
-          review={null}
-          onSave={handleSaveTradeReview}
+          open={Boolean(reviewTarget)}
+          onOpenChange={(open) => !open && setReviewTarget(null)}
+          trade={reviewTarget.trade}
+          review={reviewTarget.review}
+          onSave={(review) => saveReviewMutation.mutate(review)}
         />
       ) : null}
 
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog open={!!deleteId} onOpenChange={(openState) => !openState && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
@@ -867,7 +578,9 @@ export default function Trades() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteId && deleteTradeMutation.mutate(deleteId)} disabled={deleteTradeMutation.isPending}>
+              {deleteTradeMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

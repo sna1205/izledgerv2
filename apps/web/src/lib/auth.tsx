@@ -1,183 +1,134 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AuthUser } from "@/lib/types";
+import { ApiError } from "@/lib/api/client";
+import {
+  changePassword as changePasswordRequest,
+  getSessionUser,
+  login as loginRequest,
+  logout as logoutRequest,
+  register as registerRequest,
+} from "@/lib/api/auth";
 
-const USERS_STORAGE_KEY = "izledger-auth-users";
-const SESSION_STORAGE_KEY = "izledger-auth-session";
-
-interface StoredUser {
-  username: string;
-  password: string;
-}
-
-interface AuthUser {
-  username: string;
-}
+type AuthResult = Promise<{ error?: string }>;
 
 interface AuthContextValue {
   isReady: boolean;
   user: AuthUser | null;
-  login: (username: string, password: string) => { error?: string };
-  register: (username: string, password: string) => { error?: string };
-  logout: () => void;
-  changePassword: (currentPassword: string, nextPassword: string) => { error?: string };
+  login: (username: string, password: string) => AuthResult;
+  register: (username: string, password: string) => AuthResult;
+  logout: () => Promise<void>;
+  changePassword: (currentPassword: string, nextPassword: string) => AuthResult;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const sessionUserQueryKey = ["auth", "me"] as const;
 
-function getStoredUsers(): StoredUser[] {
-  const raw = localStorage.getItem(USERS_STORAGE_KEY);
-
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(raw) as StoredUser[];
-  } catch {
-    return [];
-  }
-}
-
-function saveStoredUsers(users: StoredUser[]) {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-}
-
-function getStoredSession(): AuthUser | null {
-  const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as AuthUser;
-    return parsed?.username ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSession(user: AuthUser | null) {
-  if (!user) {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-    return;
-  }
-
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
-}
-
-function normalizeUsername(username: string) {
-  return username.trim();
-}
-
-function findUserByUsername(users: StoredUser[], username: string) {
-  const normalized = normalizeUsername(username).toLowerCase();
-  return users.find((user) => user.username.toLowerCase() === normalized);
+function getApiErrorMessage(error: unknown, fallback: string) {
+  return error instanceof ApiError ? error.message : fallback;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isReady, setIsReady] = useState(false);
-  const [user, setUser] = useState<AuthUser | null>(null);
-
-  useEffect(() => {
-    setUser(getStoredSession());
-    setIsReady(true);
-  }, []);
-
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      isReady,
-      user,
-      login: (username, password) => {
-        const normalizedUsername = normalizeUsername(username);
-        const trimmedPassword = password.trim();
-
-        if (!normalizedUsername) {
-          return { error: "Username is required." };
+  const queryClient = useQueryClient();
+  const sessionQuery = useQuery({
+    queryKey: sessionUserQueryKey,
+    queryFn: async () => {
+      try {
+        const response = await getSessionUser();
+        return response.user;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          return null;
         }
 
-        if (!trimmedPassword) {
-          return { error: "Password is required." };
-        }
+        throw error;
+      }
+    },
+    retry: false,
+  });
 
-        const users = getStoredUsers();
-        const existingUser = findUserByUsername(users, normalizedUsername);
+  const contextValue: AuthContextValue = {
+    isReady: !sessionQuery.isLoading,
+    user: sessionQuery.data ?? null,
+    login: async (username, password) => {
+      if (!username.trim()) {
+        return { error: "Username is required." };
+      }
 
-        if (!existingUser || existingUser.password !== password) {
-          return { error: "Invalid username or password." };
-        }
+      if (!password.trim()) {
+        return { error: "Password is required." };
+      }
 
-        const nextUser = { username: existingUser.username };
-        saveSession(nextUser);
-        setUser(nextUser);
-        return {};
-      },
-      register: (username, password) => {
-        const normalizedUsername = normalizeUsername(username);
-        const trimmedPassword = password.trim();
-
-        if (!normalizedUsername) {
-          return { error: "Username is required." };
-        }
-
-        if (!trimmedPassword) {
-          return { error: "Password is required." };
-        }
-
-        const users = getStoredUsers();
-
-        if (findUserByUsername(users, normalizedUsername)) {
-          return { error: "Username already exists." };
-        }
-
-        const nextUser = {
-          username: normalizedUsername,
+      try {
+        const response = await loginRequest({
+          username: username.trim(),
           password,
-        };
+        });
 
-        saveStoredUsers([...users, nextUser]);
-        saveSession({ username: nextUser.username });
-        setUser({ username: nextUser.username });
+        queryClient.setQueryData(sessionUserQueryKey, response.user);
         return {};
-      },
-      logout: () => {
-        saveSession(null);
-        setUser(null);
-      },
-      changePassword: (currentPassword, nextPassword) => {
-        if (!user) {
-          return { error: "You need to log in again." };
-        }
+      } catch (error) {
+        return { error: getApiErrorMessage(error, "Could not log in right now.") };
+      }
+    },
+    register: async (username, password) => {
+      if (!username.trim()) {
+        return { error: "Username is required." };
+      }
 
-        if (!currentPassword.trim()) {
-          return { error: "Current password is required." };
-        }
+      if (!password.trim()) {
+        return { error: "Password is required." };
+      }
 
-        if (!nextPassword.trim()) {
-          return { error: "New password is required." };
-        }
+      try {
+        const response = await registerRequest({
+          username: username.trim(),
+          password,
+        });
 
-        const users = getStoredUsers();
-        const existingUser = findUserByUsername(users, user.username);
-
-        if (!existingUser || existingUser.password !== currentPassword) {
-          return { error: "Current password is incorrect." };
-        }
-
-        saveStoredUsers(
-          users.map((storedUser) =>
-            storedUser.username.toLowerCase() === existingUser.username.toLowerCase()
-              ? { ...storedUser, password: nextPassword }
-              : storedUser,
-          ),
-        );
-
+        queryClient.setQueryData(sessionUserQueryKey, response.user);
         return {};
-      },
-    }),
-    [isReady, user],
-  );
+      } catch (error) {
+        return { error: getApiErrorMessage(error, "Could not create your account right now.") };
+      }
+    },
+    logout: async () => {
+      try {
+        await logoutRequest();
+      } finally {
+        queryClient.setQueryData(sessionUserQueryKey, null);
+        queryClient.removeQueries({
+          predicate: (query) => {
+            const [scope] = query.queryKey;
+            return scope !== "shared-trade" && scope !== "auth";
+          },
+        });
+      }
+    },
+    changePassword: async (currentPassword, nextPassword) => {
+      if (!currentPassword.trim()) {
+        return { error: "Current password is required." };
+      }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+      if (!nextPassword.trim()) {
+        return { error: "New password is required." };
+      }
+
+      try {
+        const response = await changePasswordRequest({
+          currentPassword,
+          nextPassword,
+        });
+
+        queryClient.setQueryData(sessionUserQueryKey, response.user);
+        return {};
+      } catch (error) {
+        return { error: getApiErrorMessage(error, "Could not update your password right now.") };
+      }
+    },
+  };
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
