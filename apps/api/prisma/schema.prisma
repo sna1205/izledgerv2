@@ -75,6 +75,7 @@ model User {
   accounts     Account[]
   setups       Setup[]
   trades       Trade[]
+  tradeShares  TradeShare[]
   reviews      Review[]
   sessions     Session[]
 
@@ -156,6 +157,7 @@ model Trade {
   account           Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
   setup             Setup?          @relation(fields: [setupId], references: [id], onDelete: SetNull)
   screenshots       TradeScreenshot[]
+  shares            TradeShare[]
   review            Review?
 
   @@index([userId, tradeDate(sort: Desc)])
@@ -177,6 +179,27 @@ model TradeScreenshot {
   @@index([tradeId])
   @@index([tradeId, sortOrder])
   @@map("trade_screenshots")
+}
+
+model TradeShare {
+  id            String   @id @default(uuid()) @db.Uuid
+  tradeId       String   @map("trade_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  shareId       String   @unique @map("share_id")
+  isActive      Boolean  @default(true) @map("is_active")
+  viewCount     Int      @default(0) @map("view_count")
+  expiresAt     DateTime? @map("expires_at")
+  shareSettings Json     @map("share_settings")
+  snapshot      Json     @map("snapshot")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  trade         Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, userId])
+  @@index([userId, tradeId])
+  @@index([shareId, isActive])
+  @@map("trade_shares")
 }
 
 model Review {

@@ -8,6 +8,7 @@ import {
   Clock3,
   ImagePlus,
   Pencil,
+  Share2,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ResultBadge } from "@/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
 import { TradeFormDialog } from "@/components/TradeFormDialog";
+import { ShareTradeModal } from "@/components/ShareTradeModal";
 import { getAccountById } from "@/lib/accounts";
 import { addReview, getReviewByTradeId, updateReview } from "@/lib/reviews";
 import { deleteTrade, getTradeById, updateTrade } from "@/lib/trades";
@@ -229,6 +231,7 @@ export default function TradeDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   if (!trade) {
     return (
@@ -342,6 +345,10 @@ export default function TradeDetail() {
                 <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setReviewOpen(true)}>
                   <Sparkles className="mr-1 h-4 w-4" />
                   {review ? "Edit Review" : "Write Review"}
+                </Button>
+                <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setShareOpen(true)}>
+                  <Share2 className="mr-1 h-4 w-4" />
+                  Share Trade
                 </Button>
                 <Button
                   variant="outline"
@@ -502,6 +509,13 @@ export default function TradeDetail() {
         trade={trade}
         review={review}
         onSave={handleSaveReview}
+      />
+
+      <ShareTradeModal
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        trade={trade}
+        accountName={accountName}
       />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

@@ -21,6 +21,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Register from "./pages/Register";
 import Settings from "./pages/Settings";
+import SharedTradePage from "./pages/SharedTradePage";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/shared/trade/:shareId" element={<SharedTradePage />} />
               <Route element={<PublicOnlyRoute />}>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />

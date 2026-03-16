@@ -12,6 +12,7 @@ import { tradeRoutes } from "./modules/trades/routes.js";
 import { screenshotRoutes } from "./modules/screenshots/routes.js";
 import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
+import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -61,6 +62,7 @@ export async function buildApp() {
   await app.register(screenshotRoutes, { prefix: "/trades" });
   await app.register(reviewRoutes, { prefix: "/reviews" });
   await app.register(analyticsRoutes, { prefix: "/" });
+  await app.register(tradeShareRoutes, { prefix: "/" });
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send({
