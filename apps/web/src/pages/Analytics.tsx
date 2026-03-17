@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { addMonths, format, subMonths } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { PageErrorState } from "@/components/PageErrorState";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listAccounts } from "@/lib/api/accounts";
 import { getAnalyticsBreakdowns, getAnalyticsCalendar } from "@/lib/api/analytics";
 import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import {
+  formatCurrencyDisplay,
+  formatNumberDisplay,
+  formatPercentageDisplay,
+  normalizeAnalyticsBreakdownsResponse,
+  normalizeAnalyticsCalendarResponse,
+  normalizeMonthKey,
+  shiftMonthKey,
+} from "@/lib/analytics-rendering";
+import { useAuth } from "@/lib/auth";
+import { getPageErrorState } from "@/lib/page-errors";
+import { privateQueryKey } from "@/lib/react-query";
 import { cn } from "@/lib/utils";
-
-function formatCurrency(value: number) {
-  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}`;
-}
 
 function getProfitTone(value: number) {
   if (value > 0) return "text-emerald-600";
@@ -54,9 +62,11 @@ function PerformanceList({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-foreground">{row.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{row.trades} trades • {row.winRate.toFixed(1)}% win rate</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
+                  </p>
                 </div>
-                <p className={cn("text-sm font-semibold", getProfitTone(row.profit))}>{formatCurrency(row.profit)}</p>
+                <p className={cn("text-sm font-semibold", getProfitTone(row.profit))}>{formatCurrencyDisplay(row.profit)}</p>
               </div>
             </div>
           ))}
@@ -67,23 +77,32 @@ function PerformanceList({
 }
 
 export default function Analytics() {
+  const { user } = useAuth();
   const [accountFilter, setAccountFilter] = useAccountFilter();
-  const [currentMonth, setCurrentMonth] = useState(() => format(new Date(), "yyyy-MM"));
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [currentMonth, setCurrentMonth] = useState(() => normalizeMonthKey(null));
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const accountsQuery = useQuery({
-    queryKey: ["accounts"],
+    queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
       const response = await listAccounts();
       return response.items;
     },
   });
 
-  const accounts = accountsQuery.data ?? [];
+  const accounts = accountsQuery.data;
   const resolvedAccountFilter = useMemo(
-    () => resolveAccountFilter(accountFilter, accounts),
+    () => resolveAccountFilter(accountFilter, accounts ?? []),
     [accountFilter, accounts],
   );
+
+  useEffect(() => {
+    const normalizedMonth = normalizeMonthKey(currentMonth);
+
+    if (normalizedMonth !== currentMonth) {
+      setCurrentMonth(normalizedMonth);
+    }
+  }, [currentMonth]);
 
   useEffect(() => {
     if (resolvedAccountFilter !== accountFilter) {
@@ -92,17 +111,21 @@ export default function Analytics() {
   }, [accountFilter, resolvedAccountFilter, setAccountFilter]);
 
   useEffect(() => {
-    setSelectedDate(null);
+    setSelectedDayKey(null);
   }, [resolvedAccountFilter, currentMonth]);
 
   const accountId = resolvedAccountFilter === "all" ? undefined : resolvedAccountFilter;
+  const normalizedCurrentMonth = useMemo(() => normalizeMonthKey(currentMonth), [currentMonth]);
   const breakdownsQuery = useQuery({
-    queryKey: ["analytics-breakdowns", accountId],
-    queryFn: () => getAnalyticsBreakdowns(accountId),
+    queryKey: privateQueryKey(user.id, "analytics-breakdowns", accountId ?? "all"),
+    queryFn: async () => normalizeAnalyticsBreakdownsResponse(await getAnalyticsBreakdowns(accountId)),
   });
   const calendarQuery = useQuery({
-    queryKey: ["analytics-calendar", accountId, currentMonth],
-    queryFn: () => getAnalyticsCalendar(currentMonth, accountId),
+    queryKey: privateQueryKey(user.id, "analytics-calendar", accountId ?? "all", normalizedCurrentMonth),
+    queryFn: async () => normalizeAnalyticsCalendarResponse(
+      await getAnalyticsCalendar(normalizedCurrentMonth, accountId),
+      normalizedCurrentMonth,
+    ),
   });
 
   if ((breakdownsQuery.isLoading && !breakdownsQuery.data) || (calendarQuery.isLoading && !calendarQuery.data)) {
@@ -110,19 +133,31 @@ export default function Analytics() {
   }
 
   if (breakdownsQuery.isError || calendarQuery.isError) {
+    const pageError = getPageErrorState(breakdownsQuery.error ?? calendarQuery.error, {
+      unavailableTitle: "Analytics unavailable",
+      unavailableDescription: "The analytics service is temporarily unavailable. Please try again in a moment.",
+      unauthorizedDescription: "Your session is not allowed to view analytics right now.",
+      validationTitle: "Analytics request invalid",
+      validationDescription: "The analytics filters or month selection are invalid.",
+      timeoutTitle: "Analytics request timed out",
+      timeoutDescription: "Loading analytics took too long. Please try again.",
+    });
+
     return (
-      <div className="p-4 sm:p-6">
-        <div className="mx-auto max-w-3xl rounded-2xl border bg-card p-8 text-center">
-          <h1 className="text-lg font-semibold text-foreground">Analytics unavailable</h1>
-          <p className="mt-2 text-sm text-muted-foreground">We could not load analytics data right now.</p>
-        </div>
-      </div>
+      <PageErrorState
+        title={pageError.title}
+        description={pageError.description}
+        onRetry={pageError.allowRetry ? () => {
+          void Promise.all([breakdownsQuery.refetch(), calendarQuery.refetch()]);
+        } : undefined}
+        isRetrying={breakdownsQuery.isFetching || calendarQuery.isFetching}
+      />
     );
   }
 
-  const breakdowns = breakdownsQuery.data;
-  const calendar = calendarQuery.data;
-  const selectedDay = calendar.days.find((day) => day.date === selectedDate) ?? null;
+  const breakdowns = breakdownsQuery.data ?? normalizeAnalyticsBreakdownsResponse(null);
+  const calendar = calendarQuery.data ?? normalizeAnalyticsCalendarResponse(null, normalizedCurrentMonth);
+  const selectedDay = calendar.days.find((day) => day.key === selectedDayKey) ?? null;
 
   return (
     <div className="w-full min-w-0 p-4 sm:p-6">
@@ -135,7 +170,7 @@ export default function Analytics() {
               <TabsTrigger value="calendar">Calendar</TabsTrigger>
             </TabsList>
             <div className="w-full lg:w-auto">
-              <AccountFilterSelect accounts={accounts} value={resolvedAccountFilter} onValueChange={setAccountFilter} />
+              <AccountFilterSelect accounts={accounts ?? []} value={resolvedAccountFilter} onValueChange={setAccountFilter} />
             </div>
           </div>
         </div>
@@ -150,9 +185,9 @@ export default function Analytics() {
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="Total Trades" value={String(breakdowns.summary.totalTrades)} />
-                <StatCard label="Win Rate" value={`${breakdowns.summary.winRate.toFixed(1)}%`} />
-                <StatCard label="Avg RR" value={`1:${breakdowns.summary.avgRR.toFixed(2)}`} />
-                <StatCard label="Net PnL" value={formatCurrency(breakdowns.summary.totalProfit)} />
+                <StatCard label="Win Rate" value={formatPercentageDisplay(breakdowns.summary.winRate)} />
+                <StatCard label="Avg RR" value={`1:${formatNumberDisplay(breakdowns.summary.avgRR, { minimumFractionDigits: 2 })}`} />
+                <StatCard label="Net PnL" value={formatCurrencyDisplay(breakdowns.summary.totalProfit)} />
               </div>
 
               <div className="grid gap-6 xl:grid-cols-3">
@@ -199,8 +234,8 @@ export default function Analytics() {
               {breakdowns.winLoss.map((entry) => (
                 <div key={entry.key} className="rounded-xl border bg-background/70 px-4 py-4">
                   <p className="text-sm font-medium text-foreground">{entry.name}</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{entry.value}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{entry.percentage.toFixed(1)}% of trades</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{formatNumberDisplay(entry.value)}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{formatPercentageDisplay(entry.percentage)} of trades</p>
                 </div>
               ))}
             </div>
@@ -210,14 +245,14 @@ export default function Analytics() {
         <TabsContent value="calendar" className="mt-0">
           <div className="mb-6 flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-foreground">{format(new Date(`${currentMonth}-01T00:00:00`), "MMMM yyyy")}</h2>
+              <h2 className="text-base font-semibold text-foreground">{calendar.monthLabel}</h2>
               <p className="mt-1 text-sm text-muted-foreground">Review PnL and trade frequency by day.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCurrentMonth(format(subMonths(new Date(`${currentMonth}-01T00:00:00`), 1), "yyyy-MM"))}>
+              <Button variant="outline" size="sm" onClick={() => setCurrentMonth(shiftMonthKey(normalizedCurrentMonth, -1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setCurrentMonth(format(addMonths(new Date(`${currentMonth}-01T00:00:00`), 1), "yyyy-MM"))}>
+              <Button variant="outline" size="sm" onClick={() => setCurrentMonth(shiftMonthKey(normalizedCurrentMonth, 1))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -232,23 +267,23 @@ export default function Analytics() {
               </div>
               <div className="space-y-2">
                 {calendar.weeks.map((week, index) => (
-                  <div key={`${week.days[0]?.date ?? index}`} className="grid grid-cols-7 gap-2">
+                  <div key={week.key ?? index} className="grid grid-cols-7 gap-2">
                     {week.days.map((day) => (
                       <button
-                        key={day.date}
+                        key={day.key}
                         type="button"
-                        onClick={() => setSelectedDate(day.date)}
+                        onClick={() => setSelectedDayKey(day.key)}
                         className={cn(
                           "min-h-[92px] rounded-xl border px-3 py-3 text-left transition-colors",
                           !day.inCurrentMonth && "opacity-50",
-                          selectedDate === day.date && "border-primary",
+                          selectedDayKey === day.key && "border-primary",
                         )}
                       >
-                        <p className="text-xs text-muted-foreground">{day.date.slice(-2)}</p>
+                        <p className="text-xs text-muted-foreground">{day.dayLabel}</p>
                         <p className={cn("mt-3 text-sm font-semibold", getProfitTone(day.totalProfit))}>
-                          {day.tradeCount > 0 ? formatCurrency(day.totalProfit) : "$0.00"}
+                          {day.tradeCount > 0 ? formatCurrencyDisplay(day.totalProfit) : "$0.00"}
                         </p>
-                        <p className="mt-1 text-xs text-muted-foreground">{day.tradeCount} trades</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formatNumberDisplay(day.tradeCount)} trades</p>
                       </button>
                     ))}
                   </div>
@@ -261,27 +296,27 @@ export default function Analytics() {
               {selectedDay ? (
                 <div className="mt-4 space-y-3">
                   <div className="rounded-xl border bg-background/70 px-4 py-3">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">{selectedDay.date}</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">{selectedDay.displayDate}</p>
                     <p className={cn("mt-2 text-2xl font-semibold", getProfitTone(selectedDay.totalProfit))}>
-                      {formatCurrency(selectedDay.totalProfit)}
+                      {formatCurrencyDisplay(selectedDay.totalProfit)}
                     </p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                     <div className="rounded-xl border bg-background/70 px-4 py-3">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">Trades</p>
-                      <p className="mt-2 text-lg font-semibold text-foreground">{selectedDay.tradeCount}</p>
+                      <p className="mt-2 text-lg font-semibold text-foreground">{formatNumberDisplay(selectedDay.tradeCount)}</p>
                     </div>
                     <div className="rounded-xl border bg-background/70 px-4 py-3">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">Win Rate</p>
-                      <p className="mt-2 text-lg font-semibold text-foreground">{selectedDay.winRate.toFixed(1)}%</p>
+                      <p className="mt-2 text-lg font-semibold text-foreground">{formatPercentageDisplay(selectedDay.winRate)}</p>
                     </div>
                     <div className="rounded-xl border bg-background/70 px-4 py-3">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">Gross Profit</p>
-                      <p className="mt-2 text-lg font-semibold text-emerald-600">{formatCurrency(selectedDay.grossProfit)}</p>
+                      <p className="mt-2 text-lg font-semibold text-emerald-600">{formatCurrencyDisplay(selectedDay.grossProfit)}</p>
                     </div>
                     <div className="rounded-xl border bg-background/70 px-4 py-3">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">Gross Loss</p>
-                      <p className="mt-2 text-lg font-semibold text-rose-600">{formatCurrency(selectedDay.grossLoss)}</p>
+                      <p className="mt-2 text-lg font-semibold text-rose-600">{formatCurrencyDisplay(selectedDay.grossLoss)}</p>
                     </div>
                   </div>
                 </div>

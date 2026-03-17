@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Bitcoin, FlaskConical, Landmark, Pencil, Plus, Trash2, Trophy, UserRound } from "lucide-react";
+import { PageErrorState } from "@/components/PageErrorState";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,10 +10,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
+import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { createAccount, deleteAccount, listAccounts, updateAccount } from "@/lib/api/accounts";
 import { getAnalyticsBreakdowns } from "@/lib/api/analytics";
 import { setStoredAccountFilter } from "@/lib/account-filter";
+import {
+  ACCOUNT_CURRENCY_MAX_LENGTH,
+  ACCOUNT_CURRENCY_MIN_LENGTH,
+  ACCOUNT_NAME_MAX_LENGTH,
+  getAccountApiErrorMessage,
+  validateAccountForm,
+} from "@/lib/account-validation";
+import { getPageErrorState } from "@/lib/page-errors";
+import { privateQueryKey } from "@/lib/react-query";
 import type { Account, AccountType } from "@/lib/types";
 import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/lib/types";
 
@@ -94,22 +105,24 @@ function toFormState(account: Account): AccountFormState {
 }
 
 export default function Accounts() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
   const [form, setForm] = useState<AccountFormState>(emptyForm);
+  const [formError, setFormError] = useState("");
 
   const accountsQuery = useQuery({
-    queryKey: ["accounts"],
+    queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
       const response = await listAccounts();
       return response.items;
     },
   });
   const breakdownsQuery = useQuery({
-    queryKey: ["analytics-breakdowns"],
+    queryKey: privateQueryKey(user.id, "analytics-breakdowns", "all"),
     queryFn: () => getAnalyticsBreakdowns(),
   });
 
@@ -121,10 +134,11 @@ export default function Accounts() {
 
   const invalidateAccountData = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-      queryClient.invalidateQueries({ queryKey: ["analytics-breakdowns"] }),
-      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] }),
-      queryClient.invalidateQueries({ queryKey: ["trades"] }),
+      queryClient.invalidateQueries({ queryKey: privateQueryKey(user.id, "accounts") }),
+      queryClient.invalidateQueries({ queryKey: privateQueryKey(user.id, "analytics-breakdowns") }),
+      queryClient.invalidateQueries({ queryKey: privateQueryKey(user.id, "analytics-calendar") }),
+      queryClient.invalidateQueries({ queryKey: privateQueryKey(user.id, "dashboard-summary") }),
+      queryClient.invalidateQueries({ queryKey: privateQueryKey(user.id, "trades") }),
     ]);
   };
 
@@ -150,10 +164,15 @@ export default function Accounts() {
       setOpen(false);
       setEditingAccount(null);
       setForm(emptyForm);
+      setFormError("");
     },
     onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not save the account right now.";
-      toast.error(message);
+      const message = getAccountApiErrorMessage(error, "Could not save the account right now.");
+      setFormError(message);
+
+      if (!(error instanceof ApiError && error.code === "VALIDATION_ERROR")) {
+        toast.error(message);
+      }
     },
   });
 
@@ -176,13 +195,27 @@ export default function Accounts() {
   const openCreateModal = () => {
     setEditingAccount(null);
     setForm(emptyForm);
+    setFormError("");
     setOpen(true);
   };
 
   const openEditModal = (account: Account) => {
     setEditingAccount(account);
     setForm(toFormState(account));
+    setFormError("");
     setOpen(true);
+  };
+
+  const handleSaveAccount = () => {
+    const validationError = validateAccountForm(form);
+
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    setFormError("");
+    saveMutation.mutate(form);
   };
 
   const handleOpenDashboard = (accountId: string) => {
@@ -200,13 +233,23 @@ export default function Accounts() {
   }
 
   if (accountsQuery.isError) {
+    const errorState = getPageErrorState(accountsQuery.error, {
+      unavailableTitle: "Accounts unavailable",
+      unavailableDescription: "The accounts service is temporarily unavailable. Please try again in a moment.",
+      unauthorizedDescription: "Your session is not allowed to view accounts right now.",
+      validationTitle: "Accounts request invalid",
+      validationDescription: "The accounts request could not be processed.",
+      timeoutTitle: "Accounts request timed out",
+      timeoutDescription: "Loading your accounts took too long. Please try again.",
+    });
+
     return (
-      <div className="p-4 sm:p-6">
-        <div className="mx-auto max-w-3xl rounded-2xl border bg-card p-8 text-center">
-          <h1 className="text-lg font-semibold text-foreground">Accounts unavailable</h1>
-          <p className="mt-2 text-sm text-muted-foreground">We could not load your accounts right now.</p>
-        </div>
-      </div>
+      <PageErrorState
+        title={errorState.title}
+        description={errorState.description}
+        onRetry={errorState.allowRetry ? () => void accountsQuery.refetch() : undefined}
+        isRetrying={accountsQuery.isFetching}
+      />
     );
   }
 
@@ -342,6 +385,7 @@ export default function Accounts() {
             if (!nextOpen) {
               setEditingAccount(null);
               setForm(emptyForm);
+              setFormError("");
             }
           }}
         >
@@ -354,16 +398,23 @@ export default function Accounts() {
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Account Name</Label>
                 <Input
+                  maxLength={ACCOUNT_NAME_MAX_LENGTH}
                   placeholder="Primary Account"
                   value={form.name}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, name: event.target.value }));
+                    setFormError("");
+                  }}
                 />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">Broker</Label>
-                  <Select value={form.broker} onValueChange={(value) => setForm((current) => ({ ...current, broker: value }))}>
+                  <Select value={form.broker} onValueChange={(value) => {
+                    setForm((current) => ({ ...current, broker: value }));
+                    setFormError("");
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -379,7 +430,10 @@ export default function Accounts() {
 
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">Account Type</Label>
-                  <Select value={form.type} onValueChange={(value) => setForm((current) => ({ ...current, type: value as AccountType }))}>
+                  <Select value={form.type} onValueChange={(value) => {
+                    setForm((current) => ({ ...current, type: value as AccountType }));
+                    setFormError("");
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -401,26 +455,37 @@ export default function Accounts() {
                     type="number"
                     step="any"
                     value={form.balance}
-                    onChange={(event) => setForm((current) => ({ ...current, balance: event.target.value }))}
+                    onChange={(event) => {
+                      setForm((current) => ({ ...current, balance: event.target.value }));
+                      setFormError("");
+                    }}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">Currency</Label>
                   <Input
-                    maxLength={8}
+                    maxLength={ACCOUNT_CURRENCY_MAX_LENGTH}
                     value={form.currency}
-                    onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
+                    onChange={(event) => {
+                      setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }));
+                      setFormError("");
+                    }}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {ACCOUNT_CURRENCY_MIN_LENGTH}-{ACCOUNT_CURRENCY_MAX_LENGTH} characters.
+                  </p>
                 </div>
               </div>
             </div>
+
+            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 
             <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button className="w-full sm:w-auto" onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
+              <Button className="w-full sm:w-auto" onClick={handleSaveAccount} disabled={saveMutation.isPending}>
                 {saveMutation.isPending ? "Saving..." : editingAccount ? "Save Changes" : "Save Account"}
               </Button>
             </div>

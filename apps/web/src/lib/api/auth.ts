@@ -1,4 +1,4 @@
-import type { AuthUser } from "@/lib/types";
+import type { AuthUser, AuthenticatedUser } from "@/lib/types";
 import { apiFetch } from "@/lib/api/client";
 
 type Credentials = {
@@ -11,14 +11,14 @@ export function getSessionUser() {
 }
 
 export function login(payload: Credentials) {
-  return apiFetch<{ user: AuthUser }>("/auth/login", {
+  return apiFetch<{ user: AuthenticatedUser }>("/auth/login", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function register(payload: Credentials) {
-  return apiFetch<{ user: AuthUser }>("/auth/register", {
+  return apiFetch<{ user: AuthenticatedUser }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -34,7 +34,7 @@ export function changePassword(payload: {
   currentPassword: string;
   nextPassword: string;
 }) {
-  return apiFetch<{ user: AuthUser }>("/auth/change-password", {
+  return apiFetch<{ user: AuthenticatedUser }>("/auth/change-password", {
     method: "POST",
     body: JSON.stringify(payload),
   });

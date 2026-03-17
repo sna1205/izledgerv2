@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,14 @@ export default function Settings() {
     setIsLoggingOut(true);
 
     try {
-      await logout();
+      const result = await logout();
+
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success("Logged out.");
       navigate("/login", { replace: true });
     } finally {
       setIsLoggingOut(false);

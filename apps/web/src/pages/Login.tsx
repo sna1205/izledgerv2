@@ -10,13 +10,15 @@ import { useAuth } from "@/lib/auth";
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, sessionMessage, sessionState, user } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const nextPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/dashboard";
+  const locationState = location.state as { from?: { pathname?: string }; authMessage?: string | null } | null;
+  const nextPath = locationState?.from?.pathname || "/dashboard";
+  const authMessage = locationState?.authMessage || (sessionState === "backend-unavailable" && !user ? sessionMessage : null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -51,8 +53,12 @@ export default function Login() {
           <Input
             id="login-username"
             value={username}
-            onChange={(event) => setUsername(event.target.value)}
+            onChange={(event) => {
+              setUsername(event.target.value);
+              setError("");
+            }}
             placeholder="Your username"
+            autoComplete="username"
           />
         </div>
 
@@ -62,11 +68,16 @@ export default function Login() {
             id="login-password"
             type="password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              setError("");
+            }}
             placeholder="Your password"
+            autoComplete="current-password"
           />
         </div>
 
+        {authMessage ? <p className="text-sm text-amber-700">{authMessage}</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <Button type="submit" className="h-11 w-full rounded-xl" disabled={isSubmitting}>

@@ -51,7 +51,7 @@ export const DEFAULT_TRADE_SHARE_SETTINGS: TradeShareSettings = {
 export function getRiskReward(entry: number, stopLoss: number, takeProfit: number) {
   const risk = Math.abs(entry - stopLoss);
   const reward = Math.abs(takeProfit - entry);
-  return risk > 0 ? Number((reward / risk).toFixed(2)) : null;
+  return risk > 0 ? Number((reward / risk).toFixed(4)) : null;
 }
 
 export function buildSharedTradeView(params: {
@@ -85,7 +85,7 @@ export function formatSharedTradeDate(date: string) {
 }
 
 export function formatSharedTradeDateTime(date: string) {
-  return format(parseISO(date), "MMM d, yyyy");
+  return format(parseISO(date), "MMM d, yyyy h:mm a");
 }
 
 export function formatMoney(value: number) {

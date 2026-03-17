@@ -1,7 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import { CameraOff, Loader2, Upload, X } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
-import { deleteTradeScreenshot, uploadTradeScreenshot } from "@/lib/api/screenshots";
+import {
+  deleteTradeScreenshot,
+  MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES,
+  TRADE_SCREENSHOT_ACCEPT,
+  uploadTradeScreenshot,
+  validateTradeScreenshotFile,
+} from "@/lib/api/screenshots";
 import type { TradeScreenshotAsset } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +22,7 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
   const [dragOver, setDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadsDisabled = !tradeId || isUploading;
 
@@ -28,7 +35,35 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
     const toProcess = Array.from(files).slice(0, remaining);
 
     if (toProcess.length === 0) {
+      setFeedback("Screenshot limit reached.");
       toast.error("Screenshot limit reached.");
+      return;
+    }
+
+    const validFiles: File[] = [];
+    let validationMessage: string | null = null;
+
+    for (const file of toProcess) {
+      try {
+        validateTradeScreenshotFile(file);
+        validFiles.push(file);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "This screenshot file is not supported.";
+
+        if (!validationMessage) {
+          validationMessage = message;
+        }
+      }
+    }
+
+    if (validationMessage) {
+      setFeedback(validationMessage);
+      toast.error(validationMessage);
+    } else {
+      setFeedback(null);
+    }
+
+    if (validFiles.length === 0) {
       return;
     }
 
@@ -37,7 +72,7 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
     try {
       let nextScreenshots = [...screenshots];
 
-      for (const file of toProcess) {
+      for (const file of validFiles) {
         const screenshot = await uploadTradeScreenshot({
           tradeId,
           file,
@@ -48,9 +83,11 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
         onChange(nextScreenshots);
       }
 
-      toast.success("Screenshot uploaded.");
+      setFeedback(validationMessage);
+      toast.success(validFiles.length === 1 ? "Screenshot uploaded." : "Screenshots uploaded.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Screenshot upload failed.";
+      setFeedback(message);
       toast.error(message);
     } finally {
       setIsUploading(false);
@@ -82,6 +119,7 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
     }
 
     setDeletingId(screenshot.id);
+    setFeedback(null);
 
     try {
       await deleteTradeScreenshot(tradeId, screenshot.id);
@@ -89,6 +127,7 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
       toast.success("Screenshot removed.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not remove the screenshot.";
+      setFeedback(message);
       toast.error(message);
     } finally {
       setDeletingId(null);
@@ -137,15 +176,27 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
           <p className="mt-1 text-xs text-muted-foreground">
             {screenshots.length}/{maxFiles} screenshots
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            PNG, JPEG, or WebP up to {Math.round(MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES / (1024 * 1024))} MB
+          </p>
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept={TRADE_SCREENSHOT_ACCEPT}
             multiple
             className="hidden"
-            onChange={(event) => void handleFiles(event.target.files)}
+            onChange={(event) => {
+              void handleFiles(event.target.files);
+              event.target.value = "";
+            }}
           />
         </div>
+      ) : null}
+
+      {feedback ? (
+        <p role="alert" className="text-sm text-destructive">
+          {feedback}
+        </p>
       ) : null}
 
       {screenshots.length > 0 ? (

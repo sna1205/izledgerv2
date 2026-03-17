@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { CameraOff, ChevronLeft, ChevronRight, Images, LayoutList, Pencil, Plus, Trash2 } from "lucide-react";
+import { CameraOff, Images, LayoutList, Pencil, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { PageErrorState } from "@/components/PageErrorState";
+import { PaginationControls } from "@/components/PaginationControls";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -19,6 +21,9 @@ import { listReviews, createReview, updateReview } from "@/lib/api/reviews";
 import { listSetups } from "@/lib/api/setups";
 import { createTrade, deleteTrade, listTrades, updateTrade } from "@/lib/api/trades";
 import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import { useAuth } from "@/lib/auth";
+import { getPageErrorState } from "@/lib/page-errors";
+import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
 import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -78,54 +83,19 @@ function FilterField({
   );
 }
 
-function PaginationControls({
-  currentPage,
-  totalPages,
-  itemLabel,
-  onPrevious,
-  onNext,
-}: {
-  currentPage: number;
-  totalPages: number;
-  itemLabel: string;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  if (totalPages <= 1) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-3 border-t bg-background/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-muted-foreground">
-        Page <span className="font-medium text-foreground">{currentPage}</span> of{" "}
-        <span className="font-medium text-foreground">{totalPages}</span> {itemLabel}
-      </p>
-      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
-        <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={onPrevious} disabled={currentPage === 1}>
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          Previous
-        </Button>
-        <Button variant="outline" size="sm" className="h-9 rounded-xl px-3" onClick={onNext} disabled={currentPage === totalPages}>
-          Next
-          <ChevronRight className="ml-1 h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>) {
+function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string) {
   return Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["trades"] }),
-    queryClient.invalidateQueries({ queryKey: ["reviews"] }),
-    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] }),
-    queryClient.invalidateQueries({ queryKey: ["analytics-breakdowns"] }),
-    queryClient.invalidateQueries({ queryKey: ["analytics-calendar"] }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "trades") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "reviews") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "dashboard-summary") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "analytics-breakdowns") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "analytics-calendar") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "setups") }),
   ]);
 }
 
 export default function Trades() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
@@ -136,47 +106,57 @@ export default function Trades() {
   const [sessionFilter, setSessionFilter] = useState<string>("all");
   const [setupFilter, setSetupFilter] = useState<string>("all");
   const [emotionFilter, setEmotionFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"date" | "createdAt" | "profit" | "pair">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [activeView, setActiveView] = useState<"ledger" | "screenbook">("ledger");
   const [ledgerPage, setLedgerPage] = useState(1);
   const [screenbookPage, setScreenbookPage] = useState(1);
 
   const accountsQuery = useQuery({
-    queryKey: ["accounts"],
+    queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
       const response = await listAccounts();
       return response.items;
     },
   });
   const setupsQuery = useQuery({
-    queryKey: ["setups"],
+    queryKey: privateQueryKey(user.id, "setups", "options"),
     queryFn: async () => {
-      const response = await listSetups();
+      const response = await listSetups({ page: 1, pageSize: 100, status: "all", sortBy: "name", sortOrder: "asc" });
       return response.items;
     },
   });
-  const tradesQuery = useQuery({
-    queryKey: ["trades", "list"],
-    queryFn: async () => {
-      const response = await listTrades({ page: 1, pageSize: 100, sortBy: "date", sortOrder: "desc" });
-      return response.items;
-    },
-  });
-  const reviewsQuery = useQuery({
-    queryKey: ["reviews", "list"],
-    queryFn: async () => {
-      const response = await listReviews({ page: 1, pageSize: 100 });
-      return response.items;
-    },
-  });
-
-  const accounts = accountsQuery.data ?? [];
+  const accounts = accountsQuery.data;
   const setups = setupsQuery.data ?? [];
-  const trades = tradesQuery.data ?? [];
-  const reviews = reviewsQuery.data ?? [];
   const resolvedAccountFilter = useMemo(
-    () => resolveAccountFilter(accountFilter, accounts),
+    () => resolveAccountFilter(accountFilter, accounts ?? []),
     [accountFilter, accounts],
   );
+  const currentPage = activeView === "ledger" ? ledgerPage : screenbookPage;
+  const tradesQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "trades", "list", {
+      page: currentPage,
+      pageSize: activeView === "ledger" ? LEDGER_PAGE_SIZE : SCREENBOOK_PAGE_SIZE,
+      accountId: resolvedAccountFilter,
+      session: sessionFilter,
+      setupId: setupFilter,
+      emotion: emotionFilter,
+      sortBy,
+      sortOrder,
+    }),
+    queryFn: async () => {
+      return listTrades({
+        page: currentPage,
+        pageSize: activeView === "ledger" ? LEDGER_PAGE_SIZE : SCREENBOOK_PAGE_SIZE,
+        accountId: resolvedAccountFilter !== "all" ? resolvedAccountFilter : undefined,
+        session: sessionFilter !== "all" ? sessionFilter as NonNullable<Trade["session"]> : undefined,
+        setupId: setupFilter !== "all" ? setupFilter : undefined,
+        emotion: emotionFilter !== "all" ? emotionFilter as NonNullable<Trade["emotion"]> : undefined,
+        sortBy,
+        sortOrder,
+      });
+    },
+  });
 
   useEffect(() => {
     if (resolvedAccountFilter !== accountFilter) {
@@ -185,40 +165,44 @@ export default function Trades() {
   }, [accountFilter, resolvedAccountFilter, setAccountFilter]);
 
   const accountNames = useMemo(
-    () => Object.fromEntries(accounts.map((account) => [account.id, account.name])),
+    () => Object.fromEntries((accounts ?? []).map((account) => [account.id, account.name])),
     [accounts],
   );
+  const visibleTrades = tradesQuery.data?.items;
+  const trades = visibleTrades ?? [];
+  const totalTradePages = tradesQuery.data?.pagination.totalPages ?? 1;
+  const totalTrades = tradesQuery.data?.pagination.total ?? 0;
+  const hasActiveFilters = resolvedAccountFilter !== "all" || sessionFilter !== "all" || setupFilter !== "all" || emotionFilter !== "all";
+
+  const tradeReviewQueries = useQueries({
+    queries: (visibleTrades ?? []).map((trade) => ({
+      queryKey: privateQueryKey(user.id, "reviews", "trade", trade.id, "summary"),
+      queryFn: async () => {
+        const response = await listReviews({
+          type: "trade",
+          tradeId: trade.id,
+          page: 1,
+          pageSize: 1,
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+        });
+        return response.items[0] ?? null;
+      },
+    })),
+  });
+
   const tradeReviewMap = useMemo(
     () =>
       Object.fromEntries(
-        reviews
-          .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
-          .map((review) => [review.tradeId as string, review]),
+        (visibleTrades ?? []).map((trade, index) => [trade.id, tradeReviewQueries[index]?.data ?? null]),
       ),
-    [reviews],
+    [tradeReviewQueries, visibleTrades],
   );
-
-  const filteredTrades = useMemo(() => {
-    return trades.filter((trade) => {
-      if (resolvedAccountFilter !== "all" && trade.accountId !== resolvedAccountFilter) return false;
-      if (sessionFilter !== "all" && trade.session !== sessionFilter) return false;
-      if (setupFilter !== "all" && trade.setup !== setupFilter) return false;
-      if (emotionFilter !== "all" && trade.emotion !== emotionFilter) return false;
-      return true;
-    });
-  }, [emotionFilter, resolvedAccountFilter, sessionFilter, setupFilter, trades]);
-
-  const ledgerTotalPages = Math.max(1, Math.ceil(filteredTrades.length / LEDGER_PAGE_SIZE));
-  const screenbookTotalPages = Math.max(1, Math.ceil(filteredTrades.length / SCREENBOOK_PAGE_SIZE));
-  const currentLedgerPage = Math.min(ledgerPage, ledgerTotalPages);
-  const currentScreenbookPage = Math.min(screenbookPage, screenbookTotalPages);
-  const ledgerTrades = filteredTrades.slice((currentLedgerPage - 1) * LEDGER_PAGE_SIZE, currentLedgerPage * LEDGER_PAGE_SIZE);
-  const screenbookTrades = filteredTrades.slice((currentScreenbookPage - 1) * SCREENBOOK_PAGE_SIZE, currentScreenbookPage * SCREENBOOK_PAGE_SIZE);
 
   useEffect(() => {
     setLedgerPage(1);
     setScreenbookPage(1);
-  }, [resolvedAccountFilter, emotionFilter, sessionFilter, setupFilter]);
+  }, [resolvedAccountFilter, emotionFilter, sessionFilter, setupFilter, sortBy, sortOrder]);
 
   const saveTradeMutation = useMutation({
     mutationFn: async (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => {
@@ -228,8 +212,9 @@ export default function Trades() {
 
       return createTrade(payload);
     },
-    onSuccess: async () => {
-      await invalidateJournalQueries(queryClient);
+    onSuccess: async (result) => {
+      updateTradeQueryData(queryClient, user.id, result.trade);
+      await invalidateJournalQueries(queryClient, user.id);
       toast.success(editingTrade ? "Trade updated successfully." : "Trade saved successfully.");
       setEditingTrade(null);
     },
@@ -241,8 +226,9 @@ export default function Trades() {
 
   const deleteTradeMutation = useMutation({
     mutationFn: async (tradeId: string) => deleteTrade(tradeId),
-    onSuccess: async () => {
-      await invalidateJournalQueries(queryClient);
+    onSuccess: async (_data, tradeId) => {
+      removeTradeQueryData(queryClient, user.id, tradeId);
+      await invalidateJournalQueries(queryClient, user.id);
       toast.success("Trade deleted.");
       setDeleteId(null);
     },
@@ -276,31 +262,40 @@ export default function Trades() {
       return createReview(payload);
     },
     onSuccess: async () => {
-      await invalidateJournalQueries(queryClient);
+      await invalidateJournalQueries(queryClient, user.id);
       toast.success(reviewTarget?.review ? "Trade review updated." : "Trade review created.");
       setReviewTarget(null);
     },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not save the trade review right now.";
-      toast.error(message);
-    },
   });
 
-  const isLoading = [accountsQuery, setupsQuery, tradesQuery, reviewsQuery].some((query) => query.isLoading && !query.data);
-  const hasError = [accountsQuery, setupsQuery, tradesQuery, reviewsQuery].some((query) => query.isError);
+  const isLoading = [accountsQuery, setupsQuery, tradesQuery].some((query) => query.isLoading && !query.data);
+  const hasError = [accountsQuery, setupsQuery, tradesQuery].some((query) => query.isError);
+  const journalError = [accountsQuery, setupsQuery, tradesQuery].find((query) => query.isError)?.error;
 
   if (isLoading) {
     return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading trades...</div>;
   }
 
   if (hasError) {
+    const errorState = getPageErrorState(journalError, {
+      unavailableTitle: "Trades unavailable",
+      unavailableDescription: "The trading journal is temporarily unavailable. Please try again in a moment.",
+      unauthorizedDescription: "Your session is not allowed to view this trading journal right now.",
+      validationTitle: "Trade request invalid",
+      validationDescription: "The trade filters in this request are invalid.",
+      timeoutTitle: "Trades request timed out",
+      timeoutDescription: "Loading your trading journal took too long. Please try again.",
+    });
+
     return (
-      <div className="p-4 sm:p-6">
-        <div className="mx-auto max-w-3xl rounded-2xl border bg-card p-8 text-center">
-          <h1 className="text-lg font-semibold text-foreground">Trades unavailable</h1>
-          <p className="mt-2 text-sm text-muted-foreground">We could not load your trading journal right now.</p>
-        </div>
-      </div>
+      <PageErrorState
+        title={errorState.title}
+        description={errorState.description}
+        onRetry={errorState.allowRetry ? () => {
+          void Promise.all([accountsQuery.refetch(), setupsQuery.refetch(), tradesQuery.refetch()]);
+        } : undefined}
+        isRetrying={accountsQuery.isFetching || setupsQuery.isFetching || tradesQuery.isFetching}
+      />
     );
   }
 
@@ -350,7 +345,7 @@ export default function Trades() {
                 label="Setup"
                 value={setupFilter}
                 onValueChange={setSetupFilter}
-                options={[{ label: "All Setups", value: "all" }, ...setups.map((setup) => ({ label: setup.name, value: setup.name }))]}
+                options={[{ label: "All Setups", value: "all" }, ...setups.map((setup) => ({ label: setup.name, value: setup.id }))]}
               />
               <FilterField
                 label="Emotion"
@@ -360,21 +355,50 @@ export default function Trades() {
               />
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2 xl:min-w-[320px]">
+              <FilterField
+                label="Sort By"
+                value={sortBy}
+                onValueChange={(value) => setSortBy(value as typeof sortBy)}
+                options={[
+                  { label: "Trade Date", value: "date" },
+                  { label: "Created At", value: "createdAt" },
+                  { label: "PnL", value: "profit" },
+                  { label: "Pair", value: "pair" },
+                ]}
+              />
+              <FilterField
+                label="Order"
+                value={sortOrder}
+                onValueChange={(value) => setSortOrder(value as typeof sortOrder)}
+                options={[
+                  { label: "Descending", value: "desc" },
+                  { label: "Ascending", value: "asc" },
+                ]}
+              />
+            </div>
+
             <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground xl:min-w-[172px]">
-              <span className="font-medium text-foreground">{filteredTrades.length}</span>{" "}
-              {filteredTrades.length === 1 ? "trade" : "trades"} in view
+              <span className="font-medium text-foreground">{totalTrades}</span>{" "}
+              {totalTrades === 1 ? "trade" : "trades"} in view
             </div>
           </div>
         </div>
 
-        {trades.length === 0 ? (
+        {totalTrades === 0 ? (
           <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
-            <p className="text-base font-medium text-foreground">No trades logged yet.</p>
-            <p className="mt-2 text-sm text-muted-foreground">Start building your execution journal with your first trade.</p>
-            <Button className="mt-4" size="sm" onClick={() => setFormOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Log your first trade
-            </Button>
+            <p className="text-base font-medium text-foreground">{hasActiveFilters ? "No trades match these filters." : "No trades logged yet."}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {hasActiveFilters
+                ? "Adjust the filters or log a new trade."
+                : "Start building your execution journal with your first trade."}
+            </p>
+            {!hasActiveFilters ? (
+              <Button className="mt-4" size="sm" onClick={() => setFormOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Log your first trade
+              </Button>
+            ) : null}
           </div>
         ) : (
           <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "ledger" | "screenbook")} className="w-full">
@@ -392,7 +416,7 @@ export default function Trades() {
             </div>
 
             <TabsContent value="ledger" className="mt-4">
-              {filteredTrades.length === 0 ? (
+              {trades.length === 0 ? (
                 <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
                   <p className="text-base font-medium text-foreground">No trades match these filters.</p>
                   <p className="mt-2 text-sm text-muted-foreground">Adjust the filters or log a new trade.</p>
@@ -412,7 +436,7 @@ export default function Trades() {
                       </tr>
                     </thead>
                     <tbody>
-                      {ledgerTrades.map((trade) => {
+                      {trades.map((trade) => {
                         const linkedReview = tradeReviewMap[trade.id];
 
                         return (
@@ -460,18 +484,18 @@ export default function Trades() {
                   </table>
 
                   <PaginationControls
-                    currentPage={currentLedgerPage}
-                    totalPages={ledgerTotalPages}
+                    currentPage={currentPage}
+                    totalPages={totalTradePages}
                     itemLabel="ledger pages"
                     onPrevious={() => setLedgerPage((page) => Math.max(1, page - 1))}
-                    onNext={() => setLedgerPage((page) => Math.min(ledgerTotalPages, page + 1))}
+                    onNext={() => setLedgerPage((page) => Math.min(totalTradePages, page + 1))}
                   />
                 </div>
               )}
             </TabsContent>
 
             <TabsContent value="screenbook" className="mt-4">
-              {filteredTrades.length === 0 ? (
+              {trades.length === 0 ? (
                 <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
                   <p className="text-base font-medium text-foreground">No trades match these filters.</p>
                   <p className="mt-2 text-sm text-muted-foreground">Adjust the filters or log a new trade.</p>
@@ -479,7 +503,7 @@ export default function Trades() {
               ) : (
                 <div className="rounded-2xl border bg-card shadow-sm">
                   <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-                    {screenbookTrades.map((trade) => {
+                    {trades.map((trade) => {
                       const screenshots = trade.screenshotAssets ?? [];
 
                       return (
@@ -527,11 +551,11 @@ export default function Trades() {
                   </div>
 
                   <PaginationControls
-                    currentPage={currentScreenbookPage}
-                    totalPages={screenbookTotalPages}
+                    currentPage={currentPage}
+                    totalPages={totalTradePages}
                     itemLabel="screenbook pages"
                     onPrevious={() => setScreenbookPage((page) => Math.max(1, page - 1))}
-                    onNext={() => setScreenbookPage((page) => Math.min(screenbookTotalPages, page + 1))}
+                    onNext={() => setScreenbookPage((page) => Math.min(totalTradePages, page + 1))}
                   />
                 </div>
               )}
@@ -551,9 +575,7 @@ export default function Trades() {
         setups={setups}
         isSaving={saveTradeMutation.isPending}
         onScreenshotsChange={(trade) => {
-          queryClient.setQueryData<Trade[]>(["trades", "list"], (current) =>
-            current?.map((item) => (item.id === trade.id ? trade : item)) ?? current,
-          );
+          void syncTradeScreenshotQueryData(queryClient, user.id, trade);
           setEditingTrade(trade);
         }}
       />
@@ -564,7 +586,10 @@ export default function Trades() {
           onOpenChange={(open) => !open && setReviewTarget(null)}
           trade={reviewTarget.trade}
           review={reviewTarget.review}
-          onSave={(review) => saveReviewMutation.mutate(review)}
+          onSave={async (review) => {
+            await saveReviewMutation.mutateAsync(review);
+          }}
+          isSaving={saveReviewMutation.isPending}
         />
       ) : null}
 

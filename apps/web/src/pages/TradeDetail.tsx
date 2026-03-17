@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, Camera, CameraOff, CheckCircle2, Clock3, ImagePlus, Pencil, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { PageErrorState } from "@/components/PageErrorState";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -20,6 +21,9 @@ import { ApiError } from "@/lib/api/client";
 import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
 import { listSetups } from "@/lib/api/setups";
 import { deleteTrade, getTrade, updateTrade } from "@/lib/api/trades";
+import { useAuth } from "@/lib/auth";
+import { getPageErrorState } from "@/lib/page-errors";
+import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
 import type { Review, Trade } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -180,18 +184,20 @@ function buildInsights({ trade, review }: { trade: Trade; review?: Review | null
   return insights.slice(0, 3);
 }
 
-function invalidateTradeQueries(queryClient: ReturnType<typeof useQueryClient>, tradeId: string) {
+function invalidateTradeQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string, tradeId: string) {
   return Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["trades"] }),
-    queryClient.invalidateQueries({ queryKey: ["reviews"] }),
-    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] }),
-    queryClient.invalidateQueries({ queryKey: ["analytics-breakdowns"] }),
-    queryClient.invalidateQueries({ queryKey: ["analytics-calendar"] }),
-    queryClient.invalidateQueries({ queryKey: ["trades", "detail", tradeId] }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "trades") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "reviews") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "dashboard-summary") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "analytics-breakdowns") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "analytics-calendar") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "setups") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "trades", "detail", tradeId) }),
   ]);
 }
 
 export default function TradeDetail() {
+  const { user } = useAuth();
   const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -201,7 +207,7 @@ export default function TradeDetail() {
   const [shareOpen, setShareOpen] = useState(false);
 
   const tradeQuery = useQuery({
-    queryKey: ["trades", "detail", id],
+    queryKey: privateQueryKey(user.id, "trades", "detail", id),
     queryFn: async () => {
       const response = await getTrade(id);
       return response.trade;
@@ -209,7 +215,7 @@ export default function TradeDetail() {
     enabled: Boolean(id),
   });
   const reviewQuery = useQuery({
-    queryKey: ["reviews", "trade", id],
+    queryKey: privateQueryKey(user.id, "reviews", "trade", id),
     queryFn: async () => {
       const response = await listReviews({ type: "trade", tradeId: id, page: 1, pageSize: 10 });
       return response.items[0] ?? null;
@@ -217,24 +223,25 @@ export default function TradeDetail() {
     enabled: Boolean(id),
   });
   const accountsQuery = useQuery({
-    queryKey: ["accounts"],
+    queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
       const response = await listAccounts();
       return response.items;
     },
   });
   const setupsQuery = useQuery({
-    queryKey: ["setups"],
+    queryKey: privateQueryKey(user.id, "setups", "options"),
     queryFn: async () => {
-      const response = await listSetups();
+      const response = await listSetups({ page: 1, pageSize: 100, status: "all", sortBy: "name", sortOrder: "asc" });
       return response.items;
     },
   });
 
   const updateTradeMutation = useMutation({
     mutationFn: async (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => updateTrade(id, payload),
-    onSuccess: async () => {
-      await invalidateTradeQueries(queryClient, id);
+    onSuccess: async (result) => {
+      updateTradeQueryData(queryClient, user.id, result.trade);
+      await invalidateTradeQueries(queryClient, user.id, id);
       toast.success("Trade updated successfully.");
     },
     onError: (error) => {
@@ -245,7 +252,8 @@ export default function TradeDetail() {
   const deleteTradeMutation = useMutation({
     mutationFn: async () => deleteTrade(id),
     onSuccess: async () => {
-      await invalidateTradeQueries(queryClient, id);
+      removeTradeQueryData(queryClient, user.id, id);
+      await invalidateTradeQueries(queryClient, user.id, id);
       navigate("/trades");
     },
     onError: (error) => {
@@ -277,39 +285,73 @@ export default function TradeDetail() {
       return createReview(payload);
     },
     onSuccess: async () => {
-      await invalidateTradeQueries(queryClient, id);
+      await invalidateTradeQueries(queryClient, user.id, id);
       toast.success(reviewQuery.data ? "Trade review updated." : "Trade review created.");
       setReviewOpen(false);
     },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not save the trade review right now.";
-      toast.error(message);
-    },
   });
 
-  if (tradeQuery.isLoading && !tradeQuery.data) {
+  const trade = tradeQuery.data ?? null;
+  const review = reviewQuery.data ?? null;
+  const accountName = useMemo(() => {
+    if (!trade) {
+      return "Unassigned";
+    }
+
+    return trade.account?.name ?? accountsQuery.data?.find((account) => account.id === trade.accountId)?.name ?? "Unassigned";
+  }, [accountsQuery.data, trade]);
+  const risk = trade ? Math.abs(trade.entry - trade.stopLoss) : 0;
+  const reward = trade ? Math.abs(trade.takeProfit - trade.entry) : 0;
+  const rrValue = risk > 0 ? reward / risk : null;
+  const reviewUpdatedLabel = review?.updatedAt ? format(parseISO(review.updatedAt), "MMM d, yyyy • h:mm a") : null;
+  const insights = useMemo(() => {
+    if (!trade) {
+      return [];
+    }
+
+    return buildInsights({ trade, review });
+  }, [trade, review]);
+  const isTradeLoading = tradeQuery.isLoading && !trade;
+  const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
+
+  if (isTradeLoading) {
     return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading trade...</div>;
   }
 
-  if (tradeQuery.isError || !tradeQuery.data) {
+  if (tradeError) {
+    const errorState = getPageErrorState(tradeError, {
+      unavailableTitle: "Trade unavailable",
+      unavailableDescription: "This trade could not be loaded right now. Please try again in a moment.",
+      unauthorizedTitle: "Trade access denied",
+      unauthorizedDescription: "You are not allowed to view this trade right now.",
+      notFoundTitle: "Trade not found",
+      notFoundDescription: "This trade does not exist or may have been deleted.",
+      validationTitle: "Invalid trade link",
+      validationDescription: "This trade link is invalid.",
+      timeoutTitle: "Trade request timed out",
+      timeoutDescription: "Loading this trade took too long. Please try again.",
+    });
+
     return (
-      <div className="p-4 sm:p-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/trades")}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> Back
-        </Button>
-        <p className="mt-8 text-center text-muted-foreground">Trade not found.</p>
-      </div>
+      <PageErrorState
+        title={errorState.title}
+        description={errorState.description}
+        onRetry={errorState.allowRetry ? () => {
+          void Promise.all([
+            tradeQuery.refetch(),
+            reviewQuery.refetch(),
+            accountsQuery.refetch(),
+            setupsQuery.refetch(),
+          ]);
+        } : undefined}
+        isRetrying={tradeQuery.isFetching || reviewQuery.isFetching || accountsQuery.isFetching || setupsQuery.isFetching}
+        secondaryAction={{
+          label: "Back to Trades",
+          onClick: () => navigate("/trades"),
+        }}
+      />
     );
   }
-
-  const trade = tradeQuery.data;
-  const review = reviewQuery.data;
-  const accountName = trade.account?.name ?? accountsQuery.data?.find((account) => account.id === trade.accountId)?.name ?? "Unassigned";
-  const risk = Math.abs(trade.entry - trade.stopLoss);
-  const reward = Math.abs(trade.takeProfit - trade.entry);
-  const rrValue = risk > 0 ? reward / risk : null;
-  const reviewUpdatedLabel = review?.updatedAt ? format(parseISO(review.updatedAt), "MMM d, yyyy • h:mm a") : null;
-  const insights = useMemo(() => buildInsights({ trade, review }), [trade, review]);
 
   return (
     <div className="p-4 sm:p-6">
@@ -510,11 +552,20 @@ export default function TradeDetail() {
         setups={setupsQuery.data ?? []}
         isSaving={updateTradeMutation.isPending}
         onScreenshotsChange={(updatedTrade) => {
-          queryClient.setQueryData(["trades", "detail", id], updatedTrade);
+          void syncTradeScreenshotQueryData(queryClient, user.id, updatedTrade);
         }}
       />
 
-      <TradeReviewDialog open={reviewOpen} onOpenChange={setReviewOpen} trade={trade} review={review} onSave={(nextReview) => saveReviewMutation.mutate(nextReview)} />
+      <TradeReviewDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        trade={trade}
+        review={review}
+        onSave={async (nextReview) => {
+          await saveReviewMutation.mutateAsync(nextReview);
+        }}
+        isSaving={saveReviewMutation.isPending}
+      />
 
       <ShareTradeModal open={shareOpen} onOpenChange={setShareOpen} trade={trade} accountName={accountName} />
 

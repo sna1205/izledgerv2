@@ -82,4 +82,6 @@ export const listReviewsQuerySchema = z.object({
   tradeId: z.string().uuid().optional(),
   page: boundedIntSchema(1, numericBounds.maxPage).default(1),
   pageSize: boundedIntSchema(1, numericBounds.maxPageSize).default(20),
+  sortBy: z.enum(["updatedAt", "createdAt"]).default("updatedAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });

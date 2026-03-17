@@ -1,4 +1,4 @@
-import type { SetupDefinition } from "@/lib/types";
+import type { Pagination, SetupDefinition } from "@/lib/types";
 import { apiFetch } from "@/lib/api/client";
 
 export type SetupPayload = {
@@ -8,8 +8,36 @@ export type SetupPayload = {
   isArchived?: boolean;
 };
 
-export function listSetups() {
-  return apiFetch<{ items: SetupDefinition[] }>("/setups");
+export type SetupListItem = SetupDefinition & {
+  tradeCount?: number;
+};
+
+export type ListSetupsParams = {
+  search?: string;
+  status?: "all" | "active" | "archived";
+  page?: number;
+  pageSize?: number;
+  sortBy?: "createdAt" | "name";
+  sortOrder?: "asc" | "desc";
+};
+
+function buildQuery(params: ListSetupsParams = {}) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+
+    query.set(key, String(value));
+  }
+
+  const serialized = query.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
+export function listSetups(params: ListSetupsParams = {}) {
+  return apiFetch<{ items: SetupListItem[]; pagination: Pagination }>(`/setups${buildQuery(params)}`);
 }
 
 export function createSetup(payload: SetupPayload) {

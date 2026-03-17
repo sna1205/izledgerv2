@@ -1,7 +1,15 @@
-import { createContext, useContext } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { AuthUser } from "@/lib/types";
 import { ApiError } from "@/lib/api/client";
+import {
+  AUTH_PASSWORD_MAX_LENGTH,
+  AUTH_PASSWORD_MIN_LENGTH,
+  AUTH_USERNAME_MAX_LENGTH,
+  AUTH_USERNAME_MIN_LENGTH,
+  validateAuthCredentials,
+} from "@/lib/auth-validation";
+import { clearPrivateQueryCache } from "@/lib/react-query";
 import {
   changePassword as changePasswordRequest,
   getSessionUser,
@@ -11,52 +19,266 @@ import {
 } from "@/lib/api/auth";
 
 type AuthResult = Promise<{ error?: string }>;
+type SessionState = "loading" | "authenticated" | "anonymous" | "session-expired" | "backend-unavailable";
+
+const AUTH_STORAGE_KEY = "izledger-auth-user";
+const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
+const SESSION_UNAVAILABLE_MESSAGE = "IZLedger could not reach the server. Your local session is still available on this device.";
+const INVALID_CREDENTIALS_MESSAGE = "Incorrect username or password.";
+type ApiValidationDetail = {
+  field?: unknown;
+  message?: unknown;
+};
 
 interface AuthContextValue {
   isReady: boolean;
   user: AuthUser | null;
+  sessionState: SessionState;
+  sessionMessage: string | null;
   login: (username: string, password: string) => AuthResult;
   register: (username: string, password: string) => AuthResult;
-  logout: () => Promise<void>;
+  logout: () => AuthResult;
   changePassword: (currentPassword: string, nextPassword: string) => AuthResult;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const sessionUserQueryKey = ["auth", "me"] as const;
 
 function getApiErrorMessage(error: unknown, fallback: string) {
+  const authMessage = getAuthErrorMessage(error);
+
+  if (authMessage) {
+    return authMessage;
+  }
+
+  const validationMessage = getValidationErrorMessage(error);
+
+  if (validationMessage) {
+    return validationMessage;
+  }
+
+  if (error instanceof ApiError && error.status >= 500) {
+    return fallback;
+  }
+
   return error instanceof ApiError ? error.message : fallback;
+}
+
+function getAuthErrorMessage(error: unknown) {
+  if (!(error instanceof ApiError)) {
+    return null;
+  }
+
+  if (error.code === "INVALID_CREDENTIALS" && error.status === 401) {
+    return INVALID_CREDENTIALS_MESSAGE;
+  }
+
+  return null;
+}
+
+function getValidationErrorMessage(error: unknown) {
+  if (!(error instanceof ApiError) || error.code !== "VALIDATION_ERROR" || !Array.isArray(error.details)) {
+    return null;
+  }
+
+  for (const detail of error.details) {
+    const message = normalizeValidationDetailMessage(detail);
+
+    if (message) {
+      return message;
+    }
+  }
+
+  return error.message;
+}
+
+function normalizeValidationDetailMessage(detail: unknown) {
+  if (!detail || typeof detail !== "object") {
+    return null;
+  }
+
+  const { field, message } = detail as ApiValidationDetail;
+
+  if (field === "username") {
+    if (typeof message === "string" && /at least/i.test(message)) {
+      return `Username must be at least ${AUTH_USERNAME_MIN_LENGTH} characters.`;
+    }
+
+    if (typeof message === "string" && /at most/i.test(message)) {
+      return `Username must be ${AUTH_USERNAME_MAX_LENGTH} characters or fewer.`;
+    }
+
+    if (typeof message === "string" && /required/i.test(message)) {
+      return "Username is required.";
+    }
+  }
+
+  if (field === "password") {
+    if (typeof message === "string" && /at least/i.test(message)) {
+      return `Password must be at least ${AUTH_PASSWORD_MIN_LENGTH} characters.`;
+    }
+
+    if (typeof message === "string" && /at most/i.test(message)) {
+      return `Password must be ${AUTH_PASSWORD_MAX_LENGTH} characters or fewer.`;
+    }
+
+    if (typeof message === "string" && /required/i.test(message)) {
+      return "Password is required.";
+    }
+  }
+
+  return typeof message === "string" && message.trim() ? message : null;
+}
+
+function isTemporarySessionFailure(error: unknown) {
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  return error instanceof ApiError && (
+    error.status === 0 ||
+    error.status === 408 ||
+    error.code === "NETWORK_ERROR" ||
+    error.code === "REQUEST_TIMEOUT" ||
+    error.code === "REQUEST_ABORTED"
+  );
+}
+
+function getSessionUnavailableMessage(error: unknown, hasStoredUser: boolean) {
+  if (hasStoredUser) {
+    return SESSION_UNAVAILABLE_MESSAGE;
+  }
+
+  if (isTemporarySessionFailure(error)) {
+    return "IZLedger could not verify your session because the server is temporarily unavailable.";
+  }
+
+  return getApiErrorMessage(error, "IZLedger could not verify your session right now.");
+}
+
+function getLogoutErrorMessage(error: unknown) {
+  if (isTemporarySessionFailure(error)) {
+    return "Could not reach the server, so you are still logged in on this device.";
+  }
+
+  return getApiErrorMessage(error, "Could not log out right now. Your session is still active on this device.");
+}
+
+function readStoredUser(): AuthUser | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
+
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<AuthUser>;
+
+    if (typeof parsed.id === "string" && typeof parsed.username === "string") {
+      return {
+        ...parsed,
+        id: parsed.id,
+        username: parsed.username,
+      };
+    }
+  } catch {
+    // Ignore invalid persisted auth state and clear it below.
+  }
+
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  return null;
+}
+
+function storeUser(user: AuthUser) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+}
+
+function clearStoredUser() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
-  const sessionQuery = useQuery({
-    queryKey: sessionUserQueryKey,
-    queryFn: async () => {
-      try {
-        const response = await getSessionUser();
-        return response.user;
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          return null;
-        }
+  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
+  const [sessionState, setSessionState] = useState<SessionState>("loading");
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
 
-        throw error;
+  const syncAuthenticatedUser = useCallback(async (nextUser: AuthUser, options?: { resetPrivateCache?: boolean }) => {
+    if (options?.resetPrivateCache || (user?.id && user.id !== nextUser.id)) {
+      await clearPrivateQueryCache(queryClient);
+    }
+
+    setUser(nextUser);
+    setSessionState("authenticated");
+    setSessionMessage(null);
+    storeUser(nextUser);
+    queryClient.setQueryData(sessionUserQueryKey, { user: nextUser });
+  }, [queryClient, user?.id]);
+
+  const clearAuthenticatedUser = useCallback(async (
+    nextState: Exclude<SessionState, "loading" | "authenticated">,
+    nextMessage: string | null = null,
+    options?: { resetPrivateCache?: boolean },
+  ) => {
+    if (options?.resetPrivateCache) {
+      await clearPrivateQueryCache(queryClient);
+    }
+
+    setUser(null);
+    setSessionState(nextState);
+    setSessionMessage(nextMessage);
+    clearStoredUser();
+    queryClient.removeQueries({ queryKey: sessionUserQueryKey, exact: true });
+  }, [queryClient]);
+
+  const bootstrapSession = useCallback(async () => {
+    const hadStoredUser = Boolean(readStoredUser());
+
+    try {
+      const response = await getSessionUser();
+      await syncAuthenticatedUser(response.user);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await clearAuthenticatedUser(
+          hadStoredUser ? "session-expired" : "anonymous",
+          hadStoredUser ? SESSION_EXPIRED_MESSAGE : null,
+          { resetPrivateCache: true },
+        );
+        return;
       }
-    },
-    retry: false,
-  });
+
+      setSessionState("backend-unavailable");
+      setSessionMessage(getSessionUnavailableMessage(error, hadStoredUser));
+    }
+  }, [clearAuthenticatedUser, syncAuthenticatedUser]);
+
+  useEffect(() => {
+    void bootstrapSession();
+  }, [bootstrapSession]);
 
   const contextValue: AuthContextValue = {
-    isReady: !sessionQuery.isLoading,
-    user: sessionQuery.data ?? null,
+    isReady: sessionState !== "loading",
+    user,
+    sessionState,
+    sessionMessage,
     login: async (username, password) => {
-      if (!username.trim()) {
-        return { error: "Username is required." };
-      }
+      const validationError = validateAuthCredentials(username, password);
 
-      if (!password.trim()) {
-        return { error: "Password is required." };
+      if (validationError) {
+        return { error: validationError };
       }
 
       try {
@@ -65,19 +287,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password,
         });
 
-        queryClient.setQueryData(sessionUserQueryKey, response.user);
+        await syncAuthenticatedUser(response.user, { resetPrivateCache: true });
         return {};
       } catch (error) {
         return { error: getApiErrorMessage(error, "Could not log in right now.") };
       }
     },
     register: async (username, password) => {
-      if (!username.trim()) {
-        return { error: "Username is required." };
-      }
+      const validationError = validateAuthCredentials(username, password);
 
-      if (!password.trim()) {
-        return { error: "Password is required." };
+      if (validationError) {
+        return { error: validationError };
       }
 
       try {
@@ -86,7 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password,
         });
 
-        queryClient.setQueryData(sessionUserQueryKey, response.user);
+        await syncAuthenticatedUser(response.user, { resetPrivateCache: true });
         return {};
       } catch (error) {
         return { error: getApiErrorMessage(error, "Could not create your account right now.") };
@@ -95,14 +315,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout: async () => {
       try {
         await logoutRequest();
-      } finally {
-        queryClient.setQueryData(sessionUserQueryKey, null);
-        queryClient.removeQueries({
-          predicate: (query) => {
-            const [scope] = query.queryKey;
-            return scope !== "shared-trade" && scope !== "auth";
-          },
-        });
+        await clearAuthenticatedUser("anonymous", null, { resetPrivateCache: true });
+        return {};
+      } catch (error) {
+        return {
+          error: getLogoutErrorMessage(error),
+        };
       }
     },
     changePassword: async (currentPassword, nextPassword) => {
@@ -120,12 +338,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           nextPassword,
         });
 
-        queryClient.setQueryData(sessionUserQueryKey, response.user);
+        await syncAuthenticatedUser(response.user);
         return {};
       } catch (error) {
         return { error: getApiErrorMessage(error, "Could not update your password right now.") };
       }
     },
+    refreshSession: bootstrapSession,
   };
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

@@ -60,15 +60,6 @@ export async function buildApp() {
     timestamp: new Date().toISOString(),
   }));
 
-  await app.register(authRoutes, { prefix: "/auth" });
-  await app.register(accountRoutes, { prefix: "/accounts" });
-  await app.register(setupRoutes, { prefix: "/setups" });
-  await app.register(tradeRoutes, { prefix: "/trades" });
-  await app.register(screenshotRoutes, { prefix: "/trades" });
-  await app.register(reviewRoutes, { prefix: "/reviews" });
-  await app.register(analyticsRoutes, { prefix: "/" });
-  await app.register(tradeShareRoutes, { prefix: "/" });
-
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send(toErrorResponse(new AppError(404, "NOT_FOUND", "Resource not found.")));
   });
@@ -84,6 +75,15 @@ export async function buildApp() {
     app.log.error(error);
     reply.status(500).send(toErrorResponse(new AppError(500, "INTERNAL_SERVER_ERROR", "Internal server error.")));
   });
+
+  await app.register(authRoutes, { prefix: "/auth" });
+  await app.register(accountRoutes, { prefix: "/accounts" });
+  await app.register(setupRoutes, { prefix: "/setups" });
+  await app.register(tradeRoutes, { prefix: "/trades" });
+  await app.register(screenshotRoutes, { prefix: "/trades" });
+  await app.register(reviewRoutes, { prefix: "/reviews" });
+  await app.register(analyticsRoutes, { prefix: "/" });
+  await app.register(tradeShareRoutes, { prefix: "/" });
 
   return app;
 }

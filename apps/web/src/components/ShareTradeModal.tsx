@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toBlob } from "html-to-image";
-import { Copy, Download, Link2, Loader2, RefreshCw, ShieldOff } from "lucide-react";
+import { CalendarClock, Copy, Download, Eye, Link2, Loader2, RefreshCw, ShieldOff } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { ShareTradeCard } from "@/components/ShareTradeCard";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   TradeShareSettings,
   buildSharedTradeView,
   buildTradeShareFileName,
+  formatSharedTradeDateTime,
   getTradeShareStatusLabel,
 } from "@/lib/trade-sharing";
 import { Trade } from "@/lib/types";
@@ -59,6 +60,35 @@ const privacyOptions: Array<{
   },
 ];
 
+function toDateTimeInputValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function toExpiresAtPayload(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+}
+
 export function ShareTradeModal({
   open,
   onOpenChange,
@@ -72,12 +102,13 @@ export function ShareTradeModal({
 }) {
   const [settings, setSettings] = useState<TradeShareSettings>(DEFAULT_TRADE_SHARE_SETTINGS);
   const [activeTab, setActiveTab] = useState("public-link");
-  const [shareRecord, setShareRecord] = useState<TradeShareRecord | null>(null);
+  const [shareHistory, setShareHistory] = useState<TradeShareRecord[]>([]);
   const [isLoadingShare, setIsLoadingShare] = useState(false);
   const [isSavingShare, setIsSavingShare] = useState(false);
   const [isRevokingShare, setIsRevokingShare] = useState(false);
   const [imageAction, setImageAction] = useState<"download" | "copy" | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [expiresAtInput, setExpiresAtInput] = useState("");
   const exportCardRef = useRef<HTMLDivElement | null>(null);
   const canCopyImage =
     typeof window !== "undefined" &&
@@ -89,68 +120,67 @@ export function ShareTradeModal({
     () => buildSharedTradeView({ trade, settings, accountName }),
     [accountName, settings, trade],
   );
+  const shareRecord = shareHistory[0] ?? null;
+
+  const loadShareHistory = useCallback(async () => {
+    setIsLoadingShare(true);
+    setLinkError(null);
+
+    try {
+      const response = await getTradeShares(trade.id);
+
+      setShareHistory(response.items);
+
+      const existingShare = response.items[0] ?? null;
+
+      if (existingShare) {
+        setSettings(existingShare.settings);
+        setExpiresAtInput(toDateTimeInputValue(existingShare.expiresAt));
+      } else {
+        setSettings(DEFAULT_TRADE_SHARE_SETTINGS);
+        setExpiresAtInput("");
+      }
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? "Public link status could not be loaded right now."
+          : "Public link status could not be loaded in this session.";
+      setLinkError(message);
+      setShareHistory([]);
+    } finally {
+      setIsLoadingShare(false);
+    }
+  }, [trade.id]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    let isCurrent = true;
-
-    const loadShare = async () => {
-      setIsLoadingShare(true);
-      setLinkError(null);
-
-      try {
-        const response = await getTradeShares(trade.id);
-
-        if (!isCurrent) {
-          return;
-        }
-
-        const existingShare = response.items[0] ?? null;
-        setShareRecord(existingShare);
-
-        if (existingShare) {
-          setSettings(existingShare.settings);
-        }
-      } catch (error) {
-        if (!isCurrent) {
-          return;
-        }
-
-        const message =
-          error instanceof ApiError
-            ? error.message
-            : "Public link status could not be loaded in this session.";
-        setLinkError(message);
-        setShareRecord(null);
-      } finally {
-        if (isCurrent) {
-          setIsLoadingShare(false);
-        }
-      }
-    };
-
-    void loadShare();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [open, trade.id]);
+    setActiveTab("public-link");
+    void loadShareHistory();
+  }, [loadShareHistory, open]);
 
   async function handleGenerateLink() {
     setIsSavingShare(true);
     setLinkError(null);
 
     try {
-      const response = await createTradeShare(trade.id, { settings });
-      setShareRecord(response.share);
+      const response = await createTradeShare(trade.id, {
+        settings,
+        expiresAt: toExpiresAtPayload(expiresAtInput),
+      });
+      setShareHistory([response.share]);
+      setSettings(response.share.settings);
+      setExpiresAtInput(toDateTimeInputValue(response.share.expiresAt));
+      await loadShareHistory();
       toast.success(response.share.publicUrl ? "Public trade link is ready." : "Share settings saved.");
     } catch (error) {
       const message =
         error instanceof ApiError
-          ? error.message
+          ? error.code === "INVALID_SHARE_EXPIRATION"
+            ? "Choose a future expiration time for this shared link."
+            : "Could not create a public trade link right now."
           : "Could not create a public trade link right now.";
       setLinkError(message);
       toast.error(message);
@@ -183,12 +213,13 @@ export function ShareTradeModal({
 
     try {
       const response = await revokeTradeShare(shareRecord.shareId);
-      setShareRecord(response.share);
+      setShareHistory([response.share]);
+      await loadShareHistory();
       toast.success("Shared link revoked.");
     } catch (error) {
       const message =
         error instanceof ApiError
-          ? error.message
+          ? "Could not revoke the share link right now."
           : "Could not revoke the share link right now.";
       setLinkError(message);
       toast.error(message);
@@ -287,6 +318,9 @@ export function ShareTradeModal({
     shareRecord?.status === "active"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"
       : "border-slate-200 bg-slate-50 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200";
+  const shareHistoryDescription = shareHistory.length
+    ? "This trade keeps one reusable public link, so this timeline shows its latest lifecycle state."
+    : "No public link has been created for this trade yet.";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -317,6 +351,22 @@ export function ShareTradeModal({
                   />
                 </label>
               ))}
+
+              <div className="rounded-2xl border bg-background/85 p-4 shadow-sm">
+                <Label htmlFor="share-expiration" className="text-sm font-medium text-foreground">
+                  Link expiration
+                </Label>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Leave this blank to keep the link active until you revoke it manually.
+                </p>
+                <input
+                  id="share-expiration"
+                  type="datetime-local"
+                  value={expiresAtInput}
+                  onChange={(event) => setExpiresAtInput(event.target.value)}
+                  className="mt-3 w-full rounded-xl border bg-background px-3 py-2 text-sm"
+                />
+              </div>
             </div>
           </aside>
 
@@ -354,16 +404,62 @@ export function ShareTradeModal({
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                           <span>{shareRecord.viewCount} public views</span>
-                          <span>Updated {new Date(shareRecord.updatedAt).toLocaleString()}</span>
+                          <span>Updated {formatSharedTradeDateTime(shareRecord.updatedAt)}</span>
+                          {shareRecord.expiresAt ? <span>Expires {formatSharedTradeDateTime(shareRecord.expiresAt)}</span> : <span>No expiration</span>}
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-start gap-3 text-sm text-muted-foreground">
                         <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
-                        <p>No active public link exists for this trade yet.</p>
-                      </div>
-                    )}
+                      <p>No active public link exists for this trade yet.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-2xl border bg-background/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Owner share history</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {shareHistoryDescription}
+                      </p>
+                    </div>
+                    <span className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">
+                      {shareHistory.length ? `${shareHistory.length} record` : "No records"}
+                    </span>
                   </div>
+
+                  {shareRecord ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl border bg-card/80 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Status</p>
+                        <p className="mt-2 text-sm font-semibold text-foreground">{getTradeShareStatusLabel(shareRecord.status)}</p>
+                      </div>
+                      <div className="rounded-xl border bg-card/80 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Created</p>
+                        <p className="mt-2 text-sm font-semibold text-foreground">{formatSharedTradeDateTime(shareRecord.createdAt)}</p>
+                      </div>
+                      <div className="rounded-xl border bg-card/80 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Expires</p>
+                        <p className="mt-2 text-sm font-semibold text-foreground">
+                          {shareRecord.expiresAt ? formatSharedTradeDateTime(shareRecord.expiresAt) : "Never"}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border bg-card/80 p-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Public views</p>
+                        <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                          {shareRecord.viewCount}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex items-start gap-3 rounded-xl border bg-card/60 px-4 py-3 text-sm text-muted-foreground">
+                      <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+                      <p>Generate a link to start tracking views, revocations, and expiration for this trade.</p>
+                    </div>
+                  )}
+                </div>
 
                   {linkError ? (
                     <p className="mt-3 text-sm text-destructive">{linkError}</p>

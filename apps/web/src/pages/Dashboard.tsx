@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { PageErrorState } from "@/components/PageErrorState";
 import { StatCard } from "@/components/StatCard";
 import { ResultBadge } from "@/components/ResultBadge";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
@@ -11,6 +12,16 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { listAccounts } from "@/lib/api/accounts";
 import { getDashboardSummary } from "@/lib/api/analytics";
 import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import {
+  formatCompactCurrencyDisplay,
+  formatCurrencyDisplay,
+  formatDateDisplay,
+  formatPercentageDisplay,
+  normalizeDashboardSummaryResponse,
+} from "@/lib/analytics-rendering";
+import { useAuth } from "@/lib/auth";
+import { getPageErrorState } from "@/lib/page-errors";
+import { privateQueryKey } from "@/lib/react-query";
 
 const equityChartConfig = {
   equity: {
@@ -18,37 +29,6 @@ const equityChartConfig = {
     color: "hsl(var(--primary))",
   },
 } satisfies ChartConfig;
-
-const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-});
-
-const longDateFormatter = new Intl.DateTimeFormat("en-US", {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
-function formatCurrency(value: number) {
-  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}`;
-}
-
-function formatAxisCurrency(value: number) {
-  const absValue = Math.abs(value);
-
-  if (absValue >= 1000) {
-    return `${value < 0 ? "-" : ""}$${(absValue / 1000).toFixed(1)}k`;
-  }
-
-  return `${value < 0 ? "-" : ""}$${absValue.toFixed(0)}`;
-}
-
-function formatTradeDate(date: string, formatter: Intl.DateTimeFormat) {
-  const [year, month, day] = date.split("-").map(Number);
-  return formatter.format(new Date(year, month - 1, day));
-}
 
 function getZeroGradientOffset(minValue: number, maxValue: number) {
   if (maxValue <= 0) return 0;
@@ -58,18 +38,19 @@ function getZeroGradientOffset(minValue: number, maxValue: number) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [accountFilter, setAccountFilter] = useAccountFilter();
   const accountsQuery = useQuery({
-    queryKey: ["accounts"],
+    queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
       const response = await listAccounts();
       return response.items;
     },
   });
 
-  const accounts = accountsQuery.data ?? [];
+  const accounts = accountsQuery.data;
   const resolvedAccountFilter = useMemo(
-    () => resolveAccountFilter(accountFilter, accounts),
+    () => resolveAccountFilter(accountFilter, accounts ?? []),
     [accountFilter, accounts],
   );
 
@@ -80,8 +61,10 @@ export default function Dashboard() {
   }, [accountFilter, resolvedAccountFilter, setAccountFilter]);
 
   const summaryQuery = useQuery({
-    queryKey: ["dashboard-summary", resolvedAccountFilter],
-    queryFn: () => getDashboardSummary(resolvedAccountFilter === "all" ? undefined : resolvedAccountFilter),
+    queryKey: privateQueryKey(user.id, "dashboard-summary", resolvedAccountFilter),
+    queryFn: async () => normalizeDashboardSummaryResponse(
+      await getDashboardSummary(resolvedAccountFilter === "all" ? undefined : resolvedAccountFilter),
+    ),
   });
 
   const today = new Date().toLocaleDateString("en-US", {
@@ -92,11 +75,7 @@ export default function Dashboard() {
   });
 
   const equityCurve = useMemo(() => {
-    return (summaryQuery.data?.equityCurve ?? []).map((point) => ({
-      ...point,
-      shortDate: formatTradeDate(point.date, shortDateFormatter),
-      fullDate: formatTradeDate(point.date, longDateFormatter),
-    }));
+    return summaryQuery.data?.equityCurve ?? [];
   }, [summaryQuery.data?.equityCurve]);
 
   const equityRange = useMemo(() => {
@@ -124,23 +103,29 @@ export default function Dashboard() {
   }
 
   if (summaryQuery.isError) {
+    const errorState = getPageErrorState(summaryQuery.error, {
+      unavailableTitle: "Dashboard unavailable",
+      unavailableDescription: "The dashboard service is temporarily unavailable. Please try again in a moment.",
+      unauthorizedDescription: "Your session is not allowed to load the dashboard right now.",
+      validationTitle: "Dashboard request invalid",
+      validationDescription: "The dashboard request could not be processed.",
+      timeoutTitle: "Dashboard request timed out",
+      timeoutDescription: "Loading the dashboard took too long. Please try again.",
+    });
+
     return (
-      <div className="p-4 sm:p-6">
-        <div className="mx-auto max-w-3xl rounded-2xl border bg-card p-8 text-center">
-          <h1 className="text-lg font-semibold text-foreground">Dashboard unavailable</h1>
-          <p className="mt-2 text-sm text-muted-foreground">We could not load your dashboard data right now.</p>
-        </div>
-      </div>
+      <PageErrorState
+        title={errorState.title}
+        description={errorState.description}
+        onRetry={errorState.allowRetry ? () => void summaryQuery.refetch() : undefined}
+        isRetrying={summaryQuery.isFetching}
+      />
     );
   }
 
-  const summary = summaryQuery.data?.summary ?? {
-    todayTrades: 0,
-    totalTrades: 0,
-    winRate: 0,
-    totalProfit: 0,
-  };
-  const recentTrades = summaryQuery.data?.recentTrades ?? [];
+  const dashboard = summaryQuery.data ?? normalizeDashboardSummaryResponse(null);
+  const summary = dashboard.summary;
+  const recentTrades = dashboard.recentTrades;
 
   return (
     <div className="p-4 sm:p-6">
@@ -152,18 +137,15 @@ export default function Dashboard() {
           </div>
 
           <div className="w-full lg:w-auto">
-            <AccountFilterSelect accounts={accounts} value={resolvedAccountFilter} onValueChange={setAccountFilter} />
+            <AccountFilterSelect accounts={accounts ?? []} value={resolvedAccountFilter} onValueChange={setAccountFilter} />
           </div>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Today's Trades" value={String(summary.todayTrades)} />
           <StatCard label="Total Trades" value={String(summary.totalTrades)} />
-          <StatCard label="Win Rate" value={`${summary.winRate.toFixed(1)}%`} />
-          <StatCard
-            label="Total PnL"
-            value={`${summary.totalProfit >= 0 ? "+" : "-"}$${Math.abs(summary.totalProfit).toFixed(2)}`}
-          />
+          <StatCard label="Win Rate" value={formatPercentageDisplay(summary.winRate)} />
+          <StatCard label="Total PnL" value={formatCurrencyDisplay(summary.totalProfit)} />
         </div>
 
         <div className="mb-8 rounded-lg border bg-card p-4 sm:p-6">
@@ -176,7 +158,7 @@ export default function Dashboard() {
               <div className="sm:text-right">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">Current Equity</p>
                 <p className="font-mono-price text-lg font-semibold text-foreground">
-                  {formatCurrency(equityCurve[equityCurve.length - 1].equity)}
+                  {formatCurrencyDisplay(equityCurve[equityCurve.length - 1].equity)}
                 </p>
               </div>
             ) : null}
@@ -219,7 +201,7 @@ export default function Dashboard() {
                   fontSize={12}
                   width={56}
                   domain={[equityRange.min, equityRange.max]}
-                  tickFormatter={formatAxisCurrency}
+                  tickFormatter={(value) => formatCompactCurrencyDisplay(value)}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
                 <ChartTooltip
@@ -235,7 +217,7 @@ export default function Dashboard() {
                             <span className="text-[11px] text-muted-foreground">{item.payload.pair}</span>
                           </div>
                           <span className="font-mono-price font-medium text-foreground">
-                            {formatCurrency(Number(value))}
+                            {formatCurrencyDisplay(value)}
                           </span>
                         </div>
                       )}
@@ -287,11 +269,13 @@ export default function Dashboard() {
                 <tbody>
                   {recentTrades.map((trade) => (
                     <tr key={trade.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3 text-sm">{trade.date}</td>
+                      <td className="px-4 py-3 text-sm">{formatDateDisplay(trade.date, { fallback: "--" })}</td>
                       <td className="px-4 py-3 text-sm font-medium">{trade.pair}</td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">{trade.direction}</td>
                       <td className="px-4 py-3">{trade.setup ? <SetupTag label={trade.setup} /> : null}</td>
-                      <td className="px-4 py-3"><ResultBadge result={trade.result} /></td>
+                      <td className="px-4 py-3">
+                        {trade.result ? <ResultBadge result={trade.result} /> : <span className="text-sm text-muted-foreground">--</span>}
+                      </td>
                       <td className="px-4 py-3 text-right"><ProfitDisplay value={trade.profit} /></td>
                     </tr>
                   ))}

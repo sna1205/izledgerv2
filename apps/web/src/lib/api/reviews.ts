@@ -1,4 +1,4 @@
-import type { Review } from "@/lib/types";
+import type { Pagination, Review } from "@/lib/types";
 import { apiFetch } from "@/lib/api/client";
 
 type ReviewType = Review["type"];
@@ -48,16 +48,16 @@ export type ReviewPatch = Partial<Omit<Review, "id" | "createdAt" | "updatedAt">
   type?: ReviewType;
 };
 
-type Pagination = {
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
+export type ListReviewsParams = {
+  type?: ReviewType;
+  tradeId?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: "updatedAt" | "createdAt";
+  sortOrder?: "asc" | "desc";
 };
 
-function buildQuery(params: { type?: ReviewType; tradeId?: string; page?: number; pageSize?: number } = {}) {
+function buildQuery(params: ListReviewsParams = {}) {
   const query = new URLSearchParams();
 
   for (const [key, value] of Object.entries(params)) {
@@ -72,7 +72,7 @@ function buildQuery(params: { type?: ReviewType; tradeId?: string; page?: number
   return serialized ? `?${serialized}` : "";
 }
 
-export function listReviews(params: { type?: ReviewType; tradeId?: string; page?: number; pageSize?: number } = {}) {
+export function listReviews(params: ListReviewsParams = {}) {
   return apiFetch<{ items: Review[]; pagination: Pagination }>(`/reviews${buildQuery(params)}`);
 }
 

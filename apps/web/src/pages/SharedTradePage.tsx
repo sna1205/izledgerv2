@@ -39,6 +39,34 @@ function SharedTradeUnavailable({ message }: { message: string }) {
   );
 }
 
+function getUnavailableMessage(error: unknown, shareId: string) {
+  if (!shareId) {
+    return "This shared trade link is incomplete.";
+  }
+
+  if (!(error instanceof ApiError)) {
+    return "This shared trade link is missing, revoked, or has expired.";
+  }
+
+  if (error.code === "INVALID_INPUT") {
+    return "This shared trade link is invalid.";
+  }
+
+  if (error.code === "TRADE_SHARE_NOT_FOUND") {
+    return "This shared trade link was not found.";
+  }
+
+  if (error.code === "TRADE_SHARE_REVOKED") {
+    return "This shared trade link was revoked by its owner.";
+  }
+
+  if (error.code === "TRADE_SHARE_EXPIRED") {
+    return "This shared trade link has expired.";
+  }
+
+  return error.message || "This shared trade link is missing, revoked, or has expired.";
+}
+
 export default function SharedTradePage() {
   const { shareId = "" } = useParams<{ shareId: string }>();
 
@@ -60,10 +88,7 @@ export default function SharedTradePage() {
   }
 
   if (tradeQuery.isError || !tradeQuery.data?.trade) {
-    const message =
-      tradeQuery.error instanceof ApiError
-        ? tradeQuery.error.message
-        : "This shared trade link is missing, revoked, or has expired.";
+    const message = getUnavailableMessage(tradeQuery.error, shareId);
 
     return <SharedTradeUnavailable message={message} />;
   }

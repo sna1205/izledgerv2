@@ -54,6 +54,41 @@ test("validation failures use the standard error envelope", async () => {
   }
 });
 
+test("route plugin failures also use the standard error envelope", async () => {
+  const app = await buildApp();
+  const originalFindFirst = prisma.user.findFirst;
+
+  Object.defineProperty(prisma.user, "findFirst", {
+    value: async () => {
+      throw new Error("sensitive database details");
+    },
+    configurable: true,
+  });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        username: "Demo",
+        password: "Password123!",
+      },
+    });
+
+    assert.equal(response.statusCode, 500);
+    assertErrorShape(response.json(), {
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Internal server error.",
+    });
+  } finally {
+    Object.defineProperty(prisma.user, "findFirst", {
+      value: originalFindFirst,
+      configurable: true,
+    });
+    await app.close();
+  }
+});
+
 test("unauthorized and not found responses use the standard error envelope", async () => {
   const app = await buildApp();
 

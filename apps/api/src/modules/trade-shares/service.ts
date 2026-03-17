@@ -281,11 +281,15 @@ export async function getPublicTradeShare(shareId: string) {
   });
 
   if (!share) {
-    throw new AppError(404, "TRADE_SHARE_UNAVAILABLE", "Shared trade link is unavailable.");
+    throw new AppError(404, "TRADE_SHARE_NOT_FOUND", "Shared trade link was not found.");
   }
 
-  if (!share.isActive || isTradeShareExpired(share)) {
-    throw new AppError(404, "TRADE_SHARE_UNAVAILABLE", "Shared trade link is unavailable.");
+  if (!share.isActive) {
+    throw new AppError(410, "TRADE_SHARE_REVOKED", "This shared trade link was revoked by its owner.");
+  }
+
+  if (isTradeShareExpired(share)) {
+    throw new AppError(410, "TRADE_SHARE_EXPIRED", "This shared trade link has expired.");
   }
 
   const settings = parseShareSettings(share.shareSettings);

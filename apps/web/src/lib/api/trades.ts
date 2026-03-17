@@ -1,4 +1,4 @@
-import type { Trade } from "@/lib/types";
+import type { Pagination, Trade } from "@/lib/types";
 import { apiFetch } from "@/lib/api/client";
 
 export type TradePayload = {
@@ -33,15 +33,6 @@ export type ListTradesParams = {
   sortBy?: "date" | "createdAt" | "profit" | "pair";
   sortOrder?: "asc" | "desc";
   includeDeleted?: boolean;
-};
-
-type Pagination = {
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
 };
 
 function buildQuery(params: ListTradesParams = {}) {
