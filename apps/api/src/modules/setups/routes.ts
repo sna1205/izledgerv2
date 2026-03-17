@@ -1,13 +1,20 @@
 import { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/auth.js";
 import { parseOrThrow } from "../../utils/http.js";
-import { createSetupSchema, setupParamsSchema, updateSetupSchema } from "./schemas.js";
+import { createSetupSchema, listSetupsQuerySchema, setupParamsSchema, updateSetupSchema } from "./schemas.js";
 import { createSetup, deleteSetup, listSetups, updateSetup } from "./service.js";
 
 export async function setupRoutes(app: FastifyInstance) {
   app.get("/", { preHandler: authenticate }, async (request) => {
-    const items = await listSetups(request.auth!.userId);
-    return { items };
+    const query = parseOrThrow(listSetupsQuerySchema, request.query);
+    return listSetups(request.auth!.userId, {
+      ...query,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 20,
+      status: query.status ?? "all",
+      sortBy: query.sortBy ?? "createdAt",
+      sortOrder: query.sortOrder ?? "asc",
+    });
   });
 
   app.post("/", { preHandler: authenticate }, async (request, reply) => {

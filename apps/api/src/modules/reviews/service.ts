@@ -133,18 +133,23 @@ export async function listReviews(userId: string, query: {
   tradeId?: string;
   page: number;
   pageSize: number;
+  sortBy: "updatedAt" | "createdAt";
+  sortOrder: "asc" | "desc";
 }) {
   const where = {
     userId,
     type: query.type,
     tradeId: query.tradeId,
   } satisfies Prisma.ReviewWhereInput;
+  const orderBy = query.sortBy === "createdAt"
+    ? { createdAt: query.sortOrder }
+    : { updatedAt: query.sortOrder };
 
   const [total, reviews] = await Promise.all([
     prisma.review.count({ where }),
     prisma.review.findMany({
       where,
-      orderBy: { updatedAt: "desc" },
+      orderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     }),

@@ -1,0 +1,443 @@
+import React from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/client";
+import Analytics from "@/pages/Analytics";
+import Dashboard from "@/pages/Dashboard";
+
+vi.mock("@/lib/auth", () => ({
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      username: "trader",
+    },
+  }),
+}));
+
+const apiMocks = vi.hoisted(() => ({
+  listAccounts: vi.fn(),
+  getDashboardSummary: vi.fn(),
+  getAnalyticsBreakdowns: vi.fn(),
+  getAnalyticsCalendar: vi.fn(),
+}));
+
+vi.mock("@/lib/api/accounts", () => ({
+  listAccounts: apiMocks.listAccounts,
+}));
+
+vi.mock("@/lib/api/analytics", () => ({
+  getDashboardSummary: apiMocks.getDashboardSummary,
+  getAnalyticsBreakdowns: apiMocks.getAnalyticsBreakdowns,
+  getAnalyticsCalendar: apiMocks.getAnalyticsCalendar,
+}));
+
+vi.mock("@/components/AccountFilterSelect", () => ({
+  AccountFilterSelect: () => <div data-testid="account-filter">Account Filter</div>,
+}));
+
+vi.mock("@/components/StatCard", () => ({
+  StatCard: ({ label, value }: { label: string; value: string }) => <div>{`${label}: ${value}`}</div>,
+}));
+
+vi.mock("@/components/ProfitDisplay", () => ({
+  ProfitDisplay: ({ value }: { value: number }) => <span>{value >= 0 ? `+$${value.toFixed(2)}` : `-$${Math.abs(value).toFixed(2)}`}</span>,
+}));
+
+vi.mock("@/components/ResultBadge", () => ({
+  ResultBadge: ({ result }: { result: string }) => <span>{result}</span>,
+}));
+
+vi.mock("@/components/SetupTag", () => ({
+  SetupTag: ({ label }: { label: string }) => <span>{label}</span>,
+}));
+
+vi.mock("@/components/ui/chart", () => ({
+  ChartContainer: ({ children }: { children: React.ReactNode }) => <div data-testid="chart-container">{children}</div>,
+  ChartTooltip: () => null,
+  ChartTooltipContent: () => null,
+}));
+
+vi.mock("recharts", () => ({
+  AreaChart: () => <div />,
+  Area: () => null,
+  CartesianGrid: () => null,
+  ReferenceLine: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+}));
+
+vi.mock("@/components/ui/tabs", async () => {
+  const ReactModule = await import("react");
+
+  const TabsContext = ReactModule.createContext<{
+    value: string;
+    setValue: (value: string) => void;
+  }>({
+    value: "",
+    setValue: () => undefined,
+  });
+
+  return {
+    Tabs: ({
+      value,
+      defaultValue,
+      onValueChange,
+      children,
+    }: {
+      value?: string;
+      defaultValue?: string;
+      onValueChange?: (value: string) => void;
+      children: React.ReactNode;
+    }) => {
+      const [internalValue, setInternalValue] = ReactModule.useState(value ?? defaultValue ?? "");
+      const currentValue = value ?? internalValue;
+
+      return (
+        <TabsContext.Provider
+          value={{
+            value: currentValue,
+            setValue: (nextValue) => {
+              if (value === undefined) {
+                setInternalValue(nextValue);
+              }
+
+              onValueChange?.(nextValue);
+            },
+          }}
+        >
+          {children}
+        </TabsContext.Provider>
+      );
+    },
+    TabsList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    TabsTrigger: ({ value, children }: { value: string; children: React.ReactNode }) => {
+      const context = ReactModule.useContext(TabsContext);
+
+      return (
+        <button type="button" onClick={() => context.setValue(value)}>
+          {children}
+        </button>
+      );
+    },
+    TabsContent: ({ value, children }: { value: string; children: React.ReactNode }) => {
+      const context = ReactModule.useContext(TabsContext);
+      return context.value === value ? <div>{children}</div> : null;
+    },
+  };
+});
+
+function renderPage(page: React.ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{page}</MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
+  };
+}
+
+beforeEach(() => {
+  apiMocks.listAccounts.mockReset();
+  apiMocks.getDashboardSummary.mockReset();
+  apiMocks.getAnalyticsBreakdowns.mockReset();
+  apiMocks.getAnalyticsCalendar.mockReset();
+
+  apiMocks.listAccounts.mockResolvedValue({
+    items: [
+      {
+        id: "account-1",
+        name: "Primary",
+      },
+    ],
+  });
+});
+
+describe("dashboard rendering", () => {
+  it("renders clean empty states for zero trades", async () => {
+    apiMocks.getDashboardSummary.mockResolvedValue({
+      summary: {
+        todayTrades: 0,
+        totalTrades: 0,
+        winRate: 0,
+        totalProfit: 0,
+      },
+      recentTrades: [],
+      equityCurve: [],
+    });
+
+    renderPage(<Dashboard />);
+
+    await screen.findByText("Session Summary");
+
+    expect(screen.getByText("Win Rate: 0.0%")).toBeInTheDocument();
+    expect(screen.getByText("Total PnL: $0.00")).toBeInTheDocument();
+    expect(screen.getByText("Log trades to see your equity curve.")).toBeInTheDocument();
+    expect(screen.getByText("No trades found yet.")).toBeInTheDocument();
+  });
+
+  it("normalizes malformed dashboard payloads without rendering crashes", async () => {
+    apiMocks.getDashboardSummary.mockResolvedValue({
+      summary: {
+        todayTrades: null,
+        totalTrades: "1",
+        winRate: "88.5%",
+        totalProfit: null,
+      },
+      recentTrades: [
+        {
+          id: null,
+          date: "not-a-date",
+          pair: null,
+          direction: null,
+          setup: null,
+          result: "Maybe",
+          profit: null,
+        },
+      ],
+      equityCurve: [
+        {},
+        {
+          tradeNumber: "1",
+          date: "2026-03-16",
+          pair: null,
+          profit: "125.5",
+          equity: "125.5",
+        },
+      ],
+    });
+
+    renderPage(<Dashboard />);
+
+    await screen.findByText("Current Equity");
+
+    expect(screen.getByText("+$125.50")).toBeInTheDocument();
+    expect(screen.getByText("Unknown Pair")).toBeInTheDocument();
+    expect(screen.getAllByText("--").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Invalid Date")).not.toBeInTheDocument();
+  });
+
+  it("shows a loading state while the dashboard response is slow", async () => {
+    const deferred = createDeferred<unknown>();
+    apiMocks.getDashboardSummary.mockReturnValue(deferred.promise);
+
+    renderPage(<Dashboard />);
+
+    expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
+
+    deferred.resolve({
+      summary: {
+        todayTrades: 0,
+        totalTrades: 0,
+        winRate: 0,
+        totalProfit: 0,
+      },
+      recentTrades: [],
+      equityCurve: [],
+    });
+
+    await screen.findByText("Session Summary");
+  });
+
+  it("shows an outage state and recovers after retry", async () => {
+    apiMocks.getDashboardSummary
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({
+        summary: {
+          todayTrades: 1,
+          totalTrades: 2,
+          winRate: 50,
+          totalProfit: 125,
+        },
+        recentTrades: [],
+        equityCurve: [],
+      });
+
+    renderPage(<Dashboard />);
+
+    await screen.findByText("Dashboard unavailable");
+    expect(screen.getByText("We could not reach the server. Check your connection and try again.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Session Summary")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("analytics rendering", () => {
+  it("renders the empty analytics state for zero trades", async () => {
+    apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
+      summary: {
+        totalTrades: 0,
+        wins: 0,
+        losses: 0,
+        totalProfit: 0,
+        totalGross: 0,
+        totalLoss: 0,
+        winRate: 0,
+        avgRR: 0,
+      },
+      winLoss: [],
+      setupPerformance: [],
+      sessionPerformance: [],
+      emotionPerformance: [],
+      pairPerformance: [],
+      accountPerformance: [],
+    });
+    apiMocks.getAnalyticsCalendar.mockResolvedValue({
+      month: "2026-03",
+      days: [],
+      weeks: [],
+    });
+
+    renderPage(<Analytics />);
+
+    await screen.findByText("No analytics data yet.");
+  });
+
+  it("normalizes partial analytics data and invalid month payloads gracefully", async () => {
+    apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
+      summary: {
+        totalTrades: "1",
+        wins: 1,
+        losses: null,
+        totalProfit: null,
+        totalGross: undefined,
+        totalLoss: null,
+        winRate: "88.5%",
+        avgRR: null,
+      },
+      winLoss: [
+        {
+          key: null,
+          name: null,
+          value: "abc",
+          percentage: "101%",
+        },
+      ],
+      setupPerformance: [{}],
+      sessionPerformance: null,
+      emotionPerformance: [
+        {
+          key: "emotion-1",
+          label: null,
+          trades: "2",
+          wins: 1,
+          winRate: "120%",
+          profit: "-50",
+          averageProfit: null,
+        },
+      ],
+      pairPerformance: [],
+      accountPerformance: [{}],
+    });
+    apiMocks.getAnalyticsCalendar.mockResolvedValue({
+      month: "bad-month",
+      days: [
+        {
+          date: "not-a-date",
+          inCurrentMonth: null,
+          totalProfit: null,
+          tradeCount: null,
+          wins: null,
+          winRate: "oops",
+          grossProfit: null,
+          grossLoss: null,
+        },
+      ],
+      weeks: [
+        {
+          days: [{}],
+          summary: {
+            tradeCount: "oops",
+            totalProfit: null,
+            winRate: "150%",
+          },
+        },
+      ],
+    });
+
+    renderPage(<Analytics />);
+
+    await screen.findByText("Total Trades: 1");
+    expect(screen.getByText("Net PnL: $0.00")).toBeInTheDocument();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
+
+    await screen.findByText("Review PnL and trade frequency by day.");
+    expect(screen.getByText("$0.00")).toBeInTheDocument();
+    expect(screen.queryByText("Invalid Date")).not.toBeInTheDocument();
+  });
+
+  it("shows a loading state while analytics requests are slow", async () => {
+    const breakdownsDeferred = createDeferred<unknown>();
+    const calendarDeferred = createDeferred<unknown>();
+    apiMocks.getAnalyticsBreakdowns.mockReturnValue(breakdownsDeferred.promise);
+    apiMocks.getAnalyticsCalendar.mockReturnValue(calendarDeferred.promise);
+
+    renderPage(<Analytics />);
+
+    expect(screen.getByText("Loading analytics...")).toBeInTheDocument();
+
+    breakdownsDeferred.resolve({
+      summary: {
+        totalTrades: 0,
+        wins: 0,
+        losses: 0,
+        totalProfit: 0,
+        totalGross: 0,
+        totalLoss: 0,
+        winRate: 0,
+        avgRR: 0,
+      },
+      winLoss: [],
+      setupPerformance: [],
+      sessionPerformance: [],
+      emotionPerformance: [],
+      pairPerformance: [],
+      accountPerformance: [],
+    });
+    calendarDeferred.resolve({
+      month: "2026-03",
+      days: [],
+      weeks: [],
+    });
+
+    await screen.findByText("No analytics data yet.");
+  });
+
+  it("shows an error state when analytics endpoints return 500", async () => {
+    apiMocks.getAnalyticsBreakdowns.mockRejectedValue(new ApiError("Server failed.", 500, "HTTP_ERROR"));
+    apiMocks.getAnalyticsCalendar.mockRejectedValue(new ApiError("Server failed.", 500, "HTTP_ERROR"));
+
+    renderPage(<Analytics />);
+
+    await screen.findByText("Analytics unavailable");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+});

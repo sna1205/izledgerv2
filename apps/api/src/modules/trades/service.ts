@@ -327,10 +327,22 @@ export async function updateTrade(userId: string, tradeId: string, input: {
 export async function deleteTrade(userId: string, tradeId: string) {
   await getOwnedTrade(userId, tradeId);
 
-  await prisma.trade.update({
-    where: { id: tradeId },
-    data: {
-      deletedAt: new Date(),
-    },
-  });
+  await prisma.$transaction([
+    prisma.trade.update({
+      where: { id: tradeId },
+      data: {
+        deletedAt: new Date(),
+      },
+    }),
+    prisma.tradeShare.updateMany({
+      where: {
+        tradeId,
+        userId,
+        isActive: true,
+      },
+      data: {
+        isActive: false,
+      },
+    }),
+  ]);
 }

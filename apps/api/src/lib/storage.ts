@@ -45,6 +45,44 @@ export async function createPresignedUpload(params: {
   };
 }
 
+export async function getObjectMetadata(key: string) {
+  const s3 = getStorageClient();
+
+  try {
+    const response = await s3.send(
+      new HeadObjectCommand({
+        Bucket: env.STORAGE_BUCKET!,
+        Key: key,
+      }),
+    );
+
+    return {
+      exists: true,
+      contentType: response.ContentType ?? null,
+      contentLength: response.ContentLength ?? null,
+    };
+  } catch (error) {
+    const statusCode =
+      typeof error === "object" && error !== null && "$metadata" in error
+        ? ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ?? null)
+        : null;
+    const errorName =
+      typeof error === "object" && error !== null && "name" in error
+        ? String((error as { name?: string }).name)
+        : "";
+
+    if (statusCode === 404 || errorName === "NotFound" || errorName === "NoSuchKey") {
+      return {
+        exists: false,
+        contentType: null,
+        contentLength: null,
+      };
+    }
+
+    throw error;
+  }
+}
+
 export async function getReadUrl(key: string) {
   if (!env.STORAGE_ENABLED) {
     return "";
@@ -64,33 +102,8 @@ export async function getReadUrl(key: string) {
 }
 
 export async function objectExists(key: string) {
-  const s3 = getStorageClient();
-
-  try {
-    await s3.send(
-      new HeadObjectCommand({
-        Bucket: env.STORAGE_BUCKET!,
-        Key: key,
-      }),
-    );
-
-    return true;
-  } catch (error) {
-    const statusCode =
-      typeof error === "object" && error !== null && "$metadata" in error
-        ? ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ?? null)
-        : null;
-    const errorName =
-      typeof error === "object" && error !== null && "name" in error
-        ? String((error as { name?: string }).name)
-        : "";
-
-    if (statusCode === 404 || errorName === "NotFound" || errorName === "NoSuchKey") {
-      return false;
-    }
-
-    throw error;
-  }
+  const metadata = await getObjectMetadata(key);
+  return metadata.exists;
 }
 
 export function storageObjectUrl(key: string) {

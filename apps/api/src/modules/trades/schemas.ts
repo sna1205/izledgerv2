@@ -1,6 +1,7 @@
 import { format, isValid, parseISO } from "date-fns";
 import { z } from "zod";
 import { tradeDirections, tradeEmotions, tradeResults, tradeSessions } from "../../config/domain.js";
+import { boundedIntSchema, numericBounds, positivePriceSchema, signedMoneySchema } from "../../utils/validation.js";
 
 export const tradeParamsSchema = z.object({
   id: z.string().uuid(),
@@ -17,10 +18,10 @@ export const createTradeSchema = z.object({
   accountId: z.string().uuid(),
   pair: z.string().trim().min(1).max(20),
   direction: z.enum(tradeDirections),
-  entry: z.coerce.number(),
-  stopLoss: z.coerce.number(),
-  takeProfit: z.coerce.number(),
-  profit: z.coerce.number(),
+  entry: positivePriceSchema(numericBounds.maxTradePrice),
+  stopLoss: positivePriceSchema(numericBounds.maxTradePrice),
+  takeProfit: positivePriceSchema(numericBounds.maxTradePrice),
+  profit: signedMoneySchema(numericBounds.maxTradeProfitAbs),
   result: z.enum(tradeResults),
   setupId: z.string().uuid().optional().nullable(),
   setup: optionalString,
@@ -44,8 +45,8 @@ export const listTradesQuerySchema = z.object({
   result: z.enum(tradeResults).optional(),
   session: z.enum(tradeSessions).optional(),
   emotion: z.enum(tradeEmotions).optional(),
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(100).default(20),
+  page: boundedIntSchema(1, numericBounds.maxPage).default(1),
+  pageSize: boundedIntSchema(1, numericBounds.maxPageSize).default(20),
   sortBy: z.enum(["date", "createdAt", "profit", "pair"]).default("date"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
   includeDeleted: z.coerce.boolean().default(false),

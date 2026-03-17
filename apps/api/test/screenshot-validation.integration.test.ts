@@ -89,6 +89,7 @@ test("screenshot routes reject invalid MIME types and missing upload tokens", as
       payload: {
         fileName: "chart.svg",
         contentType: "image/svg+xml",
+        fileSize: 1024,
         sortOrder: 0,
       },
     });
@@ -96,6 +97,45 @@ test("screenshot routes reject invalid MIME types and missing upload tokens", as
     assert.equal(invalidMimeResponse.statusCode, 400);
     const invalidMimePayload = invalidMimeResponse.json();
     assert.equal(invalidMimePayload.error.code, "VALIDATION_ERROR");
+
+    const invalidExtensionResponse = await app.inject({
+      method: "POST",
+      url: `/trades/${tradeId}/screenshots/presign`,
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        fileName: "chart.png",
+        contentType: "image/jpeg",
+        fileSize: 1024,
+        sortOrder: 0,
+      },
+    });
+
+    assert.equal(invalidExtensionResponse.statusCode, 400);
+    const invalidExtensionPayload = invalidExtensionResponse.json();
+    assert.equal(invalidExtensionPayload.error.code, "VALIDATION_ERROR");
+    assert.equal(invalidExtensionPayload.error.message, "Invalid request");
+    assert.ok(invalidExtensionPayload.error.details.some((detail: { field?: string }) => detail.field === "fileName"));
+
+    const oversizedFileResponse = await app.inject({
+      method: "POST",
+      url: `/trades/${tradeId}/screenshots/presign`,
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        fileName: "chart.png",
+        contentType: "image/png",
+        fileSize: 10 * 1024 * 1024 + 1,
+        sortOrder: 0,
+      },
+    });
+
+    assert.equal(oversizedFileResponse.statusCode, 400);
+    const oversizedFilePayload = oversizedFileResponse.json();
+    assert.equal(oversizedFilePayload.error.code, "VALIDATION_ERROR");
+    assert.ok(oversizedFilePayload.error.details.some((detail: { field?: string }) => detail.field === "fileSize"));
 
     const missingTokenResponse = await app.inject({
       method: "POST",
@@ -112,7 +152,7 @@ test("screenshot routes reject invalid MIME types and missing upload tokens", as
     assert.equal(missingTokenResponse.statusCode, 400);
     const missingTokenPayload = missingTokenResponse.json();
     assert.equal(missingTokenPayload.error.code, "VALIDATION_ERROR");
-    assert.ok(Array.isArray(missingTokenPayload.error.details.fieldErrors.uploadToken));
+    assert.ok(missingTokenPayload.error.details.some((detail: { field?: string }) => detail.field === "uploadToken"));
   } finally {
     await app.close();
     await prisma.user.deleteMany({

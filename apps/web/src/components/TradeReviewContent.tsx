@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils";
-import { Review } from "@/lib/types";
+import type { Review } from "@/lib/types";
+import { ReviewMetricCard, ReviewTextSection } from "@/components/ReviewContentPrimitives";
 
 interface TradeReviewContentProps {
   review: Review;
@@ -16,22 +16,10 @@ export function TradeReviewContent({ review, orphaned = false }: TradeReviewCont
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border bg-background/70 p-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Execution</p>
-          <p className="mt-2 text-sm font-medium text-foreground">{review.executionRating || 0}/5</p>
-        </div>
-        <div className="rounded-xl border bg-background/70 p-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Discipline</p>
-          <p className="mt-2 text-sm font-medium text-foreground">{review.disciplineScore || 0}/5</p>
-        </div>
-        <div className="rounded-xl border bg-background/70 p-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Emotion</p>
-          <p className="mt-2 text-sm font-medium text-foreground">{review.emotionRating || 0}/5</p>
-        </div>
-        <div className="rounded-xl border bg-background/70 p-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Take Again?</p>
-          <p className="mt-2 text-sm font-medium text-foreground">{review.wouldTakeAgain === false ? "No" : "Yes"}</p>
-        </div>
+        <ReviewMetricCard label="Execution" value={`${review.executionRating ?? 0}/5`} />
+        <ReviewMetricCard label="Discipline" value={`${review.disciplineScore ?? 0}/5`} />
+        <ReviewMetricCard label="Emotion" value={`${review.emotionRating ?? 0}/5`} />
+        <ReviewMetricCard label="Take Again?" value={review.wouldTakeAgain === false ? "No" : "Yes"} />
       </div>
 
       {[
@@ -41,12 +29,7 @@ export function TradeReviewContent({ review, orphaned = false }: TradeReviewCont
         ["Lesson Learned", review.lessonLearned],
         ["Improve Next Time", review.improvementForNextTrade],
       ].map(([label, value]) => (
-        <div key={label} className="rounded-xl border bg-background/70 p-4">
-          <p className="mb-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-          <p className={cn("text-sm leading-relaxed text-foreground", !value && "text-muted-foreground")}>
-            {value || "No notes recorded yet."}
-          </p>
-        </div>
+        <ReviewTextSection key={label} label={label} value={value} />
       ))}
     </div>
   );

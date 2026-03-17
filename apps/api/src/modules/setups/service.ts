@@ -1,5 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/errors.js";
+import { buildPagination } from "../../utils/http.js";
 
 function toSetupDto(setup: {
   id: string;
@@ -9,6 +11,9 @@ function toSetupDto(setup: {
   isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
+  _count?: {
+    trades: number;
+  };
 }) {
   return {
     id: setup.id,
@@ -18,6 +23,7 @@ function toSetupDto(setup: {
     isArchived: setup.isArchived,
     createdAt: setup.createdAt.toISOString(),
     updatedAt: setup.updatedAt.toISOString(),
+    tradeCount: setup._count?.trades ?? 0,
   };
 }
 
@@ -53,13 +59,67 @@ async function getOwnedSetup(userId: string, setupId: string) {
   return setup;
 }
 
-export async function listSetups(userId: string) {
-  const setups = await prisma.setup.findMany({
-    where: { userId },
-    orderBy: [{ isArchived: "asc" }, { createdAt: "asc" }],
-  });
+export async function listSetups(userId: string, query: {
+  search?: string;
+  status: "all" | "active" | "archived";
+  page: number;
+  pageSize: number;
+  sortBy: "createdAt" | "name";
+  sortOrder: "asc" | "desc";
+}) {
+  const where = {
+    userId,
+    isArchived:
+      query.status === "all"
+        ? undefined
+        : query.status === "archived",
+    OR: query.search
+      ? [
+          {
+            name: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            description: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+        ]
+      : undefined,
+  } satisfies Prisma.SetupWhereInput;
+  const orderBy =
+    query.sortBy === "name"
+      ? [{ isArchived: "asc" as const }, { name: query.sortOrder }]
+      : [{ isArchived: "asc" as const }, { createdAt: query.sortOrder }];
 
-  return setups.map(toSetupDto);
+  const [total, setups] = await Promise.all([
+    prisma.setup.count({ where }),
+    prisma.setup.findMany({
+      where,
+      orderBy,
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      include: {
+        _count: {
+          select: {
+            trades: {
+              where: {
+                deletedAt: null,
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    items: setups.map(toSetupDto),
+    pagination: buildPagination(query.page, query.pageSize, total),
+  };
 }
 
 export async function createSetup(userId: string, input: {

@@ -13,7 +13,7 @@ function getTradeReviewStatus(trade: Trade, reviewed: boolean) {
     return {
       label: "Reviewed",
       icon: CheckCircle2,
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-300",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/80 dark:bg-emerald-950/90 dark:text-emerald-200",
     };
   }
 
@@ -23,14 +23,14 @@ function getTradeReviewStatus(trade: Trade, reviewed: boolean) {
     return {
       label: "Needs Review",
       icon: TriangleAlert,
-      className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/12 dark:text-amber-300",
+      className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/80 dark:bg-amber-950/90 dark:text-amber-200",
     };
   }
 
   return {
     label: "Not Reviewed",
     icon: Clock3,
-    className: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300",
+    className: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200",
   };
 }
 
@@ -39,7 +39,12 @@ export function TradeReviewStatusBadge({ trade, reviewed }: TradeReviewStatusBad
   const Icon = status.icon;
 
   return (
-    <span className={cn("inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[11px] font-medium leading-tight", status.className)}>
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-tight dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        status.className,
+      )}
+    >
       <Icon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
       {status.label}
     </span>

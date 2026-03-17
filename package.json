@@ -17,7 +17,6 @@
     "prisma:generate": "npm run prisma:generate --workspace @izledger/api",
     "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace @izledger/api",
     "prisma:migrate:deploy": "npm run prisma:migrate:deploy --workspace @izledger/api",
-    "prisma:seed": "npm run prisma:seed --workspace @izledger/api",
     "prisma:studio": "npm run prisma:studio --workspace @izledger/api"
   },
   "devDependencies": {
