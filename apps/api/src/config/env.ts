@@ -41,8 +41,12 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   HOST: z.string().default("0.0.0.0"),
-  FRONTEND_ORIGIN: z.string().url(),
+  FRONTEND_URL: optionalUrlFromEnv,
   DATABASE_URL: z.string().min(1),
+  SUPABASE_URL: optionalUrlFromEnv,
+  SUPABASE_ANON_KEY: optionalStringFromEnv,
+  SUPABASE_SERVICE_ROLE_KEY: optionalStringFromEnv,
+  JWT_SECRET: optionalStringFromEnv,
   SESSION_COOKIE_NAME: z.string().default("izledger_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   SESSION_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
@@ -63,6 +67,22 @@ const envSchema = z.object({
   STORAGE_SIGNED_READ_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 }).superRefine((data, ctx) => {
+  if (data.NODE_ENV === "production" && !data.FRONTEND_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["FRONTEND_URL"],
+      message: "FRONTEND_URL is required when NODE_ENV=production",
+    });
+  }
+
+  if ((data.SUPABASE_ANON_KEY || data.SUPABASE_SERVICE_ROLE_KEY) && !data.SUPABASE_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["SUPABASE_URL"],
+      message: "SUPABASE_URL is required when using Supabase API keys",
+    });
+  }
+
   if (!data.STORAGE_ENABLED) {
     return;
   }
@@ -100,7 +120,10 @@ const envSchema = z.object({
   }
 });
 
-const parsed = envSchema.safeParse(process.env);
+const parsed = envSchema.safeParse({
+  ...process.env,
+  FRONTEND_URL: process.env.FRONTEND_URL ?? process.env.FRONTEND_ORIGIN,
+});
 
 if (!parsed.success) {
   console.error("Invalid backend environment variables:", parsed.error.flatten().fieldErrors);

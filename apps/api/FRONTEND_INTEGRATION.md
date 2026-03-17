@@ -11,7 +11,7 @@ The current frontend already uses React Query, so the cleanest migration is:
 ```ts
 // src/lib/api/client.ts
 export async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${import.meta.env.VITE_API_URL}${input}`, {
+  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}${input}`, {
     ...init,
     credentials: "include",
     headers: {
@@ -231,7 +231,7 @@ export function useTrades(filters: Record<string, string | number | undefined>) 
 ## Suggested env for the frontend
 
 ```env
-VITE_API_URL=http://localhost:4000
+VITE_API_BASE_URL=http://localhost:4000
 ```
 
 ## Migration strategy

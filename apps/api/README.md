@@ -208,7 +208,7 @@ The default recommendation is signed read URLs for trader screenshots because th
 - Set `SESSION_COOKIE_SECURE=true` behind HTTPS.
 - Put Postgres on managed infrastructure.
 - Use S3, Cloudflare R2, or Supabase Storage in production.
-- Keep `FRONTEND_ORIGIN` explicit.
+- Keep `FRONTEND_URL` explicit.
 - Consider Redis-backed rate limiting if you later scale horizontally.
 - Move signed read URLs behind a CDN if screenshot traffic grows.
 
@@ -223,4 +223,4 @@ The default recommendation is signed read URLs for trader screenshots because th
 
 ## Frontend migration
 
-See [FRONTEND_INTEGRATION.md](/mnt/c/Users/PCM/Documents/IZledgerV2/chart-mate-log/apps/api/FRONTEND_INTEGRATION.md) for concrete React Query and API client examples.
+See `FRONTEND_INTEGRATION.md` for concrete React Query and API client examples.

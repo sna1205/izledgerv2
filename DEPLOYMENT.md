@@ -1,69 +1,81 @@
 # Deployment Guide
 
-This repo can be deployed with:
+This project is set up for:
 
 - frontend on Vercel
-- backend on Railway
+- backend API on Render
+- database on Supabase Postgres
 
-## Current app state
+This guide follows the safest MVP order:
 
-The backend is production-capable and includes:
+1. Prepare the repo
+2. Create Supabase
+3. Deploy backend to Render
+4. Deploy frontend to Vercel
+5. Verify everything works
 
-- Fastify API
-- Prisma migrations
-- health endpoint at `/health`
-- cookie-based auth
+## 1. Prepare the repo
 
-The frontend is deployable as a Vite SPA, but most data modules still read and write from `localStorage`.
+1. Push your latest code to GitHub.
+2. Make sure Prisma migrations are committed from `apps/api/prisma/migrations`.
+3. Confirm these files exist and are up to date:
+   - `apps/api/.env.example`
+   - `apps/web/.env.example`
+   - `render.yaml`
+   - `apps/web/vercel.json`
+4. If you are not ready to configure screenshot storage yet, plan to set `STORAGE_ENABLED=false` in Render.
 
-That means:
+## 2. Create Supabase
 
-- Vercel deployment works today
-- Railway deployment works today
-- full end-to-end production behavior still requires wiring the frontend to the backend API modules
+1. Create a new Supabase project.
+2. Wait for the database to finish provisioning.
+3. In Supabase, open `Project Settings` -> `Database`.
+4. Copy the Postgres connection string.
+5. Prefer the pooled connection string for Render production traffic.
+6. Keep the direct connection string somewhere safe for local admin use if needed.
+7. In `Project Settings` -> `API`, copy these values if you plan to use them later:
+   - `Project URL`
+   - `anon public key`
+   - `service_role secret key`
 
-## Frontend on Vercel
+Important:
 
-Create a Vercel project with:
+- `DATABASE_URL` is required by Prisma and the backend.
+- `SUPABASE_SERVICE_ROLE_KEY` must stay server-side only.
+- Do not put private Supabase keys in Vercel frontend env vars.
 
-- Root Directory: `apps/web`
-- Framework Preset: `Vite`
-- Build Command: `npm run build`
-- Output Directory: `dist`
+## 3. Deploy the backend to Render
 
-The SPA fallback is already configured in [apps/web/vercel.json](/mnt/c/Users/PCM/Documents/IZledgerV2/IZLedgerV2/apps/web/vercel.json).
+### Create the Render service
 
-### Recommended frontend env vars
+1. Log in to Render.
+2. Click `New` -> `Web Service`.
+3. Connect your GitHub repo.
+4. Select this repository.
+5. Set `Root Directory` to `apps/api`.
 
-If you later switch the frontend to the API client pattern in `apps/api/FRONTEND_INTEGRATION.md`, add:
+### Render service settings
 
-```bash
-VITE_API_URL=https://your-railway-api.up.railway.app
-```
+Use these settings:
 
-## Backend on Railway
+- Runtime: `Node`
+- Build Command: `npm install && npm run prisma:generate && npm run build`
+- Pre-Deploy Command: `npm run prisma:migrate:deploy`
+- Start Command: `npm run start`
+- Health Check Path: `/health`
 
-Create a Railway service from this repo with:
+If Render detects `render.yaml`, you can also deploy from that blueprint.
 
-- Root Directory: `apps/api`
-- Config as Code path: `/apps/api/railway.json`
+### Render environment variables
 
-The Railway config already defines:
-
-- Dockerfile builder
-- `npm run start`
-- `npx prisma migrate deploy` before deploy
-- health check at `/health`
-
-### Required backend env vars
-
-Set these in Railway:
+Set these required variables:
 
 ```bash
 NODE_ENV=production
 HOST=0.0.0.0
+FRONTEND_URL=https://your-frontend.vercel.app
 DATABASE_URL=postgresql://...
-FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
+JWT_SECRET=replace-with-a-long-random-secret
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
 SESSION_COOKIE_SAME_SITE=none
@@ -72,6 +84,23 @@ SESSION_COOKIE_DOMAIN=
 BCRYPT_ROUNDS=12
 AUTH_RATE_LIMIT_MAX=10
 AUTH_RATE_LIMIT_WINDOW_MINUTES=1
+LOG_LEVEL=info
+```
+
+Optional variables:
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+PORT=10000
+STORAGE_ENABLED=false
+```
+
+If you want screenshot uploads in production, do not use `STORAGE_ENABLED=false`. Instead, configure your S3-compatible storage variables:
+
+```bash
+STORAGE_ENABLED=true
 STORAGE_BUCKET=...
 STORAGE_REGION=...
 STORAGE_ENDPOINT=https://...
@@ -81,71 +110,173 @@ STORAGE_PUBLIC_BASE_URL=
 STORAGE_FORCE_PATH_STYLE=false
 STORAGE_SIGNED_READS=true
 STORAGE_SIGNED_READ_TTL_SECONDS=900
+```
+
+### Deploy backend
+
+1. Save the Render environment variables.
+2. Trigger the first deploy.
+3. Wait for build, migrate, and start to finish.
+4. Open your Render service URL.
+5. Visit `/health`.
+
+Expected result:
+
+```json
+{
+  "status": "ok",
+  "service": "izledger-backend"
+}
+```
+
+If `/health` fails, stop and fix Render before deploying the frontend.
+
+## 4. Deploy the frontend to Vercel
+
+### Create the Vercel project
+
+1. Log in to Vercel.
+2. Click `Add New` -> `Project`.
+3. Import the same GitHub repository.
+4. Set `Root Directory` to `apps/web`.
+
+### Vercel project settings
+
+Use these settings:
+
+- Framework Preset: `Vite`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+
+SPA rewrites are already handled in `apps/web/vercel.json`.
+
+### Vercel environment variables
+
+Set this required variable:
+
+```bash
+VITE_API_BASE_URL=https://your-render-service.onrender.com
+```
+
+Important:
+
+- Only `VITE_` variables are exposed to the browser.
+- Never put `JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, database credentials, or storage secrets in Vercel.
+
+### Deploy frontend
+
+1. Save the Vercel environment variable.
+2. Trigger the deployment.
+3. Open the Vercel domain after the build completes.
+4. Confirm the site loads and deep links do not 404.
+
+## 5. Connect frontend and backend
+
+After both deployments exist:
+
+1. Copy the real Vercel production URL.
+2. Go back to Render.
+3. Set `FRONTEND_URL` to the exact Vercel URL.
+4. Redeploy Render so CORS uses the correct frontend origin.
+
+If you later add a custom frontend domain, update `FRONTEND_URL` again in Render.
+
+## 6. Post-deploy verification
+
+Run this checklist:
+
+1. Backend `/health` returns `200`.
+2. Frontend loads from Vercel.
+3. Browser requests point to the Render API URL from `VITE_API_BASE_URL`.
+4. No private secrets appear in browser devtools env output.
+5. Render logs show Prisma migrations completed successfully.
+6. If using cookies across Vercel and Render, confirm:
+   - `SESSION_COOKIE_SAME_SITE=none`
+   - `SESSION_COOKIE_SECURE=true`
+
+## 7. Safe Prisma production flow
+
+Use this workflow for future releases:
+
+1. Change Prisma schema locally.
+2. Run:
+
+```bash
+npm run prisma:migrate:dev
+```
+
+3. Commit the generated migration files.
+4. Push to GitHub.
+5. Let Render run:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
+Do not use `prisma db push` against production.
+
+## 8. Local env reference
+
+### `apps/api/.env`
+
+```bash
+NODE_ENV=development
+PORT=4000
+HOST=0.0.0.0
+FRONTEND_URL=http://localhost:3000
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/izledger
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+JWT_SECRET=replace-with-a-long-random-string
+SESSION_COOKIE_NAME=izledger_session
+SESSION_TTL_DAYS=14
+SESSION_COOKIE_SAME_SITE=lax
+SESSION_COOKIE_DOMAIN=
+SESSION_COOKIE_SECURE=false
+BCRYPT_ROUNDS=12
+AUTH_RATE_LIMIT_MAX=10
+AUTH_RATE_LIMIT_WINDOW_MINUTES=1
+STORAGE_ENABLED=true
+STORAGE_BUCKET=izledger-dev
+STORAGE_REGION=auto
+STORAGE_ENDPOINT=http://localhost:9000
+STORAGE_ACCESS_KEY=minioadmin
+STORAGE_SECRET_KEY=minioadmin
+STORAGE_PUBLIC_BASE_URL=
+STORAGE_FORCE_PATH_STYLE=true
+STORAGE_SIGNED_READS=true
+STORAGE_SIGNED_READ_TTL_SECONDS=900
 LOG_LEVEL=info
 ```
 
-Railway will normally inject `PORT` for you, so you usually do not need to set it manually.
-
-## Cookie note
-
-If the frontend stays on Vercel and the API stays on a different Railway domain, cross-site cookies usually require:
-
-- `SESSION_COOKIE_SAME_SITE=none`
-- `SESSION_COOKIE_SECURE=true`
-
-If you later proxy API requests through the Vercel domain, you may be able to relax that setup.
-
-## Recommended object storage
-
-The easiest production fit for the current backend is Cloudflare R2 because it exposes an S3-compatible API and works with the existing storage client shape.
-
-Cloudflare R2 setup flow:
-
-1. Create an R2 bucket in Cloudflare.
-2. Create an R2 API token with Object Read & Write access to that bucket.
-3. Copy the Access Key ID, Secret Access Key, and S3 endpoint.
-4. Put those values into the Railway backend variables.
-
-Example Railway values for Cloudflare R2:
+### `apps/web/.env.local`
 
 ```bash
-STORAGE_BUCKET=your-bucket-name
-STORAGE_REGION=auto
-STORAGE_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-STORAGE_ACCESS_KEY=<R2_ACCESS_KEY_ID>
-STORAGE_SECRET_KEY=<R2_SECRET_ACCESS_KEY>
-STORAGE_PUBLIC_BASE_URL=
-STORAGE_FORCE_PATH_STYLE=false
-STORAGE_SIGNED_READS=true
-STORAGE_SIGNED_READ_TTL_SECONDS=900
+VITE_API_BASE_URL=http://localhost:4000
 ```
 
-## No storage yet
+## 9. Summary
 
-If you want to get Railway live first and skip screenshot uploads for now, set:
+Set in Vercel:
 
-```bash
-STORAGE_ENABLED=false
-```
+- `VITE_API_BASE_URL`
 
-With that setting:
+Set in Render:
 
-- the backend can boot without storage credentials
-- screenshot upload URLs are disabled
-- the rest of the API can still run
+- `NODE_ENV`
+- `HOST`
+- `FRONTEND_URL`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- session settings
+- auth/rate-limit settings
+- optional Supabase values
+- optional storage values
 
-## Deploy order
+Do manually in Supabase:
 
-1. Provision the production database and object storage.
-2. Deploy the backend on Railway.
-3. Set `FRONTEND_ORIGIN` to the Vercel production URL or custom domain.
-4. Deploy the frontend on Vercel.
-5. If you wire the frontend to the API, set `VITE_API_URL` in Vercel.
-
-## Verification checklist
-
-- Vercel site loads without 404s on deep links
-- Railway `/health` returns `200`
-- Prisma migrations run during deploy
-- login cookies are marked `Secure`
-- CORS origin exactly matches the deployed frontend domain
+- create project
+- copy Postgres connection string
+- optionally copy API keys
+- keep service role secret on the backend only

@@ -13,6 +13,24 @@ import { screenshotRoutes } from "./modules/screenshots/routes.js";
 import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 
+function isAllowedCorsOrigin(origin?: string) {
+  if (!origin) {
+    return true;
+  }
+
+  try {
+    const requestOrigin = new URL(origin);
+
+    if (env.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(requestOrigin.hostname)) {
+      return true;
+    }
+
+    return Boolean(env.FRONTEND_URL && origin === env.FRONTEND_URL);
+  } catch {
+    return false;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({
     logger: env.NODE_ENV === "development"
@@ -34,7 +52,9 @@ export async function buildApp() {
   app.decorateRequest("auth", null);
 
   await app.register(cors, {
-    origin: env.FRONTEND_ORIGIN,
+    origin: (origin, callback) => {
+      callback(null, isAllowedCorsOrigin(origin));
+    },
     credentials: true,
   });
 
