@@ -40,6 +40,7 @@ Use this deploy order:
 Important:
 
 - `DATABASE_URL` is required by Prisma and the backend.
+- `DIRECT_URL` is recommended for Prisma migrations on Render when `DATABASE_URL` uses the Supabase pooler.
 - `SUPABASE_SERVICE_ROLE_KEY` must stay on the backend only.
 - Do not put private Supabase keys in Vercel.
 - On Render, do not use the direct Supabase host like `db.<project-ref>.supabase.co:5432` if it fails to connect. Use the Supabase connection pooler URL instead.
@@ -76,6 +77,7 @@ NODE_ENV=production
 HOST=0.0.0.0
 FRONTEND_URL=https://your-frontend.vercel.app
 DATABASE_URL=postgresql://...
+DIRECT_URL=postgresql://...
 JWT_SECRET=replace-with-a-long-random-secret
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
@@ -97,6 +99,11 @@ SUPABASE_SERVICE_ROLE_KEY=
 PORT=10000
 STORAGE_ENABLED=false
 ```
+
+Recommended connection split:
+
+- `DATABASE_URL`: Supabase pooler URL for app/runtime traffic
+- `DIRECT_URL`: direct Postgres URL for `prisma migrate deploy`
 
 If you want screenshot uploads in production, configure storage instead of disabling it:
 
@@ -130,7 +137,9 @@ Expected result:
 }
 ```
 
-If you see Prisma error `P1001: Can't reach database server at db.<project-ref>.supabase.co:5432`, change `DATABASE_URL` in Render to the Supabase pooler connection string from `Project Settings` -> `Database` -> `Connection string` -> `Transaction pooler` or `Session pooler`.
+If deploy appears stuck on `prisma migrate deploy` while using a `*.pooler.supabase.com` connection, set `DIRECT_URL` in Render to the direct database connection string from Supabase and keep `DATABASE_URL` on the pooler string.
+
+If you see Prisma error `P1001: Can't reach database server at db.<project-ref>.supabase.co:5432`, change `DATABASE_URL` in Render to the Supabase pooler connection string from `Project Settings` -> `Database` -> `Connection string` -> `Transaction pooler` or `Session pooler`, then set `DIRECT_URL` to the direct connection string if migrations need a single direct connection.
 
 ## 4. Deploy the frontend to Vercel
 

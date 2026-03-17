@@ -135,6 +135,7 @@ This ensures build-time packages like TypeScript and `@types/node` are available
 - Set `VITE_API_BASE_URL` to the public API origin used by the frontend.
 - Set `NODE_ENV=production` on the API.
 - Set `FRONTEND_URL` to the deployed frontend origin.
+- If `DATABASE_URL` uses the Supabase pooler, set `DIRECT_URL` to the direct Postgres connection for Prisma migrations.
 - On Render, use the Supabase pooler connection string for `DATABASE_URL` rather than the direct `db.<project-ref>.supabase.co:5432` host if the direct host is unreachable.
 - Set `SESSION_COOKIE_SECURE=true` in production.
 - If the frontend and API are on different domains, use `SESSION_COOKIE_SAME_SITE=none` and HTTPS.
