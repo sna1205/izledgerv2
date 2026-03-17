@@ -142,15 +142,10 @@ export async function updateAccount(userId: string, accountId: string, input: {
 
 export async function deleteAccount(userId: string, accountId: string) {
   const account = await getOwnedAccount(userId, accountId);
-  const accountCount = await prisma.account.count({ where: { userId } });
-
-  if (accountCount <= 1) {
-    throw new AppError(409, "LAST_ACCOUNT", "At least one account must remain.");
-  }
-
   const tradeCount = await prisma.trade.count({
     where: {
       accountId,
+      deletedAt: null,
     },
   });
 

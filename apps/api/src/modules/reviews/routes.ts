@@ -11,6 +11,8 @@ export async function reviewRoutes(app: FastifyInstance) {
       ...query,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 20,
+      sortBy: query.sortBy ?? "updatedAt",
+      sortOrder: query.sortOrder ?? "desc",
     });
   });
 

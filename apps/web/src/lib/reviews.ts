@@ -1,72 +1,53 @@
-import { Review } from "./types";
+import { format, isValid, parseISO } from "date-fns";
+import type { Review, ReviewType, Trade } from "@/lib/types";
 
-const STORAGE_KEY = "trading-journal-reviews";
-
-function normalizeReview(review: Review): Review {
-  const scope = review.reviewScope || review.type || "daily";
-
-  return {
-    ...review,
-    type: (review.type || scope) as Review["type"],
-    reviewScope: scope,
-  };
-}
-
-export function getReviews(): Review[] {
-  const raw = localStorage.getItem(STORAGE_KEY);
-
-  if (!raw) {
-    return [];
+function formatSafeDate(value: string | null | undefined, pattern: string) {
+  if (!value) {
+    return null;
   }
 
-  try {
-    return (JSON.parse(raw) as Review[]).map(normalizeReview);
-  } catch {
-    return [];
+  const parsed = parseISO(value);
+
+  if (!isValid(parsed)) {
+    return null;
   }
+
+  return format(parsed, pattern);
 }
 
-export function saveReviews(reviews: Review[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
+export function getReviewScope(review: Pick<Review, "type" | "reviewScope">): ReviewType {
+  return review.reviewScope ?? review.type;
 }
 
-export function addReview(review: Omit<Review, "id" | "createdAt" | "updatedAt">): Review {
-  const next: Review = normalizeReview({
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    ...review,
-  });
-
-  saveReviews([next, ...getReviews()]);
-  return next;
+export function formatDailyReviewLabel(date?: string | null) {
+  return formatSafeDate(date, "MMM d, yyyy") ?? "Daily review";
 }
 
-export function updateReview(updated: Review): void {
-  saveReviews(
-    getReviews().map((review) =>
-      review.id === updated.id
-        ? normalizeReview({
-            ...updated,
-            updatedAt: new Date().toISOString(),
-          })
-        : review,
-    ),
-  );
+export function formatWeeklyReviewLabel(startDate?: string | null, endDate?: string | null) {
+  const start = formatSafeDate(startDate, "MMM d");
+  const end = formatSafeDate(endDate, "MMM d, yyyy");
+
+  if (!start || !end) {
+    return "Weekly review";
+  }
+
+  return `${start} - ${end}`;
 }
 
-export function deleteReview(id: string): void {
-  saveReviews(getReviews().filter((review) => review.id !== id));
-}
+export function getReviewTitle(review: Review, linkedTrade?: Trade | null) {
+  const scope = getReviewScope(review);
 
-export function getReviewsByTradeId(tradeId: string): Review[] {
-  return getReviews().filter((review) => review.tradeId === tradeId);
-}
+  if (scope === "daily") {
+    return formatDailyReviewLabel(review.reviewDate);
+  }
 
-export function getReviewByTradeId(tradeId: string): Review | undefined {
-  return getReviews().find((review) => review.tradeId === tradeId);
-}
+  if (scope === "weekly") {
+    return formatWeeklyReviewLabel(review.weekStart, review.weekEnd);
+  }
 
-export function deleteReviewsByTradeId(tradeId: string): void {
-  saveReviews(getReviews().filter((review) => review.tradeId !== tradeId));
+  if (linkedTrade) {
+    return `${linkedTrade.pair} • ${formatDailyReviewLabel(linkedTrade.date)}`;
+  }
+
+  return "Linked trade unavailable";
 }

@@ -1,15 +1,20 @@
-const defaultApiBaseUrl = import.meta.env.DEV ? "http://localhost:4000" : "";
+import { z } from "zod";
 
-function normalizeBaseUrl(value: string | undefined) {
-  const trimmed = value?.trim();
+const frontendEnvSchema = z.object({
+  VITE_API_BASE_URL: z.string().trim().url(),
+});
 
-  if (!trimmed) {
-    return defaultApiBaseUrl;
-  }
+const parsed = frontendEnvSchema.safeParse(import.meta.env);
 
-  return trimmed.replace(/\/$/, "");
+if (!parsed.success) {
+  console.error("Invalid frontend environment variables:", parsed.error.flatten().fieldErrors);
+  throw new Error("Invalid frontend environment variables");
 }
 
-export const webEnv = {
-  apiBaseUrl: normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL),
-};
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+export const env = {
+  apiBaseUrl: trimTrailingSlash(parsed.data.VITE_API_BASE_URL),
+} as const;

@@ -79,7 +79,13 @@ test("trade creation rejects impossible calendar dates at the API boundary", asy
     assert.equal(tradeResponse.statusCode, 400);
     const payload = tradeResponse.json();
     assert.equal(payload.error.code, "VALIDATION_ERROR");
-    assert.deepEqual(payload.error.details.fieldErrors.date, ["Invalid trade date"]);
+    assert.equal(payload.error.message, "Invalid request");
+    assert.deepEqual(payload.error.details, [
+      {
+        field: "date",
+        message: "Invalid trade date",
+      },
+    ]);
   } finally {
     await app.close();
     await prisma.user.deleteMany({

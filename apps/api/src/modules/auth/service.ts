@@ -35,27 +35,11 @@ export async function registerUser(params: {
 
   const passwordHash = await hashPassword(params.password);
 
-  const user = await prisma.$transaction(async (tx) => {
-    const createdUser = await tx.user.create({
-      data: {
-        username,
-        passwordHash,
-      },
-    });
-
-    await tx.account.create({
-      data: {
-        userId: createdUser.id,
-        name: "Main Account",
-        broker: "Manual",
-        type: "Personal",
-        balance: 0,
-        currency: "USD",
-        isDefault: true,
-      },
-    });
-
-    return createdUser;
+  const user = await prisma.user.create({
+    data: {
+      username,
+      passwordHash,
+    },
   });
 
   const session = await createSession({

@@ -1,40 +1,40 @@
-import { useMemo, useState } from "react";
-import { endOfWeek, format, parseISO, startOfWeek } from "date-fns";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { endOfWeek, format, startOfWeek } from "date-fns";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PaginationControls } from "@/components/PaginationControls";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
-import { TradeReviewContent } from "@/components/TradeReviewContent";
+import { PageErrorState } from "@/components/PageErrorState";
+import { ReviewContent } from "@/components/ReviewContent";
+import { ReviewListSummary } from "@/components/ReviewListSummary";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
-import { TradeReviewSummary } from "@/components/TradeReviewSummary";
-import { addReview, deleteReview, getReviews, updateReview } from "@/lib/reviews";
-import { getTrades } from "@/lib/trades";
+import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api/client";
+import { createReview, deleteReview, listReviews, updateReview } from "@/lib/api/reviews";
+import { getPageErrorState } from "@/lib/page-errors";
+import { privateQueryKey } from "@/lib/react-query";
+import { getReviewScope, getReviewTitle } from "@/lib/reviews";
+import { getTrade } from "@/lib/api/trades";
 import {
   REVIEW_EMOTIONS,
   REVIEW_RISK_STATUSES,
   REVIEW_RULE_STATUSES,
-  Review,
-  ReviewEmotion,
-  ReviewRiskStatus,
-  ReviewRuleStatus,
-  ReviewType,
-  Trade,
+  type Review,
+  type ReviewEmotion,
+  type ReviewRiskStatus,
+  type ReviewRuleStatus,
+  type ReviewType,
+  type ReviewTradeSnapshot,
+  type Trade,
 } from "@/lib/types";
 
 type ReviewScopeFilter = "all" | ReviewType;
@@ -60,20 +60,51 @@ const emptyWeeklyForm = {
   nextGoal: "",
   weeklyRating: "7",
 };
+const REVIEWS_PAGE_SIZE = 10;
 
-function formatDailyLabel(date: string) {
-  return format(parseISO(date), "MMM d, yyyy");
+function invalidateReviewQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "reviews") }),
+    queryClient.invalidateQueries({ queryKey: privateQueryKey(userId, "trades") }),
+  ]);
 }
 
-function formatWeeklyLabel(startDate: string, endDate: string) {
-  return `${format(parseISO(startDate), "MMM d")} - ${format(parseISO(endDate), "MMM d, yyyy")}`;
+function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null): Trade | null {
+  if (!snapshot) {
+    return null;
+  }
+
+  return {
+    id: snapshot.id,
+    date: snapshot.date,
+    pair: snapshot.pair,
+    accountId: "",
+    direction: snapshot.direction,
+    entry: snapshot.entry,
+    stopLoss: snapshot.stopLoss,
+    takeProfit: snapshot.takeProfit,
+    profit: snapshot.profit,
+    result: snapshot.result,
+    setupId: null,
+    setup: snapshot.setup,
+    session: snapshot.session,
+    emotion: snapshot.emotion,
+    notes: snapshot.notes,
+    screenshots: snapshot.screenshots,
+    createdAt: "",
+    updatedAt: "",
+    screenshotAssets: [],
+  };
 }
 
 export default function Reviews() {
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [reviews, setReviews] = useState<Review[]>(() => getReviews());
-  const [trades] = useState<Trade[]>(() => getTrades());
+  const queryClient = useQueryClient();
   const [scopeFilter, setScopeFilter] = useState<ReviewScopeFilter>("all");
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<"updatedAt" | "createdAt">("updatedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [open, setOpen] = useState(false);
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [viewingReview, setViewingReview] = useState<Review | null>(null);
@@ -84,20 +115,163 @@ export default function Reviews() {
   const [tradeReviewTrade, setTradeReviewTrade] = useState<Trade | null>(null);
   const [tradeReviewEditing, setTradeReviewEditing] = useState<Review | null>(null);
 
-  const tradeMap = useMemo(
-    () => Object.fromEntries(trades.map((trade) => [trade.id, trade])),
-    [trades],
-  );
+  const reviewsQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "reviews", "list", {
+      page,
+      pageSize: REVIEWS_PAGE_SIZE,
+      type: scopeFilter,
+      sortBy,
+      sortOrder,
+    }),
+    queryFn: async () => {
+      return listReviews({
+        page,
+        pageSize: REVIEWS_PAGE_SIZE,
+        type: scopeFilter === "all" ? undefined : scopeFilter,
+        sortBy,
+        sortOrder,
+      });
+    },
+  });
 
-  const filteredReviews = useMemo(() => {
-    const sorted = [...reviews].sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt));
+  const visibleReviews = reviewsQuery.data?.items;
+  const reviews = visibleReviews ?? [];
+  const totalReviewPages = reviewsQuery.data?.pagination.totalPages ?? 1;
+  const totalReviews = reviewsQuery.data?.pagination.total ?? 0;
+  const linkedTradeQueries = useQueries({
+    queries: (visibleReviews ?? [])
+      .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
+      .map((review) => ({
+        queryKey: privateQueryKey(user.id, "trades", "detail", review.tradeId, "review-page"),
+        queryFn: async () => {
+          const response = await getTrade(review.tradeId as string);
+          return response.trade;
+        },
+      })),
+  });
+  const linkedTradeMap = useMemo(() => {
+    let queryIndex = 0;
 
-    if (scopeFilter === "all") {
-      return sorted;
+    return Object.fromEntries(
+      (visibleReviews ?? [])
+        .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
+        .map((review) => {
+          const trade = linkedTradeQueries[queryIndex]?.data ?? null;
+          queryIndex += 1;
+          return [review.tradeId as string, trade];
+        }),
+    );
+  }, [linkedTradeQueries, visibleReviews]);
+  const viewingTrade = useMemo(() => {
+    if (!viewingReview || getReviewScope(viewingReview) !== "trade") {
+      return null;
     }
 
-    return sorted.filter((review) => (review.reviewScope || review.type) === scopeFilter);
-  }, [reviews, scopeFilter]);
+    const linkedTrade = viewingReview.tradeId ? linkedTradeMap[viewingReview.tradeId] : null;
+    return linkedTrade ?? buildTradeFromSnapshot(viewingReview.tradeSnapshot);
+  }, [linkedTradeMap, viewingReview]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [scopeFilter, sortBy, sortOrder]);
+
+  const dailyWeeklyMutation = useMutation({
+    mutationFn: async () => {
+      if (reviewType === "daily") {
+        const payload = {
+          type: "daily" as const,
+          reviewDate: dailyForm.reviewDate,
+          wentWell: dailyForm.wentWell.trim() || null,
+          mistakes: dailyForm.mistakes.trim() || null,
+          followedRules: dailyForm.followedRules,
+          emotion: dailyForm.emotion,
+          lessonLearned: dailyForm.lessonLearned.trim() || null,
+          improvementPlan: dailyForm.improvementPlan.trim() || null,
+          disciplineScore: Number(dailyForm.disciplineScore),
+        };
+
+        if (editingReview) {
+          return updateReview(editingReview.id, payload);
+        }
+
+        return createReview(payload);
+      }
+
+      const payload = {
+        type: "weekly" as const,
+        weekStart: weeklyForm.weekStart,
+        weekEnd: weeklyForm.weekEnd,
+        weeklySummary: weeklyForm.weeklySummary.trim() || null,
+        biggestWin: weeklyForm.biggestWin.trim() || null,
+        biggestMistake: weeklyForm.biggestMistake.trim() || null,
+        riskManagement: weeklyForm.riskManagement,
+        nextGoal: weeklyForm.nextGoal.trim() || null,
+        weeklyRating: Number(weeklyForm.weeklyRating),
+      };
+
+      if (editingReview) {
+        return updateReview(editingReview.id, payload);
+      }
+
+      return createReview(payload);
+    },
+    onSuccess: async () => {
+      await invalidateReviewQueries(queryClient, user.id);
+      toast.success(editingReview ? "Review updated." : "Review created.");
+      setOpen(false);
+      setEditingReview(null);
+      setDailyForm(emptyDailyForm);
+      setWeeklyForm(emptyWeeklyForm);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not save the review right now.";
+      toast.error(message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (reviewId: string) => deleteReview(reviewId),
+    onSuccess: async () => {
+      await invalidateReviewQueries(queryClient, user.id);
+      toast.success("Review deleted.");
+      setDeleteId(null);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not delete the review right now.";
+      toast.error(message);
+    },
+  });
+
+  const tradeReviewMutation = useMutation({
+    mutationFn: async (review: Review) => {
+      const payload = {
+        type: "trade" as const,
+        tradeId: review.tradeId!,
+        reviewDate: review.reviewDate ?? null,
+        lessonLearned: review.lessonLearned ?? null,
+        disciplineScore: review.disciplineScore ?? null,
+        executionRating: review.executionRating ?? null,
+        emotionRating: review.emotionRating ?? null,
+        whatWentWell: review.whatWentWell ?? null,
+        whatWentWrong: review.whatWentWrong ?? null,
+        mistakesMade: review.mistakesMade ?? null,
+        improvementForNextTrade: review.improvementForNextTrade ?? null,
+        wouldTakeAgain: review.wouldTakeAgain ?? null,
+      };
+
+      if (tradeReviewEditing) {
+        return updateReview(tradeReviewEditing.id, payload);
+      }
+
+      return createReview(payload);
+    },
+    onSuccess: async () => {
+      await invalidateReviewQueries(queryClient, user.id);
+      toast.success(tradeReviewEditing ? "Trade review updated." : "Trade review created.");
+      setTradeReviewTrade(null);
+      setTradeReviewEditing(null);
+    },
+  });
 
   const openCreateModal = (type: Exclude<ReviewType, "trade">) => {
     setReviewType(type);
@@ -107,18 +281,32 @@ export default function Reviews() {
     setOpen(true);
   };
 
-  const openEditModal = (review: Review) => {
+  const openEditModal = async (review: Review) => {
     if ((review.reviewScope || review.type) === "trade") {
-      const linkedTrade = review.tradeId ? tradeMap[review.tradeId] : undefined;
+      const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
 
-      if (!linkedTrade) {
-        toast.error("Linked trade not found. This orphaned review can still be viewed.");
+      if (linkedTrade) {
+        setTradeReviewTrade(linkedTrade);
+        setTradeReviewEditing(review);
         return;
       }
 
-      setTradeReviewTrade(linkedTrade);
-      setTradeReviewEditing(review);
-      return;
+      if (review.tradeId) {
+        try {
+          const response = await getTrade(review.tradeId);
+          setTradeReviewTrade(response.trade);
+          setTradeReviewEditing(review);
+          return;
+        } catch {
+          toast.error("Linked trade not found. This review can still be viewed.");
+          return;
+        }
+      }
+
+      if (!linkedTrade) {
+        toast.error("Linked trade not found. This review can still be viewed.");
+        return;
+      }
     }
 
     setEditingReview(review);
@@ -151,511 +339,258 @@ export default function Reviews() {
     setOpen(true);
   };
 
-  const resetForms = () => {
-    setEditingReview(null);
-    setDailyForm(emptyDailyForm);
-    setWeeklyForm(emptyWeeklyForm);
-  };
+  if (reviewsQuery.isLoading && !reviewsQuery.data) {
+    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading reviews...</div>;
+  }
 
-  const handleSave = () => {
-    if (reviewType === "daily") {
-      if (!dailyForm.reviewDate) {
-        toast.error("Date is required.");
-        return;
-      }
-
-      const payload = {
-        type: "daily" as const,
-        reviewScope: "daily" as const,
-        reviewDate: dailyForm.reviewDate,
-        weekStart: undefined,
-        weekEnd: undefined,
-        wentWell: dailyForm.wentWell.trim(),
-        mistakes: dailyForm.mistakes.trim(),
-        followedRules: dailyForm.followedRules,
-        emotion: dailyForm.emotion,
-        lessonLearned: dailyForm.lessonLearned.trim(),
-        improvementPlan: dailyForm.improvementPlan.trim(),
-        weeklySummary: undefined,
-        biggestWin: undefined,
-        biggestMistake: undefined,
-        riskManagement: undefined,
-        nextGoal: undefined,
-        disciplineScore: Number(dailyForm.disciplineScore),
-        weeklyRating: undefined,
-      };
-
-      if (editingReview) {
-        const updated: Review = {
-          ...editingReview,
-          ...payload,
-        };
-        updateReview(updated);
-        setReviews((current) => current.map((review) => (review.id === updated.id ? { ...updated, updatedAt: new Date().toISOString() } : review)));
-        toast.success("Daily review updated.");
-      } else {
-        const next = addReview(payload);
-        setReviews((current) => [next, ...current]);
-        toast.success("Daily review created.");
-      }
-    } else {
-      if (!weeklyForm.weekStart || !weeklyForm.weekEnd) {
-        toast.error("Week range is required.");
-        return;
-      }
-
-      const payload = {
-        type: "weekly" as const,
-        reviewScope: "weekly" as const,
-        reviewDate: undefined,
-        weekStart: weeklyForm.weekStart,
-        weekEnd: weeklyForm.weekEnd,
-        wentWell: undefined,
-        mistakes: undefined,
-        followedRules: undefined,
-        emotion: undefined,
-        lessonLearned: undefined,
-        improvementPlan: undefined,
-        weeklySummary: weeklyForm.weeklySummary.trim(),
-        biggestWin: weeklyForm.biggestWin.trim(),
-        biggestMistake: weeklyForm.biggestMistake.trim(),
-        riskManagement: weeklyForm.riskManagement,
-        nextGoal: weeklyForm.nextGoal.trim(),
-        disciplineScore: undefined,
-        weeklyRating: Number(weeklyForm.weeklyRating),
-      };
-
-      if (editingReview) {
-        const updated: Review = {
-          ...editingReview,
-          ...payload,
-        };
-        updateReview(updated);
-        setReviews((current) => current.map((review) => (review.id === updated.id ? { ...updated, updatedAt: new Date().toISOString() } : review)));
-        toast.success("Weekly review updated.");
-      } else {
-        const next = addReview(payload);
-        setReviews((current) => [next, ...current]);
-        toast.success("Weekly review created.");
-      }
-    }
-
-    setOpen(false);
-    resetForms();
-  };
-
-  const handleDelete = () => {
-    if (!deleteId) return;
-
-    deleteReview(deleteId);
-    setReviews((current) => current.filter((review) => review.id !== deleteId));
-    setDeleteId(null);
-    toast.success("Review deleted.");
-  };
-
-  const handleSaveTradeReview = (review: Review) => {
-    if (tradeReviewEditing) {
-      updateReview(review);
-    } else {
-      const { id, createdAt, updatedAt, ...draft } = review;
-      addReview(draft);
-    }
-
-    setReviews(getReviews());
-    setTradeReviewTrade(null);
-    setTradeReviewEditing(null);
-  };
-
-  const renderDailyReviewCard = (review: Review) => (
-    <article
-      key={review.id}
-      className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
-    >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-4">
-          <h2 className="text-base font-semibold text-foreground">
-            Daily Review - {review.reviewDate ? formatDailyLabel(review.reviewDate) : "Untitled"}
-          </h2>
-
-          <div className="flex flex-wrap gap-3 text-sm">
-            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-              Discipline Score: {review.disciplineScore || 0}/5
-            </span>
-            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-              Emotion: {review.emotion || "-"}
-            </span>
-            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-              Rules Followed: {review.followedRules || "-"}
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Lesson</p>
-            <p className="text-sm leading-relaxed text-foreground">
-              {review.lessonLearned || "No lesson recorded yet."}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-            <Eye className="mr-1 h-4 w-4" />
-            View
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
-            <Pencil className="mr-1 h-4 w-4" />
-            Edit
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-            <Trash2 className="mr-1 h-4 w-4" />
-            Delete
-          </Button>
-        </div>
-      </div>
-    </article>
-  );
-
-  const renderWeeklyReviewCard = (review: Review) => (
-    <article
-      key={review.id}
-      className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
-    >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-4">
-          <h2 className="text-base font-semibold text-foreground">
-            Weekly Review - {review.weekStart && review.weekEnd ? formatWeeklyLabel(review.weekStart, review.weekEnd) : "Untitled"}
-          </h2>
-
-          <div className="flex flex-wrap gap-3 text-sm">
-            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-              Rating: {review.weeklyRating || 0}/10
-            </span>
-            <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-              Risk Management: {review.riskManagement || "-"}
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Biggest Mistake</p>
-            <p className="text-sm leading-relaxed text-foreground">
-              {review.biggestMistake || "No mistake recorded yet."}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-            <Eye className="mr-1 h-4 w-4" />
-            View
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
-            <Pencil className="mr-1 h-4 w-4" />
-            Edit
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-            <Trash2 className="mr-1 h-4 w-4" />
-            Delete
-          </Button>
-        </div>
-      </div>
-    </article>
-  );
-
-  const renderTradeReviewCard = (review: Review) => {
-    const linkedTrade = review.tradeId ? tradeMap[review.tradeId] : undefined;
-    const orphaned = !linkedTrade;
+  if (reviewsQuery.isError) {
+    const errorState = getPageErrorState(reviewsQuery.error, {
+      unavailableTitle: "Reviews unavailable",
+      unavailableDescription: "The reviews service is temporarily unavailable. Please try again in a moment.",
+      unauthorizedDescription: "Your session is not allowed to view reviews right now.",
+      validationTitle: "Reviews request invalid",
+      validationDescription: "The review filters in this request are invalid.",
+      timeoutTitle: "Reviews request timed out",
+      timeoutDescription: "Loading reviews took too long. Please try again.",
+    });
 
     return (
-      <article
-        key={review.id}
-        className="rounded-xl border bg-card p-6 shadow-sm transition-colors hover:bg-muted/20"
-      >
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-base font-semibold text-foreground">
-                Trade Review - {linkedTrade ? `${linkedTrade.pair} • ${formatDailyLabel(linkedTrade.date)}` : "Deleted Trade"}
-              </h2>
-              <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                {linkedTrade ? (
-                  <>
-                    <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                      {linkedTrade.direction}
-                    </span>
-                    <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                      {linkedTrade.result}
-                    </span>
-                    {linkedTrade.setup && (
-                      <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                        {linkedTrade.setup}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                    Trade deleted, review preserved
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 text-sm">
-              <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                Execution: {review.executionRating || 0}/5
-              </span>
-              <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                Discipline: {review.disciplineScore || 0}/5
-              </span>
-              <span className="rounded-full border bg-background px-3 py-1 text-muted-foreground">
-                Emotion: {review.emotionRating || 0}/5
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Lesson</p>
-              <p className="text-sm leading-relaxed text-foreground">
-                {review.lessonLearned || "No lesson recorded yet."}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {linkedTrade && (
-              <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${linkedTrade.id}`)}>
-                View Trade
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-              <Eye className="mr-1 h-4 w-4" />
-              View
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={orphaned}
-              onClick={() => openEditModal(review)}
-            >
-              <Pencil className="mr-1 h-4 w-4" />
-              Edit
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-              <Trash2 className="mr-1 h-4 w-4" />
-              Delete
-            </Button>
-          </div>
-        </div>
-      </article>
+      <PageErrorState
+        title={errorState.title}
+        description={errorState.description}
+        onRetry={errorState.allowRetry ? () => void reviewsQuery.refetch() : undefined}
+        isRetrying={reviewsQuery.isFetching}
+      />
     );
-  };
-
-  const renderReviewList = (items: Review[], emptyCta?: () => void) => {
-    if (items.length === 0) {
-      return (
-        <div className="rounded-xl border bg-card p-10 text-center shadow-sm">
-          <p className="text-base font-medium text-foreground">No reviews yet.</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Start reflecting on your trades to improve your performance.
-          </p>
-          {emptyCta && (
-            <Button className="mt-4" onClick={emptyCta}>
-              Create your first review
-            </Button>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {items.map((review) => {
-          const scope = review.reviewScope || review.type;
-
-          if (scope === "trade") return renderTradeReviewCard(review);
-          if (scope === "weekly") return renderWeeklyReviewCard(review);
-          return renderDailyReviewCard(review);
-        })}
-      </div>
-    );
-  };
-
-  const viewingTrade = viewingReview?.tradeId ? tradeMap[viewingReview.tradeId] : undefined;
-  const viewingScope = viewingReview ? (viewingReview.reviewScope || viewingReview.type) : undefined;
+  }
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1440px]">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Reviews</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Reflect on your trading performance and improve your decision making.
-          </p>
+      <div className="mx-auto w-full max-w-[1440px] space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Reviews</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Capture daily, weekly, and trade-level reflection without relying on local-only journal data.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" size="sm" onClick={() => openCreateModal("daily")}>
+              <Plus className="mr-1 h-4 w-4" />
+              Daily Review
+            </Button>
+            <Button size="sm" onClick={() => openCreateModal("weekly")}>
+              <Plus className="mr-1 h-4 w-4" />
+              Weekly Review
+            </Button>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button variant="outline" onClick={() => openCreateModal("daily")}>
-            <Plus className="mr-1 h-4 w-4" />
-            Daily Review
-          </Button>
-          <Button onClick={() => openCreateModal("weekly")}>
-            <Plus className="mr-1 h-4 w-4" />
-            Weekly Review
-          </Button>
-        </div>
+        <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)}>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl border bg-muted/40 p-1 sm:w-[420px]">
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="daily">Daily</TabsTrigger>
+              <TabsTrigger value="weekly">Weekly</TabsTrigger>
+              <TabsTrigger value="trade">Trade</TabsTrigger>
+            </TabsList>
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <div className="min-w-0 space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Sort By</p>
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80 sm:w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="updatedAt">Updated At</SelectItem>
+                    <SelectItem value="createdAt">Created At</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0 space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Order</p>
+                <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
+                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80 sm:w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">Descending</SelectItem>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{totalReviews}</span> {totalReviews === 1 ? "review" : "reviews"}
+              </div>
+            </div>
+          </div>
+
+          <TabsContent value={scopeFilter} className="mt-6">
+            {reviews.length === 0 ? (
+              <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
+                <p className="text-base font-medium text-foreground">No reviews yet.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Create a daily or weekly review, or review a trade after you log it.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {reviews.map((review) => {
+                  const scope = getReviewScope(review);
+                  const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
+                  const snapshotTrade = buildTradeFromSnapshot(review.tradeSnapshot);
+                  const summaryTrade = linkedTrade ?? snapshotTrade;
+
+                  return (
+                    <article key={review.id} className="rounded-2xl border bg-card p-6 shadow-sm">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{scope} review</p>
+                            <h2 className="mt-2 text-lg font-semibold text-foreground">
+                              {getReviewTitle(review, summaryTrade)}
+                            </h2>
+                          </div>
+
+                          <ReviewListSummary review={review} linkedTrade={summaryTrade} />
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
+                            <Eye className="mr-1 h-4 w-4" />
+                            View
+                          </Button>
+                          {scope === "trade" && review.tradeId ? (
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${review.tradeId}`)}>
+                              View Trade
+                            </Button>
+                          ) : null}
+                          <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
+                            <Pencil className="mr-1 h-4 w-4" />
+                            Edit
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
+                            <Trash2 className="mr-1 h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+
+                <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                  <PaginationControls
+                    currentPage={page}
+                    totalPages={totalReviewPages}
+                    itemLabel="review pages"
+                    onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+                    onNext={() => setPage((current) => Math.min(totalReviewPages, current + 1))}
+                  />
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
-      <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)} className="w-full">
-        <div className="mb-6">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl border bg-muted/40 p-1 sm:w-[520px] sm:grid-cols-4">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="trade">Trade Reviews</TabsTrigger>
-            <TabsTrigger value="daily">Daily Reviews</TabsTrigger>
-            <TabsTrigger value="weekly">Weekly Reviews</TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="all" className="mt-0">
-          {renderReviewList(filteredReviews)}
-        </TabsContent>
-        <TabsContent value="trade" className="mt-0">
-          {renderReviewList(filteredReviews)}
-        </TabsContent>
-        <TabsContent value="daily" className="mt-0">
-          {renderReviewList(filteredReviews, () => openCreateModal("daily"))}
-        </TabsContent>
-        <TabsContent value="weekly" className="mt-0">
-          {renderReviewList(filteredReviews, () => openCreateModal("weekly"))}
-        </TabsContent>
-      </Tabs>
-
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) {
-            resetForms();
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {editingReview ? "Edit Review" : reviewType === "daily" ? "Create Daily Review" : "Create Weekly Review"}
-            </DialogTitle>
+            <DialogTitle>{editingReview ? "Edit Review" : reviewType === "daily" ? "Create Daily Review" : "Create Weekly Review"}</DialogTitle>
           </DialogHeader>
 
           {reviewType === "daily" ? (
-            <div className="space-y-4">
+            <div className="grid gap-4">
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
-                <Input
-                  type="date"
-                  value={dailyForm.reviewDate}
-                  onChange={(event) => setDailyForm((current) => ({ ...current, reviewDate: event.target.value }))}
-                />
+                <Label>Review Date</Label>
+                <Input type="date" value={dailyForm.reviewDate} onChange={(event) => setDailyForm((current) => ({ ...current, reviewDate: event.target.value }))} />
               </div>
-
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Followed Rules</Label>
+                  <Select value={dailyForm.followedRules} onValueChange={(value) => setDailyForm((current) => ({ ...current, followedRules: value as ReviewRuleStatus }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {REVIEW_RULE_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Emotion</Label>
+                  <Select value={dailyForm.emotion} onValueChange={(value) => setDailyForm((current) => ({ ...current, emotion: value as ReviewEmotion }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {REVIEW_EMOTIONS.map((emotion) => <SelectItem key={emotion} value={emotion}>{emotion}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Discipline Score</Label>
+                  <Input value={dailyForm.disciplineScore} onChange={(event) => setDailyForm((current) => ({ ...current, disciplineScore: event.target.value }))} />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">What went well</Label>
+                <Label>What Went Well</Label>
                 <Textarea rows={4} value={dailyForm.wentWell} onChange={(event) => setDailyForm((current) => ({ ...current, wentWell: event.target.value }))} />
               </div>
-
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Mistakes made</Label>
+                <Label>Mistakes</Label>
                 <Textarea rows={4} value={dailyForm.mistakes} onChange={(event) => setDailyForm((current) => ({ ...current, mistakes: event.target.value }))} />
               </div>
-
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Did I follow my trading rules?</Label>
-                <Select value={dailyForm.followedRules} onValueChange={(value) => setDailyForm((current) => ({ ...current, followedRules: value as ReviewRuleStatus }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {REVIEW_RULE_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Main emotion during trading</Label>
-                <Select value={dailyForm.emotion} onValueChange={(value) => setDailyForm((current) => ({ ...current, emotion: value as ReviewEmotion }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {REVIEW_EMOTIONS.map((emotion) => <SelectItem key={emotion} value={emotion}>{emotion}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Lesson learned</Label>
+                <Label>Lesson Learned</Label>
                 <Textarea rows={4} value={dailyForm.lessonLearned} onChange={(event) => setDailyForm((current) => ({ ...current, lessonLearned: event.target.value }))} />
               </div>
-
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">What will I improve tomorrow?</Label>
+                <Label>Improvement Plan</Label>
                 <Textarea rows={4} value={dailyForm.improvementPlan} onChange={(event) => setDailyForm((current) => ({ ...current, improvementPlan: event.target.value }))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discipline score</Label>
-                <Select value={dailyForm.disciplineScore} onValueChange={(value) => setDailyForm((current) => ({ ...current, disciplineScore: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["1", "2", "3", "4", "5"].map((score) => <SelectItem key={score} value={score}>{score}</SelectItem>)}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid gap-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Week start</Label>
+                  <Label>Week Start</Label>
                   <Input type="date" value={weeklyForm.weekStart} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekStart: event.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Week end</Label>
+                  <Label>Week End</Label>
                   <Input type="date" value={weeklyForm.weekEnd} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekEnd: event.target.value }))} />
                 </div>
               </div>
-
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Risk Management</Label>
+                  <Select value={weeklyForm.riskManagement} onValueChange={(value) => setWeeklyForm((current) => ({ ...current, riskManagement: value as ReviewRiskStatus }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {REVIEW_RISK_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Weekly Rating</Label>
+                  <Input value={weeklyForm.weeklyRating} onChange={(event) => setWeeklyForm((current) => ({ ...current, weeklyRating: event.target.value }))} />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Weekly summary</Label>
+                <Label>Weekly Summary</Label>
                 <Textarea rows={4} value={weeklyForm.weeklySummary} onChange={(event) => setWeeklyForm((current) => ({ ...current, weeklySummary: event.target.value }))} />
               </div>
-
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Biggest win this week</Label>
-                <Textarea rows={3} value={weeklyForm.biggestWin} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestWin: event.target.value }))} />
+                <Label>Biggest Win</Label>
+                <Textarea rows={4} value={weeklyForm.biggestWin} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestWin: event.target.value }))} />
               </div>
-
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Biggest mistake this week</Label>
-                <Textarea rows={3} value={weeklyForm.biggestMistake} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestMistake: event.target.value }))} />
+                <Label>Biggest Mistake</Label>
+                <Textarea rows={4} value={weeklyForm.biggestMistake} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestMistake: event.target.value }))} />
               </div>
-
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Did I respect risk management?</Label>
-                <Select value={weeklyForm.riskManagement} onValueChange={(value) => setWeeklyForm((current) => ({ ...current, riskManagement: value as ReviewRiskStatus }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {REVIEW_RISK_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Goal for next week</Label>
-                <Textarea rows={3} value={weeklyForm.nextGoal} onChange={(event) => setWeeklyForm((current) => ({ ...current, nextGoal: event.target.value }))} />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Weekly self rating</Label>
-                <Select value={weeklyForm.weeklyRating} onValueChange={(value) => setWeeklyForm((current) => ({ ...current, weeklyRating: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].map((score) => <SelectItem key={score} value={score}>{score}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>Next Goal</Label>
+                <Textarea rows={4} value={weeklyForm.nextGoal} onChange={(event) => setWeeklyForm((current) => ({ ...current, nextGoal: event.target.value }))} />
               </div>
             </div>
           )}
@@ -664,99 +599,56 @@ export default function Reviews() {
             <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button className="w-full sm:w-auto" onClick={handleSave}>Save Review</Button>
+            <Button className="w-full sm:w-auto" onClick={() => dailyWeeklyMutation.mutate()} disabled={dailyWeeklyMutation.isPending}>
+              {dailyWeeklyMutation.isPending ? "Saving..." : editingReview ? "Save Changes" : "Save Review"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {tradeReviewTrade && (
-        <TradeReviewDialog
-          open={!!tradeReviewTrade}
-          onOpenChange={(open) => {
-            if (!open) {
+      <Dialog open={Boolean(viewingReview)} onOpenChange={(openState) => !openState && setViewingReview(null)}>
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-4xl overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{viewingReview ? getReviewTitle(viewingReview, viewingTrade) : "Review Details"}</DialogTitle>
+          </DialogHeader>
+          {viewingReview ? <ReviewContent review={viewingReview} linkedTrade={viewingTrade} /> : null}
+        </DialogContent>
+      </Dialog>
+
+      {tradeReviewTrade ? (
+      <TradeReviewDialog
+          open={Boolean(tradeReviewTrade)}
+          onOpenChange={(openState) => {
+            if (!openState) {
               setTradeReviewTrade(null);
               setTradeReviewEditing(null);
             }
           }}
           trade={tradeReviewTrade}
           review={tradeReviewEditing}
-          onSave={handleSaveTradeReview}
+          onSave={async (review) => {
+            await tradeReviewMutation.mutateAsync(review);
+          }}
+          isSaving={tradeReviewMutation.isPending}
         />
-      )}
+      ) : null}
 
-      <Dialog open={!!viewingReview} onOpenChange={(nextOpen) => !nextOpen && setViewingReview(null)}>
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {viewingScope === "trade"
-                ? "Trade Review"
-                : viewingScope === "weekly"
-                  ? `Weekly Review - ${viewingReview?.weekStart && viewingReview?.weekEnd ? formatWeeklyLabel(viewingReview.weekStart, viewingReview.weekEnd) : ""}`
-                  : `Daily Review - ${viewingReview?.reviewDate ? formatDailyLabel(viewingReview.reviewDate) : ""}`}
-            </DialogTitle>
-          </DialogHeader>
-
-          {viewingReview && (
-            <div className="space-y-4">
-              {viewingScope === "trade" ? (
-                <>
-                  {viewingTrade && <TradeReviewSummary trade={viewingTrade} />}
-                  <TradeReviewContent review={viewingReview} orphaned={!viewingTrade} />
-                  {viewingTrade && (
-                    <div className="flex justify-end">
-                      <Button variant="outline" onClick={() => navigate(`/trades/${viewingTrade.id}`)}>
-                        View Linked Trade
-                      </Button>
-                    </div>
-                  )}
-                </>
-              ) : viewingScope === "weekly" ? (
-                <>
-                  {[
-                    ["Weekly summary", viewingReview.weeklySummary],
-                    ["Biggest win this week", viewingReview.biggestWin],
-                    ["Biggest mistake this week", viewingReview.biggestMistake],
-                    ["Goal for next week", viewingReview.nextGoal],
-                  ].map(([label, value]) => (
-                    <div key={label} className="space-y-2 rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                      <p className="text-sm leading-relaxed text-foreground">{value || "No notes recorded."}</p>
-                    </div>
-                  ))}
-                </>
-              ) : (
-                <>
-                  {[
-                    ["What went well", viewingReview.wentWell],
-                    ["Mistakes made", viewingReview.mistakes],
-                    ["Lesson learned", viewingReview.lessonLearned],
-                    ["What will I improve tomorrow?", viewingReview.improvementPlan],
-                  ].map(([label, value]) => (
-                    <div key={label} className="space-y-2 rounded-xl border p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                      <p className="text-sm leading-relaxed text-foreground">{value || "No notes recorded."}</p>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <AlertDialog open={Boolean(deleteId)} onOpenChange={(openState) => !openState && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Review</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>
+              This action cannot be undone.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      </div>
     </div>
   );
 }

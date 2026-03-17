@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PublicOnlyRoute } from "@/components/PublicOnlyRoute";
 import { AuthProvider } from "@/lib/auth";
+import { createAppQueryClient } from "@/lib/react-query";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Trades from "./pages/Trades";
@@ -21,8 +22,9 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Register from "./pages/Register";
 import Settings from "./pages/Settings";
+import SharedTradePage from "./pages/SharedTradePage";
 
-const queryClient = new QueryClient();
+const queryClient = createAppQueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -34,6 +36,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/shared/trade/:shareId" element={<SharedTradePage />} />
               <Route element={<PublicOnlyRoute />}>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />

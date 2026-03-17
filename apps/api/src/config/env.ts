@@ -75,6 +75,22 @@ const envSchema = z.object({
     });
   }
 
+  if (data.NODE_ENV === "production" && !data.SESSION_COOKIE_SECURE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["SESSION_COOKIE_SECURE"],
+      message: "SESSION_COOKIE_SECURE must be true in production",
+    });
+  }
+
+  if (data.SESSION_COOKIE_SAME_SITE === "none" && !data.SESSION_COOKIE_SECURE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["SESSION_COOKIE_SECURE"],
+      message: "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAME_SITE=none",
+    });
+  }
+
   if ((data.SUPABASE_ANON_KEY || data.SUPABASE_SERVICE_ROLE_KEY) && !data.SUPABASE_URL) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -92,14 +108,6 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["STORAGE_BUCKET"],
       message: "STORAGE_BUCKET is required when STORAGE_ENABLED=true",
-    });
-  }
-
-  if (!data.STORAGE_ENDPOINT) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["STORAGE_ENDPOINT"],
-      message: "STORAGE_ENDPOINT is required when STORAGE_ENABLED=true",
     });
   }
 
