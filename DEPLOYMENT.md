@@ -41,6 +41,7 @@ Important:
 
 - `DATABASE_URL` is required by Prisma and the backend.
 - `DIRECT_URL` is recommended for Prisma migrations on Render when `DATABASE_URL` uses the Supabase pooler.
+- If `DIRECT_URL` is not set, the Render predeploy step falls back to `DATABASE_URL`.
 - `SUPABASE_SERVICE_ROLE_KEY` must stay on the backend only.
 - Do not put private Supabase keys in Vercel.
 - On Render, do not use the direct Supabase host like `db.<project-ref>.supabase.co:5432` if it fails to connect. Use the Supabase connection pooler URL instead.
