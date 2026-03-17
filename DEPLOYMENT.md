@@ -42,6 +42,7 @@ Important:
 - `DATABASE_URL` is required by Prisma and the backend.
 - `SUPABASE_SERVICE_ROLE_KEY` must stay on the backend only.
 - Do not put private Supabase keys in Vercel.
+- On Render, do not use the direct Supabase host like `db.<project-ref>.supabase.co:5432` if it fails to connect. Use the Supabase connection pooler URL instead.
 
 ## 3. Deploy the backend to Render
 
@@ -128,6 +129,8 @@ Expected result:
   "service": "izledger-backend"
 }
 ```
+
+If you see Prisma error `P1001: Can't reach database server at db.<project-ref>.supabase.co:5432`, change `DATABASE_URL` in Render to the Supabase pooler connection string from `Project Settings` -> `Database` -> `Connection string` -> `Transaction pooler` or `Session pooler`.
 
 ## 4. Deploy the frontend to Vercel
 
