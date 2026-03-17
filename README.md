@@ -122,6 +122,14 @@ Deploy with:
 
 See `DEPLOYMENT.md` for the full step-by-step guide.
 
+For Render builds, use:
+
+```bash
+npm install --include=dev && npm run prisma:generate && npm run build
+```
+
+This ensures build-time packages like TypeScript and `@types/node` are available even when `NODE_ENV=production`.
+
 ## Production notes
 
 - Set `VITE_API_BASE_URL` to the public API origin used by the frontend.

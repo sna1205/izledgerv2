@@ -58,12 +58,13 @@ Important:
 Use these values:
 
 - Runtime: `Node`
-- Build Command: `npm install && npm run prisma:generate && npm run build`
+- Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
 - Pre-Deploy Command: `npm run prisma:migrate:deploy`
 - Start Command: `npm run start`
 - Health Check Path: `/health`
 
 If Render detects `render.yaml`, you can deploy from the blueprint instead.
+If you configured the service manually in the Render dashboard already, update the Build Command there to match this exactly.
 
 ### Render environment variables
 
