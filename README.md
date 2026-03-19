@@ -129,6 +129,7 @@ npm install --include=dev && npm run prisma:generate && npm run build
 ```
 
 This ensures build-time packages like TypeScript and `@types/node` are available even when `NODE_ENV=production`.
+For free-plan Render services, use `npm run start:render` as the start command so migrations run before the API boots.
 
 ## Production notes
 
@@ -139,7 +140,7 @@ This ensures build-time packages like TypeScript and `@types/node` are available
 - On Render, use the Supabase pooler connection string for `DATABASE_URL` rather than the direct `db.<project-ref>.supabase.co:5432` host if the direct host is unreachable.
 - Set `SESSION_COOKIE_SECURE=true` in production.
 - If the frontend and API are on different domains, use `SESSION_COOKIE_SAME_SITE=none` and HTTPS.
-- Run `npm run prisma:migrate:deploy` during backend deploys.
+- Run `npm run prisma:migrate:deploy` during backend deploys, or let `npm run start:render` do it on Render startup.
 - If screenshot storage is not ready yet, set `STORAGE_ENABLED=false`.
 
 ## Production readiness summary

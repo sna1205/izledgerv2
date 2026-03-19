@@ -14,6 +14,31 @@ Use this deploy order:
 4. Deploy the frontend to Vercel
 5. Verify the full stack
 
+## Pre-deploy checklist
+
+Before clicking deploy, confirm:
+
+- Latest code is pushed to GitHub on the branch Render/Vercel will deploy.
+- `render.yaml` changes are committed if you changed deploy commands or env defaults.
+- If Prisma schema changed, matching files exist in `apps/api/prisma/migrations`.
+- Local builds pass:
+  - `npm run build --workspace @izledger/api`
+  - `npm run build --workspace @izledger/web`
+- Render service settings match this repo:
+  - Root Directory: `apps/api`
+  - Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
+  - Start Command: `npm run start:render`
+- Render env vars are present and correct:
+  - `DATABASE_URL` = Supabase pooler URL
+  - `DIRECT_URL` = direct Supabase Postgres URL when available
+  - `FRONTEND_URL` = exact Vercel production URL
+  - `SESSION_COOKIE_SECURE=true`
+  - `SESSION_COOKIE_SAME_SITE=none`
+  - `STORAGE_ENABLED=false` unless object storage is configured
+- Vercel env var is present:
+  - `VITE_API_BASE_URL=https://your-render-service.onrender.com`
+- After deploy, test `GET /health` on the Render service before testing login from the frontend.
+
 ## 1. Prepare the repo
 
 1. Push your latest code to GitHub.
@@ -62,12 +87,12 @@ Use these values:
 
 - Runtime: `Node`
 - Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
-- Pre-Deploy Command: `npm run prisma:migrate:deploy`
-- Start Command: `npm run start`
+- Start Command: `npm run start:render`
 - Health Check Path: `/health`
 
 If Render detects `render.yaml`, you can deploy from the blueprint instead.
 If you configured the service manually in the Render dashboard already, update the Build Command there to match this exactly.
+This repo does not require a Render Pre-Deploy Command, which helps on plans where that feature is unavailable.
 
 ### Render environment variables
 
@@ -125,7 +150,7 @@ STORAGE_SIGNED_READ_TTL_SECONDS=900
 
 1. Save the env vars in Render.
 2. Trigger the deploy.
-3. Wait for build, migrate, and start to finish.
+3. Wait for build, startup migration, and app start to finish.
 4. Open the Render URL.
 5. Visit `/health`.
 
@@ -138,7 +163,7 @@ Expected result:
 }
 ```
 
-If deploy appears stuck on `prisma migrate deploy` while using a `*.pooler.supabase.com` connection, set `DIRECT_URL` in Render to the direct database connection string from Supabase and keep `DATABASE_URL` on the pooler string.
+If deploy appears stuck on `prisma migrate deploy` during startup while using a `*.pooler.supabase.com` connection, set `DIRECT_URL` in Render to the direct database connection string from Supabase and keep `DATABASE_URL` on the pooler string.
 
 If you see Prisma error `P1001: Can't reach database server at db.<project-ref>.supabase.co:5432`, change `DATABASE_URL` in Render to the Supabase pooler connection string from `Project Settings` -> `Database` -> `Connection string` -> `Transaction pooler` or `Session pooler`, then set `DIRECT_URL` to the direct connection string if migrations need a single direct connection.
 
@@ -200,7 +225,7 @@ Check these items:
 2. The Vercel site loads successfully.
 3. Frontend requests point at the Render API URL from `VITE_API_BASE_URL`.
 4. No private secrets appear in browser env output.
-5. Render logs show `prisma migrate deploy` completed successfully.
+5. Render logs show `prisma migrate deploy` completed successfully during startup.
 6. If frontend and API are on different domains, confirm:
    - `SESSION_COOKIE_SAME_SITE=none`
    - `SESSION_COOKIE_SECURE=true`
@@ -225,6 +250,7 @@ npm run prisma:migrate:deploy
 ```
 
 Do not use `prisma db push` in production.
+On free-plan Render deployments, this migration runs from the service start command instead of a separate pre-deploy step.
 
 ## 8. Local env reference
 
