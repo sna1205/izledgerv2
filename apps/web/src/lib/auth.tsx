@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AuthUser } from "@/lib/types";
 import { ApiError } from "@/lib/api/client";
@@ -21,9 +21,8 @@ import {
 type AuthResult = Promise<{ error?: string }>;
 type SessionState = "loading" | "authenticated" | "anonymous" | "session-expired" | "backend-unavailable";
 
-const AUTH_STORAGE_KEY = "izledger-auth-user";
+const LEGACY_AUTH_STORAGE_KEY = "izledger-auth-user";
 const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
-const SESSION_UNAVAILABLE_MESSAGE = "IZLedger could not reach the server. Your local session is still available on this device.";
 const INVALID_CREDENTIALS_MESSAGE = "Incorrect username or password.";
 type ApiValidationDetail = {
   field?: unknown;
@@ -145,11 +144,7 @@ function isTemporarySessionFailure(error: unknown) {
   );
 }
 
-function getSessionUnavailableMessage(error: unknown, hasStoredUser: boolean) {
-  if (hasStoredUser) {
-    return SESSION_UNAVAILABLE_MESSAGE;
-  }
-
+function getSessionUnavailableMessage(error: unknown) {
   if (isTemporarySessionFailure(error)) {
     return "IZLedger could not verify your session because the server is temporarily unavailable.";
   }
@@ -165,68 +160,41 @@ function getLogoutErrorMessage(error: unknown) {
   return getApiErrorMessage(error, "Could not log out right now. Your session is still active on this device.");
 }
 
-function readStoredUser(): AuthUser | null {
+function clearLegacyStoredUser() {
   if (typeof window === "undefined") {
-    return null;
+    return false;
   }
 
-  const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  const hadStoredUser = window.localStorage.getItem(LEGACY_AUTH_STORAGE_KEY) !== null;
 
-  if (!rawValue) {
-    return null;
+  if (hadStoredUser) {
+    window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY);
   }
 
-  try {
-    const parsed = JSON.parse(rawValue) as Partial<AuthUser>;
-
-    if (typeof parsed.id === "string" && typeof parsed.username === "string") {
-      return {
-        ...parsed,
-        id: parsed.id,
-        username: parsed.username,
-      };
-    }
-  } catch {
-    // Ignore invalid persisted auth state and clear it below.
-  }
-
-  window.localStorage.removeItem(AUTH_STORAGE_KEY);
-  return null;
-}
-
-function storeUser(user: AuthUser) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-}
-
-function clearStoredUser() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  return hadStoredUser;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
-  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionState, setSessionState] = useState<SessionState>("loading");
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
+  const userRef = useRef<AuthUser | null>(null);
 
   const syncAuthenticatedUser = useCallback(async (nextUser: AuthUser, options?: { resetPrivateCache?: boolean }) => {
-    if (options?.resetPrivateCache || (user?.id && user.id !== nextUser.id)) {
+    const currentUserId = userRef.current?.id;
+
+    if (options?.resetPrivateCache || (currentUserId && currentUserId !== nextUser.id)) {
       await clearPrivateQueryCache(queryClient);
     }
 
+    userRef.current = nextUser;
     setUser(nextUser);
     setSessionState("authenticated");
     setSessionMessage(null);
-    storeUser(nextUser);
+    clearLegacyStoredUser();
     queryClient.setQueryData(sessionUserQueryKey, { user: nextUser });
-  }, [queryClient, user?.id]);
+  }, [queryClient]);
 
   const clearAuthenticatedUser = useCallback(async (
     nextState: Exclude<SessionState, "loading" | "authenticated">,
@@ -237,15 +205,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await clearPrivateQueryCache(queryClient);
     }
 
+    userRef.current = null;
     setUser(null);
     setSessionState(nextState);
     setSessionMessage(nextMessage);
-    clearStoredUser();
+    clearLegacyStoredUser();
     queryClient.removeQueries({ queryKey: sessionUserQueryKey, exact: true });
   }, [queryClient]);
 
   const bootstrapSession = useCallback(async () => {
-    const hadStoredUser = Boolean(readStoredUser());
+    const hadLegacyStoredUser = clearLegacyStoredUser();
+    const hadKnownUser = Boolean(userRef.current) || hadLegacyStoredUser;
 
     try {
       const response = await getSessionUser();
@@ -253,15 +223,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         await clearAuthenticatedUser(
-          hadStoredUser ? "session-expired" : "anonymous",
-          hadStoredUser ? SESSION_EXPIRED_MESSAGE : null,
+          hadKnownUser ? "session-expired" : "anonymous",
+          hadKnownUser ? SESSION_EXPIRED_MESSAGE : null,
           { resetPrivateCache: true },
         );
         return;
       }
 
       setSessionState("backend-unavailable");
-      setSessionMessage(getSessionUnavailableMessage(error, hadStoredUser));
+      setSessionMessage(getSessionUnavailableMessage(error));
     }
   }, [clearAuthenticatedUser, syncAuthenticatedUser]);
 

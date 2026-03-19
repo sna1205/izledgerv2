@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -75,6 +76,7 @@ model User {
   accounts     Account[]
   setups       Setup[]
   trades       Trade[]
+  screenshots  TradeScreenshot[]
   screenshotUploads TradeScreenshotUpload[]
   tradeShares  TradeShare[]
   reviews      Review[]
@@ -192,13 +194,17 @@ model TradeScreenshotUpload {
 
 model TradeScreenshot {
   id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
   tradeId    String   @map("trade_id") @db.Uuid
   storageKey String   @map("storage_key")
   sortOrder  Int      @default(0) @map("sort_order")
   createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@index([tradeId])
+  @@index([userId, tradeId])
   @@index([tradeId, sortOrder])
   @@map("trade_screenshots")
 }

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "../../lib/prisma.js";
 import { env } from "../../config/env.js";
-import { createPresignedUpload, getObjectMetadata, getReadUrl } from "../../lib/storage.js";
+import { createPresignedUpload, deleteObjectIfPresent, getObjectMetadata, getReadUrl } from "../../lib/storage.js";
 import { AppError } from "../../utils/errors.js";
 import { safeFileName } from "../../utils/strings.js";
 import { maxScreenshotFileSizeBytes } from "./constants.js";
@@ -317,6 +317,7 @@ export async function completeTradeScreenshot(userId: string, tradeId: string, i
 
     return tx.tradeScreenshot.create({
       data: {
+        userId,
         tradeId,
         storageKey: input.storageKey,
         sortOrder: input.sortOrder,
@@ -339,10 +340,8 @@ export async function deleteTradeScreenshot(userId: string, tradeId: string, scr
   const screenshot = await prisma.tradeScreenshot.findFirst({
     where: {
       id: screenshotId,
+      userId,
       tradeId,
-      trade: {
-        userId,
-      },
     },
   });
 
@@ -353,6 +352,10 @@ export async function deleteTradeScreenshot(userId: string, tradeId: string, scr
   await prisma.tradeScreenshot.delete({
     where: { id: screenshot.id },
   });
+
+  // Remove the object after the DB row is gone so a transient storage error cannot leave
+  // a broken screenshot reference visible in the product.
+  await deleteObjectIfPresent(screenshot.storageKey);
 }
 
 export async function reorderTradeScreenshots(userId: string, tradeId: string, screenshotIds: string[]) {
@@ -360,8 +363,8 @@ export async function reorderTradeScreenshots(userId: string, tradeId: string, s
 
   const screenshots = await prisma.tradeScreenshot.findMany({
     where: {
+      userId,
       tradeId,
-      trade: { userId },
     },
   });
 
