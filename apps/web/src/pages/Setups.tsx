@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { PageErrorState } from "@/components/PageErrorState";
+import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { createSetup, deleteSetup, listSetups, updateSetup } from "@/lib/api/setups";
 import { getPageErrorState } from "@/lib/page-errors";
+import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
 import type { SetupDefinition } from "@/lib/types";
 
@@ -58,14 +60,14 @@ export default function Setups() {
       sortOrder,
     }),
     queryFn: async () => {
-      return listSetups({
+      return withMinimumDelay(() => listSetups({
         search,
         status: statusFilter,
         page,
         pageSize: SETUPS_PAGE_SIZE,
         sortBy,
         sortOrder,
-      });
+      }));
     },
   });
   const setups = setupsQuery.data?.items ?? [];
@@ -140,7 +142,7 @@ export default function Setups() {
   const hasActiveFilters = Boolean(search.trim()) || statusFilter !== "all";
 
   if (setupsQuery.isLoading && !setupsQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading setups...</div>;
+    return <SetupsSkeleton />;
   }
 
   if (setupsQuery.isError) {
@@ -165,7 +167,7 @@ export default function Setups() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="page-enter p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1440px]">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

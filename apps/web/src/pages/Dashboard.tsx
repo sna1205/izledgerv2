@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { PageErrorState } from "@/components/PageErrorState";
 import { StatCard } from "@/components/StatCard";
 import { ResultBadge } from "@/components/ResultBadge";
@@ -20,6 +21,7 @@ import {
   normalizeDashboardSummaryResponse,
 } from "@/lib/analytics-rendering";
 import { useAuth } from "@/lib/auth";
+import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey } from "@/lib/react-query";
 
@@ -63,7 +65,9 @@ export default function Dashboard() {
   const summaryQuery = useQuery({
     queryKey: privateQueryKey(user.id, "dashboard-summary", resolvedAccountFilter),
     queryFn: async () => normalizeDashboardSummaryResponse(
-      await getDashboardSummary(resolvedAccountFilter === "all" ? undefined : resolvedAccountFilter),
+      await withMinimumDelay(() => getDashboardSummary(
+        resolvedAccountFilter === "all" ? undefined : resolvedAccountFilter,
+      )),
     ),
   });
 
@@ -99,7 +103,7 @@ export default function Dashboard() {
   }, [equityCurve]);
 
   if (summaryQuery.isLoading && !summaryQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading dashboard...</div>;
+    return <DashboardSkeleton />;
   }
 
   if (summaryQuery.isError) {
@@ -128,7 +132,7 @@ export default function Dashboard() {
   const recentTrades = dashboard.recentTrades;
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="page-enter p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1440px]">
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

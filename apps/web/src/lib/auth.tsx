@@ -17,6 +17,7 @@ import {
   logout as logoutRequest,
   register as registerRequest,
 } from "@/lib/api/auth";
+import { withMinimumDelay } from "@/lib/loading";
 
 type AuthResult = Promise<{ error?: string }>;
 type SessionState = "loading" | "authenticated" | "anonymous" | "session-expired" | "backend-unavailable";
@@ -218,7 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const hadKnownUser = Boolean(userRef.current) || hadLegacyStoredUser;
 
     try {
-      const response = await getSessionUser();
+      const response = await withMinimumDelay(() => getSessionUser());
       await syncAuthenticatedUser(response.user);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {

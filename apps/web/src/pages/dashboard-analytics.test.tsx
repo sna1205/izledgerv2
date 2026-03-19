@@ -245,7 +245,7 @@ describe("dashboard rendering", () => {
 
     renderPage(<Dashboard />);
 
-    expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-skeleton")).toBeInTheDocument();
 
     deferred.resolve({
       summary: {
@@ -402,7 +402,7 @@ describe("analytics rendering", () => {
 
     renderPage(<Analytics />);
 
-    expect(screen.getByText("Loading analytics...")).toBeInTheDocument();
+    expect(screen.getByTestId("analytics-skeleton")).toBeInTheDocument();
 
     breakdownsDeferred.resolve({
       summary: {

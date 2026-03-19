@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton";
 import { PageErrorState } from "@/components/PageErrorState";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
   shiftMonthKey,
 } from "@/lib/analytics-rendering";
 import { useAuth } from "@/lib/auth";
+import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey } from "@/lib/react-query";
 import { cn } from "@/lib/utils";
@@ -118,18 +120,20 @@ export default function Analytics() {
   const normalizedCurrentMonth = useMemo(() => normalizeMonthKey(currentMonth), [currentMonth]);
   const breakdownsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "analytics-breakdowns", accountId ?? "all"),
-    queryFn: async () => normalizeAnalyticsBreakdownsResponse(await getAnalyticsBreakdowns(accountId)),
+    queryFn: async () => normalizeAnalyticsBreakdownsResponse(
+      await withMinimumDelay(() => getAnalyticsBreakdowns(accountId)),
+    ),
   });
   const calendarQuery = useQuery({
     queryKey: privateQueryKey(user.id, "analytics-calendar", accountId ?? "all", normalizedCurrentMonth),
     queryFn: async () => normalizeAnalyticsCalendarResponse(
-      await getAnalyticsCalendar(normalizedCurrentMonth, accountId),
+      await withMinimumDelay(() => getAnalyticsCalendar(normalizedCurrentMonth, accountId)),
       normalizedCurrentMonth,
     ),
   });
 
   if ((breakdownsQuery.isLoading && !breakdownsQuery.data) || (calendarQuery.isLoading && !calendarQuery.data)) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading analytics...</div>;
+    return <AnalyticsSkeleton />;
   }
 
   if (breakdownsQuery.isError || calendarQuery.isError) {
@@ -160,7 +164,7 @@ export default function Analytics() {
   const selectedDay = calendar.days.find((day) => day.key === selectedDayKey) ?? null;
 
   return (
-    <div className="w-full min-w-0 p-4 sm:p-6">
+    <div className="page-enter w-full min-w-0 p-4 sm:p-6">
       <Tabs defaultValue="overview" className="w-full">
         <div className="sticky top-0 z-20 mb-6 bg-background/95 pb-4 pt-1 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

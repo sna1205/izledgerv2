@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, CalendarDays, Lock, ShieldOff } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
+import { SharedTradeSkeleton } from "@/components/skeletons/SharedTradeSkeleton";
 import { ShareTradeCard } from "@/components/ShareTradeCard";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { getPublicTradeShare } from "@/lib/api/trade-shares";
+import { withMinimumDelay } from "@/lib/loading";
 import { formatMoney, formatPrice, formatSharedTradeDate } from "@/lib/trade-sharing";
 
 function DetailBlock({
@@ -72,19 +74,13 @@ export default function SharedTradePage() {
 
   const tradeQuery = useQuery({
     queryKey: ["shared-trade", shareId],
-    queryFn: () => getPublicTradeShare(shareId),
+    queryFn: () => withMinimumDelay(() => getPublicTradeShare(shareId)),
     retry: false,
     enabled: Boolean(shareId),
   });
 
   if (tradeQuery.isLoading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#f6f9fc_0%,#eef4fb_100%)] px-4 py-10 dark:bg-[linear-gradient(180deg,#09111d_0%,#0d1827_100%)]">
-        <div className="rounded-full border border-slate-200/70 bg-white/80 px-4 py-2 text-sm text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
-          Loading shared trade...
-        </div>
-      </main>
-    );
+    return <SharedTradeSkeleton />;
   }
 
   if (tradeQuery.isError || !tradeQuery.data?.trade) {
@@ -107,7 +103,7 @@ export default function SharedTradePage() {
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f7fbff_0%,#eef4fb_32%,#f7efe2_100%)] px-4 py-8 dark:bg-[linear-gradient(180deg,#06101d_0%,#0d1828_46%,#1b1420_100%)]">
+    <main className="page-enter min-h-screen bg-[linear-gradient(180deg,#f7fbff_0%,#eef4fb_32%,#f7efe2_100%)] px-4 py-8 dark:bg-[linear-gradient(180deg,#06101d_0%,#0d1828_46%,#1b1420_100%)]">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>

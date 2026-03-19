@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { PageErrorState } from "@/components/PageErrorState";
+import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { ReviewContent } from "@/components/ReviewContent";
 import { ReviewListSummary } from "@/components/ReviewListSummary";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
@@ -21,6 +22,7 @@ import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { createReview, deleteReview, listReviews, updateReview } from "@/lib/api/reviews";
 import { getPageErrorState } from "@/lib/page-errors";
+import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
 import { getReviewScope, getReviewTitle } from "@/lib/reviews";
 import { getTrade } from "@/lib/api/trades";
@@ -124,13 +126,13 @@ export default function Reviews() {
       sortOrder,
     }),
     queryFn: async () => {
-      return listReviews({
+      return withMinimumDelay(() => listReviews({
         page,
         pageSize: REVIEWS_PAGE_SIZE,
         type: scopeFilter === "all" ? undefined : scopeFilter,
         sortBy,
         sortOrder,
-      });
+      }));
     },
   });
 
@@ -340,7 +342,7 @@ export default function Reviews() {
   };
 
   if (reviewsQuery.isLoading && !reviewsQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading reviews...</div>;
+    return <ReviewsSkeleton />;
   }
 
   if (reviewsQuery.isError) {
@@ -365,7 +367,7 @@ export default function Reviews() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="page-enter p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1440px] space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

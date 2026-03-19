@@ -3,6 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { format, parseISO } from "date-fns";
 import { CameraOff, Images, LayoutList, Pencil, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
 import { Button } from "@/components/ui/button";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PaginationControls } from "@/components/PaginationControls";
@@ -22,6 +23,7 @@ import { listSetups } from "@/lib/api/setups";
 import { createTrade, deleteTrade, listTrades, updateTrade } from "@/lib/api/trades";
 import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
 import { useAuth } from "@/lib/auth";
+import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
 import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/lib/types";
@@ -115,14 +117,20 @@ export default function Trades() {
   const accountsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
-      const response = await listAccounts();
+      const response = await withMinimumDelay(() => listAccounts());
       return response.items;
     },
   });
   const setupsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "setups", "options"),
     queryFn: async () => {
-      const response = await listSetups({ page: 1, pageSize: 100, status: "all", sortBy: "name", sortOrder: "asc" });
+      const response = await withMinimumDelay(() => listSetups({
+        page: 1,
+        pageSize: 100,
+        status: "all",
+        sortBy: "name",
+        sortOrder: "asc",
+      }));
       return response.items;
     },
   });
@@ -145,7 +153,7 @@ export default function Trades() {
       sortOrder,
     }),
     queryFn: async () => {
-      return listTrades({
+      return withMinimumDelay(() => listTrades({
         page: currentPage,
         pageSize: activeView === "ledger" ? LEDGER_PAGE_SIZE : SCREENBOOK_PAGE_SIZE,
         accountId: resolvedAccountFilter !== "all" ? resolvedAccountFilter : undefined,
@@ -154,7 +162,7 @@ export default function Trades() {
         emotion: emotionFilter !== "all" ? emotionFilter as NonNullable<Trade["emotion"]> : undefined,
         sortBy,
         sortOrder,
-      });
+      }));
     },
   });
 
@@ -273,7 +281,7 @@ export default function Trades() {
   const journalError = [accountsQuery, setupsQuery, tradesQuery].find((query) => query.isError)?.error;
 
   if (isLoading) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading trades...</div>;
+    return <TradesSkeleton />;
   }
 
   if (hasError) {
@@ -300,7 +308,7 @@ export default function Trades() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="page-enter p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1600px] space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -440,18 +448,20 @@ export default function Trades() {
                         const linkedReview = tradeReviewMap[trade.id];
 
                         return (
-                          <tr key={trade.id} className="border-b last:border-b-0">
+                          <tr
+                            key={trade.id}
+                            className="cursor-pointer border-b transition-colors hover:bg-muted/20 last:border-b-0"
+                            onClick={() => navigate(`/trades/${trade.id}`)}
+                          >
                             <td className="px-4 py-4 text-sm">{formatTradeDate(trade.date)}</td>
                             <td className="px-4 py-4">
-                              <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                                <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium", directionStyles[trade.direction])}>
-                                    {trade.direction}
-                                  </span>
-                                  <ResultBadge result={trade.result} />
-                                </div>
-                              </button>
+                              <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium", directionStyles[trade.direction])}>
+                                  {trade.direction}
+                                </span>
+                                <ResultBadge result={trade.result} />
+                              </div>
                             </td>
                             <td className="px-4 py-4 text-sm text-muted-foreground">{accountNames[trade.accountId] ?? "Unknown Account"}</td>
                             <td className="px-4 py-4">
@@ -462,17 +472,39 @@ export default function Trades() {
                               </div>
                             </td>
                             <td className="px-4 py-4">
-                              <button type="button" onClick={() => setReviewTarget({ trade, review: linkedReview })}>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setReviewTarget({ trade, review: linkedReview });
+                                }}
+                              >
                                 <TradeReviewStatusBadge trade={trade} reviewed={Boolean(linkedReview)} />
                               </button>
                             </td>
                             <td className="px-4 py-4 text-right"><ProfitDisplay value={trade.profit} /></td>
                             <td className="px-4 py-4">
                               <div className="flex justify-end gap-2">
-                                <Button variant="outline" size="sm" onClick={() => { setEditingTrade(trade); setFormOpen(true); }}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setEditingTrade(trade);
+                                    setFormOpen(true);
+                                  }}
+                                >
                                   <Pencil className="h-4 w-4" />
                                 </Button>
-                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(trade.id)}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setDeleteId(trade.id);
+                                  }}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>

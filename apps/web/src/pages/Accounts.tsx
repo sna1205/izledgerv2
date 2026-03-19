@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Bitcoin, FlaskConical, Landmark, Pencil, Plus, Trash2, Trophy, UserRound } from "lucide-react";
+import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
 import { PageErrorState } from "@/components/PageErrorState";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +24,7 @@ import {
   validateAccountForm,
 } from "@/lib/account-validation";
 import { getPageErrorState } from "@/lib/page-errors";
+import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
 import type { Account, AccountType } from "@/lib/types";
 import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/lib/types";
@@ -117,7 +119,7 @@ export default function Accounts() {
   const accountsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
-      const response = await listAccounts();
+      const response = await withMinimumDelay(() => listAccounts());
       return response.items;
     },
   });
@@ -229,7 +231,7 @@ export default function Accounts() {
   };
 
   if (accountsQuery.isLoading && !accountsQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading accounts...</div>;
+    return <AccountsSkeleton />;
   }
 
   if (accountsQuery.isError) {
@@ -254,7 +256,7 @@ export default function Accounts() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="page-enter p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1440px]">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
