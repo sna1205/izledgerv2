@@ -1,88 +1,62 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
-import { CameraOff, Images, LayoutList, Pencil, Plus, Trash2 } from "lucide-react";
+import { CameraOff, Eye, Images, LayoutList, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
+import { FilterBar, FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
+import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
 import { PaginationControls } from "@/components/PaginationControls";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { toast } from "@/components/ui/sonner";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ResultBadge } from "@/components/ResultBadge";
+import { ShareTradeModal } from "@/components/ShareTradeModal";
+import { StatCard } from "@/components/StatCard";
 import { TradeFormDialog } from "@/components/TradeFormDialog";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
 import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "@/components/ui/sonner";
+import { DataBadge } from "@/components/DataBadge";
 import { listAccounts } from "@/lib/api/accounts";
 import { ApiError } from "@/lib/api/client";
 import { listReviews, createReview, updateReview } from "@/lib/api/reviews";
 import { listSetups } from "@/lib/api/setups";
 import { createTrade, deleteTrade, listTrades, updateTrade } from "@/lib/api/trades";
 import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import { formatCurrencyDisplay, formatNumberDisplay } from "@/lib/analytics-rendering";
 import { useAuth } from "@/lib/auth";
 import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
 import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const LEDGER_PAGE_SIZE = 10;
 const SCREENBOOK_PAGE_SIZE = 9;
 
-const directionStyles = {
-  Buy: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
-  Sell: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
-} as const;
-
-const emotionStyles = {
-  Calm: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300",
-  Focused: "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300",
-  Confident: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300",
-  Anxious: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
-  Frustrated: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
-} as const;
-
-const sessionStyles = {
-  Asia: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-300",
-  London: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300",
-  "New York": "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300",
-} as const;
-
 function formatTradeDate(date: string) {
   return format(parseISO(date), "MMM d, yyyy");
-}
-
-function FilterField({
-  label,
-  value,
-  onValueChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onValueChange: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
-}) {
-  return (
-    <div className="min-w-0 w-full space-y-2">
-      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
 }
 
 function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string) {
@@ -96,12 +70,17 @@ function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>
   ]);
 }
 
+function toneForDirection(direction: Trade["direction"]) {
+  return direction === "Buy" ? "success" : "danger";
+}
+
 export default function Trades() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [sharingTrade, setSharingTrade] = useState<Trade | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ trade: Trade; review?: Review | null } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [accountFilter, setAccountFilter] = useAccountFilter();
@@ -121,6 +100,7 @@ export default function Trades() {
       return response.items;
     },
   });
+
   const setupsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "setups", "options"),
     queryFn: async () => {
@@ -134,6 +114,7 @@ export default function Trades() {
       return response.items;
     },
   });
+
   const accounts = accountsQuery.data;
   const setups = setupsQuery.data ?? [];
   const resolvedAccountFilter = useMemo(
@@ -141,6 +122,7 @@ export default function Trades() {
     [accountFilter, accounts],
   );
   const currentPage = activeView === "ledger" ? ledgerPage : screenbookPage;
+
   const tradesQuery = useQuery({
     queryKey: privateQueryKey(user.id, "trades", "list", {
       page: currentPage,
@@ -152,18 +134,16 @@ export default function Trades() {
       sortBy,
       sortOrder,
     }),
-    queryFn: async () => {
-      return withMinimumDelay(() => listTrades({
-        page: currentPage,
-        pageSize: activeView === "ledger" ? LEDGER_PAGE_SIZE : SCREENBOOK_PAGE_SIZE,
-        accountId: resolvedAccountFilter !== "all" ? resolvedAccountFilter : undefined,
-        session: sessionFilter !== "all" ? sessionFilter as NonNullable<Trade["session"]> : undefined,
-        setupId: setupFilter !== "all" ? setupFilter : undefined,
-        emotion: emotionFilter !== "all" ? emotionFilter as NonNullable<Trade["emotion"]> : undefined,
-        sortBy,
-        sortOrder,
-      }));
-    },
+    queryFn: async () => withMinimumDelay(() => listTrades({
+      page: currentPage,
+      pageSize: activeView === "ledger" ? LEDGER_PAGE_SIZE : SCREENBOOK_PAGE_SIZE,
+      accountId: resolvedAccountFilter !== "all" ? resolvedAccountFilter : undefined,
+      session: sessionFilter !== "all" ? sessionFilter as NonNullable<Trade["session"]> : undefined,
+      setupId: setupFilter !== "all" ? setupFilter : undefined,
+      emotion: emotionFilter !== "all" ? emotionFilter as NonNullable<Trade["emotion"]> : undefined,
+      sortBy,
+      sortOrder,
+    })),
   });
 
   useEffect(() => {
@@ -172,10 +152,16 @@ export default function Trades() {
     }
   }, [accountFilter, resolvedAccountFilter, setAccountFilter]);
 
+  useEffect(() => {
+    setLedgerPage(1);
+    setScreenbookPage(1);
+  }, [resolvedAccountFilter, emotionFilter, sessionFilter, setupFilter, sortBy, sortOrder]);
+
   const accountNames = useMemo(
     () => Object.fromEntries((accounts ?? []).map((account) => [account.id, account.name])),
     [accounts],
   );
+
   const visibleTrades = tradesQuery.data?.items;
   const trades = visibleTrades ?? [];
   const totalTradePages = tradesQuery.data?.pagination.totalPages ?? 1;
@@ -200,17 +186,18 @@ export default function Trades() {
   });
 
   const tradeReviewMap = useMemo(
-    () =>
-      Object.fromEntries(
-        (visibleTrades ?? []).map((trade, index) => [trade.id, tradeReviewQueries[index]?.data ?? null]),
-      ),
+    () => Object.fromEntries((visibleTrades ?? []).map((trade, index) => [trade.id, tradeReviewQueries[index]?.data ?? null])),
     [tradeReviewQueries, visibleTrades],
   );
 
-  useEffect(() => {
-    setLedgerPage(1);
-    setScreenbookPage(1);
-  }, [resolvedAccountFilter, emotionFilter, sessionFilter, setupFilter, sortBy, sortOrder]);
+  const reviewedCount = useMemo(
+    () => trades.reduce((count, trade) => count + (tradeReviewMap[trade.id] ? 1 : 0), 0),
+    [tradeReviewMap, trades],
+  );
+  const totalPnlInView = useMemo(
+    () => trades.reduce((sum, trade) => sum + trade.profit, 0),
+    [trades],
+  );
 
   const saveTradeMutation = useMutation({
     mutationFn: async (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => {
@@ -225,6 +212,7 @@ export default function Trades() {
       await invalidateJournalQueries(queryClient, user.id);
       toast.success(editingTrade ? "Trade updated successfully." : "Trade saved successfully.");
       setEditingTrade(null);
+      setFormOpen(false);
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not save the trade right now.";
@@ -308,280 +296,314 @@ export default function Trades() {
   }
 
   return (
-    <div className="page-enter p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1600px] space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Trades</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Scan execution quality, profit, session context, and review status in one ledger.
-            </p>
-          </div>
-
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditingTrade(null);
-              setFormOpen(true);
-            }}
-            className="h-10 rounded-xl px-4"
-          >
-            <Plus className="mr-1 h-4 w-4" />
+    <PageShell size="wide">
+      <PageHeader
+        title="Trades"
+        actions={(
+          <Button onClick={() => { setEditingTrade(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4" />
             New Trade
           </Button>
-        </div>
+        )}
+      />
 
-        <div className="rounded-2xl border bg-card p-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <FilterField
-                label="Account"
-                value={resolvedAccountFilter}
-                onValueChange={setAccountFilter}
-                options={[
-                  { label: "All Accounts", value: "all" },
-                  ...accounts.map((account) => ({ label: account.name, value: account.id })),
-                ]}
-              />
-              <FilterField
-                label="Session"
-                value={sessionFilter}
-                onValueChange={setSessionFilter}
-                options={[{ label: "All Sessions", value: "all" }, ...SESSIONS.map((session) => ({ label: session, value: session }))]}
-              />
-              <FilterField
-                label="Setup"
-                value={setupFilter}
-                onValueChange={setSetupFilter}
-                options={[{ label: "All Setups", value: "all" }, ...setups.map((setup) => ({ label: setup.name, value: setup.id }))]}
-              />
-              <FilterField
-                label="Emotion"
-                value={emotionFilter}
-                onValueChange={setEmotionFilter}
-                options={[{ label: "All Emotions", value: "all" }, ...EMOTIONS.map((emotion) => ({ label: emotion, value: emotion }))]}
-              />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard label="Trades In View" value={formatNumberDisplay(totalTrades)} icon={LayoutList} />
+        <StatCard label="Reviewed" value={formatNumberDisplay(reviewedCount)} icon={Eye} />
+        <StatCard
+          label="PnL In View"
+          value={formatCurrencyDisplay(totalPnlInView)}
+          tone={totalPnlInView > 0 ? "positive" : totalPnlInView < 0 ? "negative" : "default"}
+          icon={Images}
+        />
+      </div>
+
+      <FilterBar meta={<><span className="font-medium text-foreground">{totalTrades}</span>&nbsp;trades in view</>}>
+        <FilterField label="Account">
+          <Select value={resolvedAccountFilter} onValueChange={setAccountFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Accounts</SelectItem>
+              {accounts?.map((account) => (
+                <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+
+        <FilterField label="Session">
+          <Select value={sessionFilter} onValueChange={setSessionFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sessions</SelectItem>
+              {SESSIONS.map((session) => (
+                <SelectItem key={session} value={session}>{session}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+
+        <FilterField label="Setup">
+          <Select value={setupFilter} onValueChange={setSetupFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Setups</SelectItem>
+              {setups.map((setup) => (
+                <SelectItem key={setup.id} value={setup.id}>{setup.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+
+        <FilterField label="Emotion">
+          <Select value={emotionFilter} onValueChange={setEmotionFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Emotions</SelectItem>
+              {EMOTIONS.map((emotion) => (
+                <SelectItem key={emotion} value={emotion}>{emotion}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+      </FilterBar>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "ledger" | "screenbook")} className="w-full">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:max-w-[320px]">
+            <TabsTrigger value="ledger" className="gap-2">
+              <LayoutList className="h-4 w-4" />
+              Ledger
+            </TabsTrigger>
+            <TabsTrigger value="screenbook" className="gap-2">
+              <Images className="h-4 w-4" />
+              Screenbook
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row">
+            <div className="w-full sm:w-[180px]">
+              <FilterField label="Sort By">
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date">Trade Date</SelectItem>
+                    <SelectItem value="createdAt">Created At</SelectItem>
+                    <SelectItem value="profit">PnL</SelectItem>
+                    <SelectItem value="pair">Pair</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FilterField>
             </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:min-w-[320px]">
-              <FilterField
-                label="Sort By"
-                value={sortBy}
-                onValueChange={(value) => setSortBy(value as typeof sortBy)}
-                options={[
-                  { label: "Trade Date", value: "date" },
-                  { label: "Created At", value: "createdAt" },
-                  { label: "PnL", value: "profit" },
-                  { label: "Pair", value: "pair" },
-                ]}
-              />
-              <FilterField
-                label="Order"
-                value={sortOrder}
-                onValueChange={(value) => setSortOrder(value as typeof sortOrder)}
-                options={[
-                  { label: "Descending", value: "desc" },
-                  { label: "Ascending", value: "asc" },
-                ]}
-              />
-            </div>
-
-            <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground xl:min-w-[172px]">
-              <span className="font-medium text-foreground">{totalTrades}</span>{" "}
-              {totalTrades === 1 ? "trade" : "trades"} in view
+            <div className="w-full sm:w-[180px]">
+              <FilterField label="Order">
+                <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">Descending</SelectItem>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FilterField>
             </div>
           </div>
-        </div>
 
-        {totalTrades === 0 ? (
-          <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
-            <p className="text-base font-medium text-foreground">{hasActiveFilters ? "No trades match these filters." : "No trades logged yet."}</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {hasActiveFilters
-                ? "Adjust the filters or log a new trade."
-                : "Start building your execution journal with your first trade."}
-            </p>
-            {!hasActiveFilters ? (
-              <Button className="mt-4" size="sm" onClick={() => setFormOpen(true)}>
-                <Plus className="mr-1 h-4 w-4" />
-                Log your first trade
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "ledger" | "screenbook")} className="w-full">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <TabsList className="grid h-11 w-full grid-cols-2 rounded-2xl border bg-muted/40 p-1 sm:max-w-[320px]">
-                <TabsTrigger value="ledger" className="rounded-xl gap-2 data-[state=active]:shadow-sm">
-                  <LayoutList className="h-4 w-4" />
-                  Ledger
-                </TabsTrigger>
-                <TabsTrigger value="screenbook" className="rounded-xl gap-2 data-[state=active]:shadow-sm">
-                  <Images className="h-4 w-4" />
-                  Screenbook
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="ledger" className="mt-4">
-              {trades.length === 0 ? (
-                <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
-                  <p className="text-base font-medium text-foreground">No trades match these filters.</p>
-                  <p className="mt-2 text-sm text-muted-foreground">Adjust the filters or log a new trade.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto rounded-2xl border bg-card shadow-sm">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Date</th>
-                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Pair</th>
-                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Account</th>
-                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Context</th>
-                        <th className="px-4 py-3 text-xs uppercase tracking-wider text-muted-foreground">Review</th>
-                        <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted-foreground">PnL</th>
-                        <th className="px-4 py-3 text-right text-xs uppercase tracking-wider text-muted-foreground">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {trades.map((trade) => {
-                        const linkedReview = tradeReviewMap[trade.id];
-
-                        return (
-                          <tr
-                            key={trade.id}
-                            className="cursor-pointer border-b transition-colors hover:bg-muted/20 last:border-b-0"
-                            onClick={() => navigate(`/trades/${trade.id}`)}
-                          >
-                            <td className="px-4 py-4 text-sm">{formatTradeDate(trade.date)}</td>
-                            <td className="px-4 py-4">
-                              <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium", directionStyles[trade.direction])}>
-                                  {trade.direction}
-                                </span>
-                                <ResultBadge result={trade.result} />
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 text-sm text-muted-foreground">{accountNames[trade.accountId] ?? "Unknown Account"}</td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-wrap gap-2">
-                                {trade.setup ? <span className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{trade.setup}</span> : null}
-                                {trade.session ? <span className={cn("rounded-full border px-2.5 py-1 text-[11px]", sessionStyles[trade.session])}>{trade.session}</span> : null}
-                                {trade.emotion ? <span className={cn("rounded-full border px-2.5 py-1 text-[11px]", emotionStyles[trade.emotion])}>{trade.emotion}</span> : null}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setReviewTarget({ trade, review: linkedReview });
-                                }}
-                              >
-                                <TradeReviewStatusBadge trade={trade} reviewed={Boolean(linkedReview)} />
-                              </button>
-                            </td>
-                            <td className="px-4 py-4 text-right"><ProfitDisplay value={trade.profit} /></td>
-                            <td className="px-4 py-4">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setEditingTrade(trade);
-                                    setFormOpen(true);
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setDeleteId(trade.id);
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-
-                  <PaginationControls
-                    currentPage={currentPage}
-                    totalPages={totalTradePages}
-                    itemLabel="ledger pages"
-                    onPrevious={() => setLedgerPage((page) => Math.max(1, page - 1))}
-                    onNext={() => setLedgerPage((page) => Math.min(totalTradePages, page + 1))}
-                  />
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="screenbook" className="mt-4">
-              {trades.length === 0 ? (
-                <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
-                  <p className="text-base font-medium text-foreground">No trades match these filters.</p>
-                  <p className="mt-2 text-sm text-muted-foreground">Adjust the filters or log a new trade.</p>
-                </div>
-              ) : (
-                <div className="rounded-2xl border bg-card shadow-sm">
-                  <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+          <TabsContent value="ledger" className="space-y-5">
+            {totalTrades === 0 ? (
+              <EmptyState
+                icon={LayoutList}
+                title={hasActiveFilters ? "No trades match these filters" : "No trades logged yet"}
+                description={hasActiveFilters
+                  ? "Adjust filters and try again."
+                  : "Log a trade to populate this view."}
+                action={!hasActiveFilters ? (
+                  <Button onClick={() => setFormOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Log your first trade
+                  </Button>
+                ) : null}
+              />
+            ) : (
+              <SectionCard className="overflow-hidden p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Date</TableHead>
+                      <TableHead>Pair / Direction</TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Context</TableHead>
+                      <TableHead>Review</TableHead>
+                      <TableHead className="text-right">PnL</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {trades.map((trade) => {
-                      const screenshots = trade.screenshotAssets ?? [];
+                      const linkedReview = tradeReviewMap[trade.id];
 
                       return (
-                        <article key={trade.id} className="overflow-hidden rounded-2xl border bg-background/60">
-                          {screenshots.length > 0 ? (
-                            <button type="button" className="block w-full text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                              <img src={screenshots[0].url} alt={`${trade.pair} screenshot`} className="aspect-[16/10] w-full object-cover" />
-                            </button>
-                          ) : (
-                            <div className="flex aspect-[16/10] items-center justify-center bg-muted/40 text-sm text-muted-foreground">
-                              <CameraOff className="mr-2 h-4 w-4" />
-                              No screenshots
-                            </div>
-                          )}
-
-                          <div className="space-y-4 p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                                  <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
-                                </button>
-                                <p className="mt-1 text-xs text-muted-foreground">{formatTradeDate(trade.date)}</p>
+                        <TableRow
+                          key={trade.id}
+                          className="group cursor-pointer"
+                          onClick={() => navigate(`/trades/${trade.id}`)}
+                        >
+                          <TableCell className="text-sm text-muted-foreground">{formatTradeDate(trade.date)}</TableCell>
+                          <TableCell>
+                            <div className="space-y-2">
+                              <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                              <div className="flex flex-wrap gap-2">
+                                <DataBadge tone={toneForDirection(trade.direction)}>{trade.direction}</DataBadge>
+                                <ResultBadge result={trade.result} />
                               </div>
-                              <ProfitDisplay value={trade.profit} />
                             </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {accountNames[trade.accountId] ?? "Unknown Account"}
+                          </TableCell>
+                          <TableCell>
                             <div className="flex flex-wrap gap-2">
-                              <ResultBadge result={trade.result} />
-                              {trade.setup ? <span className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{trade.setup}</span> : null}
-                              <TradeReviewStatusBadge trade={trade} reviewed={Boolean(tradeReviewMap[trade.id])} />
+                              {trade.setup ? <DataBadge>{trade.setup}</DataBadge> : null}
+                              {trade.session ? <DataBadge tone="primary">{trade.session}</DataBadge> : null}
+                              {trade.emotion ? <DataBadge tone="warning">{trade.emotion}</DataBadge> : null}
                             </div>
-                            <div className="flex justify-between gap-2">
-                              <Button variant="outline" size="sm" onClick={() => { setEditingTrade(trade); setFormOpen(true); }}>
-                                <Pencil className="mr-1 h-4 w-4" />
-                                Edit
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setReviewTarget({ trade, review: linkedReview });
+                              }}
+                            >
+                              <TradeReviewStatusBadge trade={trade} reviewed={Boolean(linkedReview)} />
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <ProfitDisplay value={trade.profit} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSharingTrade(trade);
+                                }}
+                              >
+                                <Share2 className="h-4 w-4" />
                               </Button>
-                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(trade.id)}>
-                                <Trash2 className="mr-1 h-4 w-4" />
-                                Delete
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setEditingTrade(trade);
+                                  setFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setDeleteId(trade.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalTradePages}
+                  itemLabel="ledger pages"
+                  onPrevious={() => setLedgerPage((page) => Math.max(1, page - 1))}
+                  onNext={() => setLedgerPage((page) => Math.min(totalTradePages, page + 1))}
+                />
+              </SectionCard>
+            )}
+          </TabsContent>
+
+          <TabsContent value="screenbook" className="space-y-5">
+            {totalTrades === 0 ? (
+              <EmptyState
+                icon={Images}
+                title={hasActiveFilters ? "No trades match these filters" : "Screenbook is empty"}
+                description={hasActiveFilters
+                  ? "Adjust filters and try again."
+                  : "Add screenshots to trades to populate this view."}
+              />
+            ) : (
+              <SectionCard className="overflow-hidden">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {trades.map((trade) => {
+                    const screenshots = trade.screenshotAssets ?? [];
+
+                    return (
+                      <article key={trade.id} className="surface-muted overflow-hidden p-0">
+                        {screenshots.length > 0 ? (
+                          <button type="button" className="block w-full text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
+                            <img src={screenshots[0].url} alt={`${trade.pair} screenshot`} className="aspect-[16/10] w-full object-cover" />
+                          </button>
+                        ) : (
+                          <div className="flex aspect-[16/10] items-center justify-center bg-muted/40 text-sm text-muted-foreground">
+                            <CameraOff className="mr-2 h-4 w-4" />
+                            No screenshots
+                          </div>
+                        )}
+
+                        <div className="space-y-4 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
+                                <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                              </button>
+                              <p className="mt-1 text-xs text-muted-foreground">{formatTradeDate(trade.date)}</p>
+                            </div>
+                            <ProfitDisplay value={trade.profit} />
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <DataBadge tone={toneForDirection(trade.direction)}>{trade.direction}</DataBadge>
+                            <ResultBadge result={trade.result} />
+                            {trade.setup ? <DataBadge>{trade.setup}</DataBadge> : null}
+                            <TradeReviewStatusBadge trade={trade} reviewed={Boolean(tradeReviewMap[trade.id])} />
+                          </div>
+
+                          <div className="flex justify-between gap-2">
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${trade.id}`)}>
+                              <Eye className="h-4 w-4" />
+                              View
+                            </Button>
+                            <div className="flex gap-2">
+                              <Button variant="outline" size="icon" onClick={() => setSharingTrade(trade)}>
+                                <Share2 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="icon" onClick={() => { setEditingTrade(trade); setFormOpen(true); }}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(trade.id)}>
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>
-                        </article>
-                      );
-                    })}
-                  </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
 
+                <div className="mt-5 overflow-hidden rounded-[1.25rem] border border-border/70">
                   <PaginationControls
                     currentPage={currentPage}
                     totalPages={totalTradePages}
@@ -590,10 +612,10 @@ export default function Trades() {
                     onNext={() => setScreenbookPage((page) => Math.min(totalTradePages, page + 1))}
                   />
                 </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        )}
+              </SectionCard>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <TradeFormDialog
@@ -625,12 +647,21 @@ export default function Trades() {
         />
       ) : null}
 
-      <AlertDialog open={!!deleteId} onOpenChange={(openState) => !openState && setDeleteId(null)}>
+      {sharingTrade ? (
+        <ShareTradeModal
+          open={Boolean(sharingTrade)}
+          onOpenChange={(open) => !open && setSharingTrade(null)}
+          trade={sharingTrade}
+          accountName={accountNames[sharingTrade.accountId]}
+        />
+      ) : null}
+
+      <AlertDialog open={Boolean(deleteId)} onOpenChange={(openState) => !openState && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Any linked trade review will be preserved in Reviews as journal history.
+              This action cannot be undone. Linked trade reviews remain in Reviews as journal history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -641,6 +672,6 @@ export default function Trades() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

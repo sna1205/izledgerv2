@@ -19,9 +19,9 @@ export function AccountFilterSelect({
 }: AccountFilterSelectProps) {
   return (
     <div className="w-full max-w-[260px] space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-label">{label}</p>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className={triggerClassName}>
+        <SelectTrigger className={triggerClassName ?? "h-11 rounded-2xl"}>
           <SelectValue placeholder="All Accounts" />
         </SelectTrigger>
         <SelectContent>

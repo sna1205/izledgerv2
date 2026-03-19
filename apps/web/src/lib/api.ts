@@ -1,4 +1,4 @@
-import { webEnv } from "@/config/env";
+import { env } from "@/config/env";
 
 function normalizePath(path: string) {
   return path.startsWith("/") ? path : `/${path}`;
@@ -7,11 +7,11 @@ function normalizePath(path: string) {
 export function buildApiUrl(path: string) {
   const normalizedPath = normalizePath(path);
 
-  if (!webEnv.apiBaseUrl) {
+  if (!env.apiBaseUrl) {
     return normalizedPath;
   }
 
-  return `${webEnv.apiBaseUrl}${normalizedPath}`;
+  return `${env.apiBaseUrl}${normalizedPath}`;
 }
 
 export function apiFetch(path: string, init?: RequestInit) {

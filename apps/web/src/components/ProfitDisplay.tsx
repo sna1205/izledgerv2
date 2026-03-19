@@ -5,7 +5,7 @@ export function ProfitDisplay({ value, className }: { value: number; className?:
   return (
     <span
       className={cn(
-        "font-mono-price font-medium",
+        "font-mono-price text-sm font-semibold",
         value > 0 ? "text-success" : value < 0 ? "text-danger" : "text-muted-foreground",
         className
       )}

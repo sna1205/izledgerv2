@@ -1,14 +1,25 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
+import { Activity, ArrowRight, CalendarDays, Target, Wallet } from "lucide-react";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { DataBadge } from "@/components/DataBadge";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
+import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
-import { StatCard } from "@/components/StatCard";
-import { ResultBadge } from "@/components/ResultBadge";
+import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { SetupTag } from "@/components/SetupTag";
+import { ResultBadge } from "@/components/ResultBadge";
+import { StatCard } from "@/components/StatCard";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { listAccounts } from "@/lib/api/accounts";
 import { getDashboardSummary } from "@/lib/api/analytics";
@@ -24,6 +35,7 @@ import { useAuth } from "@/lib/auth";
 import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey } from "@/lib/react-query";
+import { cn } from "@/lib/utils";
 
 const equityChartConfig = {
   equity: {
@@ -41,7 +53,9 @@ function getZeroGradientOffset(minValue: number, maxValue: number) {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [accountFilter, setAccountFilter] = useAccountFilter();
+
   const accountsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
@@ -71,17 +85,7 @@ export default function Dashboard() {
     ),
   });
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  const equityCurve = useMemo(() => {
-    return summaryQuery.data?.equityCurve ?? [];
-  }, [summaryQuery.data?.equityCurve]);
-
+  const equityCurve = useMemo(() => summaryQuery.data?.equityCurve ?? [], [summaryQuery.data?.equityCurve]);
   const equityRange = useMemo(() => {
     if (equityCurve.length === 0) {
       return {
@@ -127,69 +131,106 @@ export default function Dashboard() {
     );
   }
 
+  const todayLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
   const dashboard = summaryQuery.data ?? normalizeDashboardSummaryResponse(null);
   const summary = dashboard.summary;
   const recentTrades = dashboard.recentTrades;
+  const currentEquity = equityCurve[equityCurve.length - 1]?.equity ?? 0;
 
   return (
-    <div className="page-enter p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1440px]">
-        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Session Summary</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{today}</p>
-          </div>
+    <PageShell size="wide">
+      <PageHeader
+        title="Dashboard"
+        actions={(
+          <AccountFilterSelect
+            accounts={accounts ?? []}
+            value={resolvedAccountFilter}
+            onValueChange={setAccountFilter}
+            triggerClassName="h-11 rounded-2xl min-w-[220px]"
+          />
+        )}
+      />
 
-          <div className="w-full lg:w-auto">
-            <AccountFilterSelect accounts={accounts ?? []} value={resolvedAccountFilter} onValueChange={setAccountFilter} />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Today"
+          value={String(summary.todayTrades)}
+          subtext={todayLabel}
+          icon={CalendarDays}
+        />
+        <StatCard
+          label="Total PnL"
+          value={formatCurrencyDisplay(summary.totalProfit)}
+          tone={summary.totalProfit > 0 ? "positive" : summary.totalProfit < 0 ? "negative" : "default"}
+          icon={Wallet}
+        />
+        <StatCard
+          label="Win Rate"
+          value={formatPercentageDisplay(summary.winRate)}
+          icon={Target}
+        />
+        <StatCard
+          label="Trades"
+          value={String(summary.totalTrades)}
+          icon={Activity}
+        />
+      </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Today's Trades" value={String(summary.todayTrades)} />
-          <StatCard label="Total Trades" value={String(summary.totalTrades)} />
-          <StatCard label="Win Rate" value={formatPercentageDisplay(summary.winRate)} />
-          <StatCard label="Total PnL" value={formatCurrencyDisplay(summary.totalProfit)} />
-        </div>
-
-        <div className="mb-8 rounded-lg border bg-card p-4 sm:p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-sm font-medium text-foreground">Equity Curve</h2>
-              <p className="text-xs text-muted-foreground">Cumulative PnL after each logged trade.</p>
+      <SectionCard>
+        <SectionHeader
+          title="Performance Curve"
+          action={equityCurve.length > 0 ? (
+            <div className="surface-muted px-4 py-3 text-right">
+              <p className="text-label mb-2">Current Equity</p>
+              <p className={cn("font-mono-price text-xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
+                {formatCurrencyDisplay(currentEquity)}
+              </p>
             </div>
-            {equityCurve.length > 0 ? (
-              <div className="sm:text-right">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Current Equity</p>
-                <p className="font-mono-price text-lg font-semibold text-foreground">
-                  {formatCurrencyDisplay(equityCurve[equityCurve.length - 1].equity)}
-                </p>
-              </div>
-            ) : null}
-          </div>
+          ) : null}
+        />
 
-          {equityCurve.length === 0 ? (
-            <div className="flex h-[280px] items-center justify-center rounded-lg border border-dashed">
-              <p className="text-sm text-muted-foreground">Log trades to see your equity curve.</p>
-            </div>
-          ) : (
-            <ChartContainer config={equityChartConfig} className="h-[240px] w-full sm:h-[280px]">
-              <AreaChart accessibilityLayer data={equityCurve} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
+        {equityCurve.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={Activity}
+              title="Your equity curve will appear here"
+              description="Log a trade to populate the curve."
+              action={(
+                <Link
+                  to="/trades"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                >
+                  Log your first trade
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              )}
+              className="py-16"
+            />
+          </div>
+        ) : (
+          <div className="mt-6">
+            <ChartContainer config={equityChartConfig} className="h-[320px] w-full">
+              <AreaChart accessibilityLayer data={equityCurve} margin={{ left: 8, right: 8, top: 8, bottom: 4 }}>
                 <defs>
-                  <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.28} />
-                    <stop offset={`${equityRange.zeroOffset * 100}%`} stopColor="hsl(var(--success))" stopOpacity={0.1} />
+                  <linearGradient id="dashboard-equity-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.24} />
+                    <stop offset={`${equityRange.zeroOffset * 100}%`} stopColor="hsl(var(--success))" stopOpacity={0.12} />
                     <stop offset={`${equityRange.zeroOffset * 100}%`} stopColor="hsl(var(--danger))" stopOpacity={0.1} />
-                    <stop offset="100%" stopColor="hsl(var(--danger))" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="hsl(var(--danger))" stopOpacity={0.22} />
                   </linearGradient>
-                  <linearGradient id="equity-stroke" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="dashboard-equity-stroke" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(var(--success))" />
                     <stop offset={`${equityRange.zeroOffset * 100}%`} stopColor="hsl(var(--success))" />
                     <stop offset={`${equityRange.zeroOffset * 100}%`} stopColor="hsl(var(--danger))" />
                     <stop offset="100%" stopColor="hsl(var(--danger))" />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} />
+                <CartesianGrid vertical={false} stroke="hsl(var(--border) / 0.5)" />
                 <XAxis
                   axisLine={false}
                   dataKey="shortDate"
@@ -210,12 +251,12 @@ export default function Dashboard() {
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
                 <ChartTooltip
                   cursor={false}
-                  content={
+                  content={(
                     <ChartTooltipContent
                       indicator="line"
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate}
                       formatter={(value, _, item) => (
-                        <div className="flex min-w-[10rem] items-center justify-between gap-4">
+                        <div className="flex min-w-[11rem] items-center justify-between gap-4">
                           <div className="grid gap-1">
                             <span className="text-muted-foreground">Equity</span>
                             <span className="text-[11px] text-muted-foreground">{item.payload.pair}</span>
@@ -226,69 +267,96 @@ export default function Dashboard() {
                         </div>
                       )}
                     />
-                  }
+                  )}
                 />
                 <Area
                   dataKey="equity"
-                  fill="url(#equity-fill)"
+                  fill="url(#dashboard-equity-fill)"
                   fillOpacity={1}
                   isAnimationActive={false}
-                  stroke="url(#equity-stroke)"
-                  strokeWidth={2}
+                  stroke="url(#dashboard-equity-stroke)"
+                  strokeWidth={2.5}
                   type="monotone"
                 />
               </AreaChart>
             </ChartContainer>
-          )}
-        </div>
-
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">Recent Trades</h2>
-            <Link to="/trades" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-              View all →
-            </Link>
           </div>
+        )}
+      </SectionCard>
 
-          {recentTrades.length === 0 ? (
-            <div className="rounded-lg border p-12 text-center">
-              <p className="text-sm text-muted-foreground">No trades found yet.</p>
-              <Link to="/trades" className="mt-2 inline-block text-sm text-foreground underline">
-                Log your first trade →
-              </Link>
-            </div>
-          ) : (
-            <div className="hidden overflow-x-auto rounded-lg border md:block">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Date</th>
-                    <th className="px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Pair</th>
-                    <th className="px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Direction</th>
-                    <th className="px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Setup</th>
-                    <th className="px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Result</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">Profit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTrades.map((trade) => (
-                    <tr key={trade.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3 text-sm">{formatDateDisplay(trade.date, { fallback: "--" })}</td>
-                      <td className="px-4 py-3 text-sm font-medium">{trade.pair}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{trade.direction}</td>
-                      <td className="px-4 py-3">{trade.setup ? <SetupTag label={trade.setup} /> : null}</td>
-                      <td className="px-4 py-3">
-                        {trade.result ? <ResultBadge result={trade.result} /> : <span className="text-sm text-muted-foreground">--</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right"><ProfitDisplay value={trade.profit} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <SectionCard>
+        <SectionHeader
+          title="Recent Trades"
+          action={(
+            <Link to="/trades" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+              View all trades
+            </Link>
           )}
-        </div>
-      </div>
-    </div>
+        />
+
+        {recentTrades.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={Activity}
+              title="No recent trades yet"
+              description="Log a trade to populate this table."
+              action={(
+                <Link
+                  to="/trades"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-background/85 px-4 py-2 text-sm font-medium text-foreground"
+                >
+                  Open Trades
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              )}
+            />
+          </div>
+        ) : (
+          <div className="mt-6 overflow-hidden rounded-[1.25rem] border border-border/70">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Date</TableHead>
+                  <TableHead>Pair / Direction</TableHead>
+                  <TableHead>Setup</TableHead>
+                  <TableHead>Outcome</TableHead>
+                  <TableHead className="text-right">PnL</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentTrades.map((trade) => (
+                  <TableRow
+                    key={trade.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/trades/${trade.id}`)}
+                  >
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDateDisplay(trade.date, { fallback: "--" })}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                        <DataBadge tone={trade.direction === "Buy" ? "success" : "danger"}>
+                          {trade.direction ?? "Unknown"}
+                        </DataBadge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {trade.setup ? <DataBadge>{trade.setup}</DataBadge> : <span className="text-sm text-muted-foreground">No setup</span>}
+                    </TableCell>
+                    <TableCell>
+                      {trade.result ? <ResultBadge result={trade.result} /> : <span className="text-sm text-muted-foreground">Pending</span>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <ProfitDisplay value={trade.profit} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </SectionCard>
+    </PageShell>
   );
 }
