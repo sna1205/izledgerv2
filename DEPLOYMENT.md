@@ -1,109 +1,95 @@
 # Deployment Guide
 
-This project is set up for:
+This project deploys as:
 
 - frontend on Vercel
 - backend API on Render
-- database on Supabase Postgres
+- database on Neon Postgres
+- object storage on S3-compatible storage when enabled
 
-Use this deploy order:
+The app architecture stays the same in production:
+
+- `apps/web` talks only to the backend API
+- `apps/api` handles auth, Prisma, and storage
+- Prisma is the only database layer
+- auth uses HTTP-only cookies
+
+## Deploy Order
 
 1. Prepare the repo
-2. Create Supabase
+2. Create the Neon database
 3. Deploy the backend to Render
 4. Deploy the frontend to Vercel
 5. Verify the full stack
 
-## Pre-deploy checklist
+## 1. Prepare The Repo
 
-Before clicking deploy, confirm:
+Before deploying:
 
-- Latest code is pushed to GitHub on the branch Render/Vercel will deploy.
-- `render.yaml` changes are committed if you changed deploy commands or env defaults.
-- If Prisma schema changed, matching files exist in `apps/api/prisma/migrations`.
-- Local builds pass:
-  - `npm run build --workspace @izledger/api`
-  - `npm run build --workspace @izledger/web`
-- Render service settings match this repo:
-  - Root Directory: `apps/api`
-  - Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
-  - Start Command: `npm run start:render`
-- Render env vars are present and correct:
-  - `DATABASE_URL` = Supabase pooler URL
-  - `DIRECT_URL` = direct Supabase Postgres URL when available
-  - `FRONTEND_URL` = exact Vercel production URL
-  - `SESSION_COOKIE_SECURE=true`
-  - `SESSION_COOKIE_SAME_SITE=none`
-  - `STORAGE_ENABLED=false` unless object storage is configured
-- Vercel env var is present:
-  - `VITE_API_BASE_URL=https://your-render-service.onrender.com`
-- After deploy, test `GET /health` on the Render service before testing login from the frontend.
-
-## 1. Prepare the repo
-
-1. Push your latest code to GitHub.
-2. Make sure Prisma migrations are committed from `apps/api/prisma/migrations`.
-3. Make sure these files are present:
+1. Push the latest code to GitHub.
+2. Make sure Prisma migrations are committed under `apps/api/prisma/migrations`.
+3. Confirm these files are present and up to date:
+   - `render.yaml`
    - `apps/api/.env.example`
    - `apps/web/.env.example`
-   - `render.yaml`
    - `apps/web/vercel.json`
-4. If you do not want screenshot storage yet, plan to set `STORAGE_ENABLED=false` in Render.
+4. Confirm local builds pass:
 
-## 2. Create Supabase
+```bash
+npm run build --workspace @izledger/api
+npm run build --workspace @izledger/web
+```
 
-1. Create a new Supabase project.
-2. Wait for provisioning to finish.
-3. Open `Project Settings` -> `Database`.
-4. Copy the Postgres connection string.
-5. Prefer the pooled connection string for Render production traffic.
-6. Optionally open `Project Settings` -> `API` and copy:
-   - project URL
-   - anon key
-   - service role key
+5. If you do not want screenshot uploads yet, plan to set `STORAGE_ENABLED=false` in production.
 
-Important:
+## 2. Create The Neon Database
+
+1. Create a new Neon project.
+2. Open the database connection details.
+3. Copy the pooled Postgres connection string for app runtime traffic.
+4. Copy the direct Postgres connection string for Prisma migrations.
+5. Confirm both strings include `sslmode=require`.
+
+Recommended split:
+
+- `DATABASE_URL`: pooled Neon connection string
+- `DIRECT_URL`: direct Neon connection string
+
+Example shape:
+
+```bash
+DATABASE_URL=postgresql://USER:PASSWORD@ep-xxxxxx-pooler.REGION.aws.neon.tech/DB_NAME?sslmode=require
+DIRECT_URL=postgresql://USER:PASSWORD@ep-xxxxxx.REGION.aws.neon.tech/DB_NAME?sslmode=require
+```
+
+Notes:
 
 - `DATABASE_URL` is required by Prisma and the backend.
-- `DIRECT_URL` is recommended for Prisma migrations on Render when `DATABASE_URL` uses the Supabase pooler.
-- If `DIRECT_URL` is not set, the Render predeploy step falls back to `DATABASE_URL`.
-- `SUPABASE_SERVICE_ROLE_KEY` must stay on the backend only.
-- Do not put private Supabase keys in Vercel.
-- On Render, do not use the direct Supabase host like `db.<project-ref>.supabase.co:5432` if it fails to connect. Use the Supabase connection pooler URL instead.
+- `DIRECT_URL` is optional, but recommended for `prisma migrate deploy`.
+- This repo's Render start command uses `DIRECT_URL` for migrations when it is set, then runs the API normally on `DATABASE_URL`.
+- For a long-running backend service, prefer the pooled Neon URL for `DATABASE_URL`.
 
-## 3. Deploy the backend to Render
+## 3. Deploy The Backend To Render
 
-### Create the service
+### Render Service Settings
 
-1. Log in to Render.
-2. Click `New` -> `Web Service`.
-3. Connect your GitHub repo.
-4. Select this repository.
-5. Set `Root Directory` to `apps/api`.
+Create a Render web service with:
 
-### Render settings
-
-Use these values:
-
+- Root Directory: `apps/api`
 - Runtime: `Node`
 - Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
 - Start Command: `npm run start:render`
 - Health Check Path: `/health`
 
 If Render detects `render.yaml`, you can deploy from the blueprint instead.
-If you configured the service manually in the Render dashboard already, update the Build Command there to match this exactly.
-This repo does not require a Render Pre-Deploy Command, which helps on plans where that feature is unavailable.
 
-### Render environment variables
-
-Required:
+### Required Backend Env Vars
 
 ```bash
 NODE_ENV=production
 HOST=0.0.0.0
 FRONTEND_URL=https://your-frontend.vercel.app
-DATABASE_URL=postgresql://...
-DIRECT_URL=postgresql://...
+DATABASE_URL=postgresql://USER:PASSWORD@ep-xxxxxx-pooler.REGION.aws.neon.tech/DB_NAME?sslmode=require
 JWT_SECRET=replace-with-a-long-random-secret
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
@@ -116,45 +102,42 @@ AUTH_RATE_LIMIT_WINDOW_MINUTES=1
 LOG_LEVEL=info
 ```
 
-Optional:
+### Optional Backend Env Vars
 
 ```bash
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+DIRECT_URL=postgresql://USER:PASSWORD@ep-xxxxxx.REGION.aws.neon.tech/DB_NAME?sslmode=require
 PORT=10000
 STORAGE_ENABLED=false
-```
-
-Recommended connection split:
-
-- `DATABASE_URL`: Supabase pooler URL for app/runtime traffic
-- `DIRECT_URL`: direct Postgres URL for `prisma migrate deploy`
-
-If you want screenshot uploads in production, configure storage instead of disabling it:
-
-```bash
-STORAGE_ENABLED=true
-STORAGE_BUCKET=...
-STORAGE_REGION=...
-STORAGE_ENDPOINT=https://...
-STORAGE_ACCESS_KEY=...
-STORAGE_SECRET_KEY=...
+STORAGE_BUCKET=
+STORAGE_REGION=auto
+STORAGE_ENDPOINT=
+STORAGE_ACCESS_KEY=
+STORAGE_SECRET_KEY=
 STORAGE_PUBLIC_BASE_URL=
 STORAGE_FORCE_PATH_STYLE=false
 STORAGE_SIGNED_READS=true
 STORAGE_SIGNED_READ_TTL_SECONDS=900
 ```
 
-### First backend deploy
+Storage notes:
 
-1. Save the env vars in Render.
-2. Trigger the deploy.
-3. Wait for build, startup migration, and app start to finish.
+- Set `STORAGE_ENABLED=false` if uploads are not ready yet.
+- If storage is enabled, provide the full bucket and credential configuration.
+- Never expose storage credentials to the frontend.
+
+### First Backend Deploy
+
+1. Save env vars in Render.
+2. Trigger a deploy.
+3. Wait for build, migration, and startup to finish.
 4. Open the Render URL.
-5. Visit `/health`.
+5. Check:
 
-Expected result:
+```bash
+GET /health
+```
+
+Expected response:
 
 ```json
 {
@@ -163,32 +146,24 @@ Expected result:
 }
 ```
 
-If deploy appears stuck on `prisma migrate deploy` during startup while using a `*.pooler.supabase.com` connection, set `DIRECT_URL` in Render to the direct database connection string from Supabase and keep `DATABASE_URL` on the pooler string.
+If migrations hang while `DATABASE_URL` is pooled, add `DIRECT_URL` with the direct Neon connection string.
 
-If you see Prisma error `P1001: Can't reach database server at db.<project-ref>.supabase.co:5432`, change `DATABASE_URL` in Render to the Supabase pooler connection string from `Project Settings` -> `Database` -> `Connection string` -> `Transaction pooler` or `Session pooler`, then set `DIRECT_URL` to the direct connection string if migrations need a single direct connection.
+If Render logs show a Prisma `P1001` connection error while the app uses a direct Neon runtime URL, switch `DATABASE_URL` back to the pooled Neon URL and keep the direct string in `DIRECT_URL` only.
 
-## 4. Deploy the frontend to Vercel
+## 4. Deploy The Frontend To Vercel
 
-### Create the project
+### Vercel Project Settings
 
-1. Log in to Vercel.
-2. Click `Add New` -> `Project`.
-3. Import the same GitHub repo.
-4. Set `Root Directory` to `apps/web`.
+Create a Vercel project with:
 
-### Vercel settings
-
-Use these values:
-
+- Root Directory: `apps/web`
 - Framework Preset: `Vite`
 - Build Command: `npm run build`
 - Output Directory: `dist`
 
 SPA rewrites are already configured in `apps/web/vercel.json`.
 
-### Vercel environment variables
-
-Required:
+### Required Frontend Env Var
 
 ```bash
 VITE_API_BASE_URL=https://your-render-service.onrender.com
@@ -197,62 +172,56 @@ VITE_API_BASE_URL=https://your-render-service.onrender.com
 Important:
 
 - Only `VITE_` variables are exposed to the browser.
-- Never put `JWT_SECRET`, database credentials, storage secrets, or `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
+- Never put `JWT_SECRET`, database credentials, or storage secrets in Vercel.
 
-### First frontend deploy
-
-1. Save the env var in Vercel.
-2. Trigger the deploy.
-3. Open the Vercel domain.
-4. Confirm the site loads and deep links do not 404.
-
-## 5. Connect frontend and backend
+## 5. Connect Frontend And Backend
 
 After both services exist:
 
-1. Copy the real Vercel production URL.
-2. Go back to Render.
-3. Set `FRONTEND_URL` to that exact URL.
-4. Redeploy Render so CORS and cookies use the correct frontend origin.
+1. Copy the real frontend production URL from Vercel.
+2. Set `FRONTEND_URL` in Render to that exact origin.
+3. Redeploy the backend so CORS and cookies use the correct frontend origin.
 
-If you later add a custom domain, update `FRONTEND_URL` again.
+If you later add a custom domain, update `FRONTEND_URL` again and redeploy.
 
-## 6. Verify production
+## 6. Verify Production
 
-Check these items:
+Check all of the following:
 
-1. `GET /health` returns `200` on Render.
-2. The Vercel site loads successfully.
-3. Frontend requests point at the Render API URL from `VITE_API_BASE_URL`.
-4. No private secrets appear in browser env output.
-5. Render logs show `prisma migrate deploy` completed successfully during startup.
-6. If frontend and API are on different domains, confirm:
+1. `GET /health` returns `200` from Render.
+2. The frontend loads successfully on Vercel.
+3. Login and logout still work with HTTP-only cookies.
+4. Browser requests point to `VITE_API_BASE_URL`.
+5. Render logs show `prisma migrate deploy` completed successfully.
+6. CRUD flows work against the Neon database.
+7. If frontend and backend are on different domains:
    - `SESSION_COOKIE_SAME_SITE=none`
    - `SESSION_COOKIE_SECURE=true`
 
-## 7. Safe Prisma production flow
+## 7. Safe Prisma Release Flow
 
-For future releases:
+For future schema changes:
 
-1. Change the Prisma schema locally.
-2. Run:
+1. Update `apps/api/prisma/schema.prisma`.
+2. Generate a migration locally:
 
 ```bash
 npm run prisma:migrate:dev
 ```
 
-3. Commit the generated migration files.
+3. Commit the migration files.
 4. Push to GitHub.
 5. Let Render run:
 
 ```bash
-npm run prisma:migrate:deploy
+npm run start:render
 ```
 
-Do not use `prisma db push` in production.
-On free-plan Render deployments, this migration runs from the service start command instead of a separate pre-deploy step.
+That start command runs `prisma migrate deploy` before the API boots.
 
-## 8. Local env reference
+Do not use `prisma db push` in production.
+
+## 8. Local Environment Reference
 
 ### `apps/api/.env`
 
@@ -261,10 +230,8 @@ NODE_ENV=development
 PORT=4000
 HOST=0.0.0.0
 FRONTEND_URL=http://localhost:5173
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DB_NAME
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/izledger
+DIRECT_URL=
 JWT_SECRET=replace-with-a-long-random-string
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14

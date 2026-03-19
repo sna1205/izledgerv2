@@ -43,9 +43,6 @@ const envSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   FRONTEND_URL: optionalUrlFromEnv,
   DATABASE_URL: z.string().min(1),
-  SUPABASE_URL: optionalUrlFromEnv,
-  SUPABASE_ANON_KEY: optionalStringFromEnv,
-  SUPABASE_SERVICE_ROLE_KEY: optionalStringFromEnv,
   JWT_SECRET: optionalStringFromEnv,
   SESSION_COOKIE_NAME: z.string().default("izledger_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
@@ -88,14 +85,6 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["SESSION_COOKIE_SECURE"],
       message: "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAME_SITE=none",
-    });
-  }
-
-  if ((data.SUPABASE_ANON_KEY || data.SUPABASE_SERVICE_ROLE_KEY) && !data.SUPABASE_URL) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["SUPABASE_URL"],
-      message: "SUPABASE_URL is required when using Supabase API keys",
     });
   }
 

@@ -79,9 +79,7 @@ LOG_LEVEL=info
 Optional backend env vars:
 
 ```bash
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+DIRECT_URL=
 JWT_SECRET=
 SESSION_COOKIE_DOMAIN=
 STORAGE_BUCKET=
@@ -118,7 +116,7 @@ Deploy with:
 
 - frontend on Vercel
 - backend on Render
-- database on Supabase Postgres
+- database on Neon Postgres
 
 See `DEPLOYMENT.md` for the full step-by-step guide.
 
@@ -136,8 +134,9 @@ For free-plan Render services, use `npm run start:render` as the start command s
 - Set `VITE_API_BASE_URL` to the public API origin used by the frontend.
 - Set `NODE_ENV=production` on the API.
 - Set `FRONTEND_URL` to the deployed frontend origin.
-- If `DATABASE_URL` uses the Supabase pooler, set `DIRECT_URL` to the direct Postgres connection for Prisma migrations.
-- On Render, use the Supabase pooler connection string for `DATABASE_URL` rather than the direct `db.<project-ref>.supabase.co:5432` host if the direct host is unreachable.
+- On Render, set `DATABASE_URL` to the Neon pooled Postgres connection string and keep `sslmode=require`.
+- Set `DIRECT_URL` to the direct Neon Postgres connection string for Prisma migrations when you want migrations to avoid the pooler.
+- This repo's Render start command temporarily uses `DIRECT_URL` for `prisma migrate deploy` when it is present, while the API still runs on `DATABASE_URL`.
 - Set `SESSION_COOKIE_SECURE=true` in production.
 - If the frontend and API are on different domains, use `SESSION_COOKIE_SAME_SITE=none` and HTTPS.
 - Run `npm run prisma:migrate:deploy` during backend deploys, or let `npm run start:render` do it on Render startup.
