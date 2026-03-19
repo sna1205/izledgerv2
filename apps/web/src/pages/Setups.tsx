@@ -1,39 +1,46 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Layers3, Pencil, Plus, Sparkles, SwatchBook, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
+import { FilterBar, FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
+import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { PaginationControls } from "@/components/PaginationControls";
+import { StatCard } from "@/components/StatCard";
+import { DataBadge } from "@/components/DataBadge";
+import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PaginationControls } from "@/components/PaginationControls";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { createSetup, deleteSetup, listSetups, updateSetup } from "@/lib/api/setups";
+import { formatNumberDisplay } from "@/lib/analytics-rendering";
 import { getPageErrorState } from "@/lib/page-errors";
+import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
 import type { SetupDefinition } from "@/lib/types";
 
 const emptyForm = {
   name: "",
   description: "",
-  color: "#10b981",
+  color: "#10B981",
 };
 const SETUPS_PAGE_SIZE = 12;
-
-function getContrastColor(hexColor: string) {
-  const normalized = hexColor.replace("#", "");
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-
-  return brightness > 155 ? "#0f172a" : "#ffffff";
-}
 
 export default function Setups() {
   const { user } = useAuth();
@@ -57,20 +64,23 @@ export default function Setups() {
       sortBy,
       sortOrder,
     }),
-    queryFn: async () => {
-      return listSetups({
-        search,
-        status: statusFilter,
-        page,
-        pageSize: SETUPS_PAGE_SIZE,
-        sortBy,
-        sortOrder,
-      });
-    },
+    queryFn: async () => withMinimumDelay(() => listSetups({
+      search,
+      status: statusFilter,
+      page,
+      pageSize: SETUPS_PAGE_SIZE,
+      sortBy,
+      sortOrder,
+    })),
   });
+
   const setups = setupsQuery.data?.items ?? [];
   const totalSetups = setupsQuery.data?.pagination.total ?? 0;
   const totalSetupPages = setupsQuery.data?.pagination.totalPages ?? 1;
+  const activeSetups = setups.filter((setup) => !setup.isArchived).length;
+  const archivedSetups = setups.filter((setup) => setup.isArchived).length;
+  const totalTradesMapped = setups.reduce((sum, setup) => sum + (setup.tradeCount ?? 0), 0);
+  const hasActiveFilters = Boolean(search.trim()) || statusFilter !== "all";
 
   const invalidateData = async () => {
     await Promise.all([
@@ -86,7 +96,7 @@ export default function Setups() {
       const normalized = {
         name: payload.name.trim(),
         description: payload.description.trim(),
-        color: payload.color,
+        color: payload.color.trim() || "#10B981",
       };
 
       if (editingSetup) {
@@ -137,10 +147,8 @@ export default function Setups() {
     setOpen(true);
   };
 
-  const hasActiveFilters = Boolean(search.trim()) || statusFilter !== "all";
-
   if (setupsQuery.isLoading && !setupsQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading setups...</div>;
+    return <SetupsSkeleton />;
   }
 
   if (setupsQuery.isError) {
@@ -165,240 +173,215 @@ export default function Setups() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1440px]">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Setups</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Create and manage your trading setups.</p>
-          </div>
-
-          <Button size="sm" onClick={openCreateModal} className="w-full sm:w-auto">
-            <Plus className="mr-1 h-4 w-4" />
+    <PageShell size="wide">
+      <PageHeader
+        title="Setups"
+        actions={(
+          <Button onClick={openCreateModal}>
+            <Plus className="h-4 w-4" />
             Add Setup
           </Button>
-        </div>
+        )}
+      />
 
-        <div className="mb-6 rounded-2xl border bg-card p-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="grid flex-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Search</p>
-                <Input
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search setups..."
-                  className="h-10 rounded-xl border-border/70 bg-background/80"
-                />
-              </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard label="Total Setups" value={String(totalSetups)} icon={Layers3} />
+        <StatCard label="Active" value={String(activeSetups)} icon={Sparkles} />
+        <StatCard label="Mapped Trades" value={formatNumberDisplay(totalTradesMapped)} icon={SwatchBook} />
+      </div>
 
-              <div className="space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Status</p>
-                <Select value={statusFilter} onValueChange={(value) => {
-                  setStatusFilter(value as typeof statusFilter);
-                  setPage(1);
-                }}>
-                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Setups</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+      <FilterBar meta={<><span className="font-medium text-foreground">{totalSetups}</span>&nbsp;setups in view</>}>
+        <FilterField label="Search">
+          <Input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search setups..."
+          />
+        </FilterField>
 
-              <div className="space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Sort By</p>
-                <Select value={sortBy} onValueChange={(value) => {
-                  setSortBy(value as typeof sortBy);
-                  setPage(1);
-                }}>
-                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="createdAt">Created At</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        <FilterField label="Status">
+          <Select value={statusFilter} onValueChange={(value) => {
+            setStatusFilter(value as typeof statusFilter);
+            setPage(1);
+          }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Setups</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterField>
 
-              <div className="space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Order</p>
-                <Select value={sortOrder} onValueChange={(value) => {
-                  setSortOrder(value as typeof sortOrder);
-                  setPage(1);
-                }}>
-                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="asc">Ascending</SelectItem>
-                    <SelectItem value="desc">Descending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+        <FilterField label="Sort By">
+          <Select value={sortBy} onValueChange={(value) => {
+            setSortBy(value as typeof sortBy);
+            setPage(1);
+          }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="createdAt">Created At</SelectItem>
+              <SelectItem value="name">Name</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterField>
 
-            <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{totalSetups}</span> {totalSetups === 1 ? "setup" : "setups"}
-            </div>
-          </div>
-        </div>
+        <FilterField label="Order">
+          <Select value={sortOrder} onValueChange={(value) => {
+            setSortOrder(value as typeof sortOrder);
+            setPage(1);
+          }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="asc">Ascending</SelectItem>
+              <SelectItem value="desc">Descending</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterField>
+      </FilterBar>
 
-        {totalSetups === 0 ? (
-          <div className="rounded-xl border border-dashed bg-card p-14 text-center shadow-sm">
-            <p className="text-sm text-muted-foreground">
-              {hasActiveFilters ? "No setups match this search." : "No setups created yet."}
-            </p>
-            {!hasActiveFilters ? (
-              <Button size="sm" className="mt-4" onClick={openCreateModal}>
-                <Plus className="mr-1 h-4 w-4" />
-                Create your first setup
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {setups.map((setup) => {
-                const tradeCount = setup.tradeCount ?? 0;
-                const contrastColor = getContrastColor(setup.color);
+      {totalSetups === 0 ? (
+        <EmptyState
+          icon={SwatchBook}
+          title={hasActiveFilters ? "No setups match these filters" : "Create your first setup"}
+          description={hasActiveFilters
+            ? "Adjust filters and try again."
+            : "Add a setup to tag trades."}
+          action={!hasActiveFilters ? (
+            <Button onClick={openCreateModal}>
+              <Plus className="h-4 w-4" />
+              Create your first setup
+            </Button>
+          ) : null}
+        />
+      ) : (
+        <div className="space-y-5">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {setups.map((setup) => {
+              const tradeCount = setup.tradeCount ?? 0;
 
-                return (
-                  <article key={setup.id} className="rounded-xl border bg-card p-5 shadow-sm">
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex items-start gap-3">
-                        <span
-                          className="inline-flex max-w-full truncate rounded-full px-3 py-1 text-xs font-semibold"
-                          style={{ backgroundColor: setup.color, color: contrastColor }}
-                        >
-                          {setup.name}
-                        </span>
+              return (
+                <SectionCard
+                  key={setup.id}
+                  className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-28px_rgba(15,23,42,0.32)]"
+                >
+                  <div className="flex h-full flex-col">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-lg font-medium text-foreground">{setup.name}</h2>
+                          <DataBadge tone={setup.isArchived ? "warning" : "primary"}>
+                            {setup.isArchived ? "Archived" : "Active"}
+                          </DataBadge>
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">Created {new Date(setup.createdAt).toLocaleDateString("en-US")}</p>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button className="rounded-md p-2 transition-colors hover:bg-accent" onClick={() => openEditModal(setup)}>
-                          <Pencil className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                        <button className="rounded-md p-2 transition-colors hover:bg-destructive/10" onClick={() => setDeleteTarget(setup)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </button>
+                      <div className="flex items-center gap-2 opacity-100 transition-opacity group-hover:opacity-100">
+                        <Button variant="outline" size="icon" onClick={() => openEditModal(setup)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(setup)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
 
-                    <p className="min-h-[3rem] text-sm leading-relaxed text-muted-foreground">
-                      {setup.description || "No description added yet."}
+                    <p className="mt-5 min-h-[72px] text-sm leading-6 text-muted-foreground">
+                      {setup.description || "No description."}
                     </p>
 
-                    <div className="mt-5 flex items-center justify-between rounded-lg border bg-background/70 px-3 py-2">
-                      <div>
-                        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Color</p>
-                        <p className="mt-1 text-sm font-medium text-foreground">{setup.color.toUpperCase()}</p>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="surface-muted px-4 py-4">
+                        <p className="text-label mb-2">Color Token</p>
+                        <p className="font-mono-price text-sm font-semibold text-foreground">{setup.color.toUpperCase()}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Trades</p>
-                        <p className="mt-1 text-sm font-medium text-foreground">{tradeCount}</p>
+                      <div className="surface-muted px-4 py-4">
+                        <p className="text-label mb-2">Trades</p>
+                        <p className="text-lg font-semibold text-foreground">{formatNumberDisplay(tradeCount)}</p>
                       </div>
                     </div>
-                  </article>
-                );
-              })}
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-              <PaginationControls
-                currentPage={page}
-                totalPages={totalSetupPages}
-                itemLabel="setup pages"
-                onPrevious={() => setPage((current) => Math.max(1, current - 1))}
-                onNext={() => setPage((current) => Math.min(totalSetupPages, current + 1))}
-              />
-            </div>
+                  </div>
+                </SectionCard>
+              );
+            })}
           </div>
-        )}
 
-        <Dialog
-          open={open}
-          onOpenChange={(nextOpen) => {
-            setOpen(nextOpen);
+          <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/70">
+            <PaginationControls
+              currentPage={page}
+              totalPages={totalSetupPages}
+              itemLabel="setup pages"
+              onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+              onNext={() => setPage((current) => Math.min(totalSetupPages, current + 1))}
+            />
+          </div>
+        </div>
+      )}
 
-            if (!nextOpen) {
-              setEditingSetup(null);
-              setForm(emptyForm);
-            }
-          }}
-        >
-          <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingSetup ? "Edit Setup" : "Create Setup"}</DialogTitle>
-            </DialogHeader>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
 
-            <div className="grid gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Setup Name</Label>
-                <Input
-                  value={form.name}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                />
-              </div>
+          if (!nextOpen) {
+            setEditingSetup(null);
+            setForm(emptyForm);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-[1.75rem]">
+          <DialogHeader>
+            <DialogTitle>{editingSetup ? "Edit Setup" : "Create Setup"}</DialogTitle>
+          </DialogHeader>
 
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Description</Label>
-                <Textarea
-                  rows={4}
-                  value={form.description}
-                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Color</Label>
-                <div className="flex items-center gap-3 rounded-lg border bg-background px-3 py-2">
-                  <input
-                    type="color"
-                    value={form.color}
-                    onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))}
-                    className="h-10 w-12 rounded border-0 bg-transparent p-0"
-                  />
-                  <Input value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))} />
-                </div>
-              </div>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label className="text-label">Setup Name</Label>
+              <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
             </div>
 
-            <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
+            <div className="space-y-2">
+              <Label className="text-label">Description</Label>
+              <Textarea rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-label">Color Token</Label>
+              <Input value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value.toUpperCase() }))} />
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button className="w-full sm:w-auto" onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : editingSetup ? "Save Changes" : "Save Setup"}
+              <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Saving..." : editingSetup ? "Save Changes" : "Create Setup"}
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-        <AlertDialog open={!!deleteTarget} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Setup</AlertDialogTitle>
-              <AlertDialogDescription>
-                This removes the setup from future trade selection only. Existing trade history will remain unchanged.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending}>
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </div>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Setup</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. Existing trades keep their historical setup label.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </PageShell>
   );
 }

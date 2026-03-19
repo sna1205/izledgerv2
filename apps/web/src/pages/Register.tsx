@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { AuthPageShell } from "@/components/AuthPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ export default function Register() {
   const { register } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,19 +71,31 @@ export default function Register() {
 
         <div className="space-y-2">
           <Label htmlFor="register-password">Password</Label>
-          <Input
-            id="register-password"
-            type="password"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setError("");
-            }}
-            placeholder="Create a password"
-            autoComplete="new-password"
-            minLength={AUTH_PASSWORD_MIN_LENGTH}
-            maxLength={AUTH_PASSWORD_MAX_LENGTH}
-          />
+          <div className="relative">
+            <Input
+              id="register-password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setError("");
+              }}
+              className="pr-12"
+              placeholder="Create a password"
+              autoComplete="new-password"
+              minLength={AUTH_PASSWORD_MIN_LENGTH}
+              maxLength={AUTH_PASSWORD_MAX_LENGTH}
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setShowPassword((current) => !current)}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           <p className="text-xs text-muted-foreground">
             Use {AUTH_PASSWORD_MIN_LENGTH} to {AUTH_PASSWORD_MAX_LENGTH} characters.
           </p>

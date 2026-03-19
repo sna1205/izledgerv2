@@ -44,6 +44,12 @@ npm run prisma:migrate:dev
 npm run dev
 ```
 
+The root dev launcher now:
+
+- creates `apps/api/.env` and `apps/web/.env.local` from their examples when missing
+- keeps the frontend pointed at the backend automatically
+- falls forward to the next free port if `4000` or `5173` is already in use
+
 Default local app URLs:
 
 - web: `http://localhost:5173`

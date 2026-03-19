@@ -1,29 +1,45 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { endOfWeek, format, startOfWeek } from "date-fns";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookOpenText, Eye, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PaginationControls } from "@/components/PaginationControls";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { toast } from "@/components/ui/sonner";
+import { DataBadge } from "@/components/DataBadge";
+import { EmptyState } from "@/components/EmptyState";
+import { FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
+import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { PaginationControls } from "@/components/PaginationControls";
 import { ReviewContent } from "@/components/ReviewContent";
 import { ReviewListSummary } from "@/components/ReviewListSummary";
+import { StatCard } from "@/components/StatCard";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { createReview, deleteReview, listReviews, updateReview } from "@/lib/api/reviews";
+import { getTrade } from "@/lib/api/trades";
 import { getPageErrorState } from "@/lib/page-errors";
+import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
 import { getReviewScope, getReviewTitle } from "@/lib/reviews";
-import { getTrade } from "@/lib/api/trades";
 import {
   REVIEW_EMOTIONS,
   REVIEW_RISK_STATUSES,
@@ -32,8 +48,8 @@ import {
   type ReviewEmotion,
   type ReviewRiskStatus,
   type ReviewRuleStatus,
-  type ReviewType,
   type ReviewTradeSnapshot,
+  type ReviewType,
   type Trade,
 } from "@/lib/types";
 
@@ -97,6 +113,12 @@ function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null): Trade | n
   };
 }
 
+function scopeTone(scope: ReviewType) {
+  if (scope === "daily") return "primary" as const;
+  if (scope === "weekly") return "warning" as const;
+  return "success" as const;
+}
+
 export default function Reviews() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -123,21 +145,20 @@ export default function Reviews() {
       sortBy,
       sortOrder,
     }),
-    queryFn: async () => {
-      return listReviews({
-        page,
-        pageSize: REVIEWS_PAGE_SIZE,
-        type: scopeFilter === "all" ? undefined : scopeFilter,
-        sortBy,
-        sortOrder,
-      });
-    },
+    queryFn: async () => withMinimumDelay(() => listReviews({
+      page,
+      pageSize: REVIEWS_PAGE_SIZE,
+      type: scopeFilter === "all" ? undefined : scopeFilter,
+      sortBy,
+      sortOrder,
+    })),
   });
 
   const visibleReviews = reviewsQuery.data?.items;
   const reviews = visibleReviews ?? [];
   const totalReviewPages = reviewsQuery.data?.pagination.totalPages ?? 1;
   const totalReviews = reviewsQuery.data?.pagination.total ?? 0;
+
   const linkedTradeQueries = useQueries({
     queries: (visibleReviews ?? [])
       .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
@@ -149,6 +170,7 @@ export default function Reviews() {
         },
       })),
   });
+
   const linkedTradeMap = useMemo(() => {
     let queryIndex = 0;
 
@@ -162,6 +184,7 @@ export default function Reviews() {
         }),
     );
   }, [linkedTradeQueries, visibleReviews]);
+
   const viewingTrade = useMemo(() => {
     if (!viewingReview || getReviewScope(viewingReview) !== "trade") {
       return null;
@@ -302,11 +325,6 @@ export default function Reviews() {
           return;
         }
       }
-
-      if (!linkedTrade) {
-        toast.error("Linked trade not found. This review can still be viewed.");
-        return;
-      }
     }
 
     setEditingReview(review);
@@ -339,8 +357,19 @@ export default function Reviews() {
     setOpen(true);
   };
 
+  const reviewMix = useMemo(() => {
+    return reviews.reduce(
+      (acc, review) => {
+        const scope = getReviewScope(review);
+        acc[scope] += 1;
+        return acc;
+      },
+      { daily: 0, weekly: 0, trade: 0 } as Record<ReviewType, number>,
+    );
+  }, [reviews]);
+
   if (reviewsQuery.isLoading && !reviewsQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading reviews...</div>;
+    return <ReviewsSkeleton />;
   }
 
   if (reviewsQuery.isError) {
@@ -365,78 +394,75 @@ export default function Reviews() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1440px] space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Reviews</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Capture daily, weekly, and trade-level reflection without relying on local-only journal data.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" size="sm" onClick={() => openCreateModal("daily")}>
-              <Plus className="mr-1 h-4 w-4" />
+    <PageShell size="wide">
+      <PageHeader
+        title="Reviews"
+        actions={(
+          <>
+            <Button variant="outline" onClick={() => openCreateModal("daily")}>
+              <Plus className="h-4 w-4" />
               Daily Review
             </Button>
-            <Button size="sm" onClick={() => openCreateModal("weekly")}>
-              <Plus className="mr-1 h-4 w-4" />
+            <Button onClick={() => openCreateModal("weekly")}>
+              <Plus className="h-4 w-4" />
               Weekly Review
             </Button>
-          </div>
-        </div>
+          </>
+        )}
+      />
 
-        <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl border bg-muted/40 p-1 sm:w-[420px]">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="daily">Daily</TabsTrigger>
-              <TabsTrigger value="weekly">Weekly</TabsTrigger>
-              <TabsTrigger value="trade">Trade</TabsTrigger>
-            </TabsList>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard label="Reviews" value={String(totalReviews)} icon={BookOpenText} />
+        <StatCard label="Daily / Weekly" value={`${reviewMix.daily}/${reviewMix.weekly}`} icon={Sparkles} />
+        <StatCard label="Trade Reviews" value={String(reviewMix.trade)} icon={Eye} />
+      </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="min-w-0 space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Sort By</p>
+      <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <TabsList className="grid h-auto w-full grid-cols-4 sm:max-w-[460px]">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="daily">Daily</TabsTrigger>
+            <TabsTrigger value="weekly">Weekly</TabsTrigger>
+            <TabsTrigger value="trade">Trade</TabsTrigger>
+          </TabsList>
+
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <div className="w-full sm:w-[180px]">
+              <FilterField label="Sort By">
                 <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80 sm:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="updatedAt">Updated At</SelectItem>
                     <SelectItem value="createdAt">Created At</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </FilterField>
+            </div>
 
-              <div className="min-w-0 space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Order</p>
+            <div className="w-full sm:w-[180px]">
+              <FilterField label="Order">
                 <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
-                  <SelectTrigger className="h-10 rounded-xl border-border/70 bg-background/80 sm:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="desc">Descending</SelectItem>
                     <SelectItem value="asc">Ascending</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="rounded-2xl border bg-background/60 px-4 py-3 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{totalReviews}</span> {totalReviews === 1 ? "review" : "reviews"}
-              </div>
+              </FilterField>
             </div>
           </div>
+        </div>
 
-          <TabsContent value={scopeFilter} className="mt-6">
-            {reviews.length === 0 ? (
-              <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
-                <p className="text-base font-medium text-foreground">No reviews yet.</p>
-                <p className="mt-2 text-sm text-muted-foreground">Create a daily or weekly review, or review a trade after you log it.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
+        <TabsContent value={scopeFilter} className="space-y-5">
+          {reviews.length === 0 ? (
+            <EmptyState
+              icon={BookOpenText}
+              title="No reviews yet"
+              description="Create a review to populate this view."
+            />
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-5 lg:grid-cols-2">
                 {reviews.map((review) => {
                   const scope = getReviewScope(review);
                   const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
@@ -444,60 +470,68 @@ export default function Reviews() {
                   const summaryTrade = linkedTrade ?? snapshotTrade;
 
                   return (
-                    <article key={review.id} className="rounded-2xl border bg-card p-6 shadow-sm">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-4">
+                    <SectionCard
+                      key={review.id}
+                      className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-28px_rgba(15,23,42,0.32)]"
+                    >
+                      <div className="flex h-full flex-col gap-5">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                           <div>
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{scope} review</p>
-                            <h2 className="mt-2 text-lg font-semibold text-foreground">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <DataBadge tone={scopeTone(scope)}>{scope}</DataBadge>
+                              <p className="text-sm text-muted-foreground">Updated {new Date(review.updatedAt).toLocaleDateString("en-US")}</p>
+                            </div>
+                            <h2 className="mt-3 text-lg font-medium text-foreground">
                               {getReviewTitle(review, summaryTrade)}
                             </h2>
                           </div>
 
+                          <div className="flex flex-wrap gap-2 opacity-100 transition-opacity group-hover:opacity-100">
+                            <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
+                              <Eye className="h-4 w-4" />
+                              View
+                            </Button>
+                            {scope === "trade" && review.tradeId ? (
+                              <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${review.tradeId}`)}>
+                                View Trade
+                              </Button>
+                            ) : null}
+                            <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
+                              <Pencil className="h-4 w-4" />
+                              Edit
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="surface-muted px-4 py-4">
                           <ReviewListSummary review={review} linkedTrade={summaryTrade} />
                         </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-                            <Eye className="mr-1 h-4 w-4" />
-                            View
-                          </Button>
-                          {scope === "trade" && review.tradeId ? (
-                            <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${review.tradeId}`)}>
-                              View Trade
-                            </Button>
-                          ) : null}
-                          <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
-                            <Pencil className="mr-1 h-4 w-4" />
-                            Edit
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-                            <Trash2 className="mr-1 h-4 w-4" />
-                            Delete
-                          </Button>
-                        </div>
                       </div>
-                    </article>
+                    </SectionCard>
                   );
                 })}
-
-                <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                  <PaginationControls
-                    currentPage={page}
-                    totalPages={totalReviewPages}
-                    itemLabel="review pages"
-                    onPrevious={() => setPage((current) => Math.max(1, current - 1))}
-                    onNext={() => setPage((current) => Math.min(totalReviewPages, current + 1))}
-                  />
-                </div>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+
+              <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/70">
+                <PaginationControls
+                  currentPage={page}
+                  totalPages={totalReviewPages}
+                  itemLabel="review pages"
+                  onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+                  onNext={() => setPage((current) => Math.min(totalReviewPages, current + 1))}
+                />
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto rounded-2xl">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto rounded-[1.75rem]">
           <DialogHeader>
             <DialogTitle>{editingReview ? "Edit Review" : reviewType === "daily" ? "Create Daily Review" : "Create Weekly Review"}</DialogTitle>
           </DialogHeader>
@@ -505,12 +539,12 @@ export default function Reviews() {
           {reviewType === "daily" ? (
             <div className="grid gap-4">
               <div className="space-y-2">
-                <Label>Review Date</Label>
+                <Label className="text-label">Review Date</Label>
                 <Input type="date" value={dailyForm.reviewDate} onChange={(event) => setDailyForm((current) => ({ ...current, reviewDate: event.target.value }))} />
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>Followed Rules</Label>
+                  <Label className="text-label">Followed Rules</Label>
                   <Select value={dailyForm.followedRules} onValueChange={(value) => setDailyForm((current) => ({ ...current, followedRules: value as ReviewRuleStatus }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -519,7 +553,7 @@ export default function Reviews() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Emotion</Label>
+                  <Label className="text-label">Emotion</Label>
                   <Select value={dailyForm.emotion} onValueChange={(value) => setDailyForm((current) => ({ ...current, emotion: value as ReviewEmotion }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -528,24 +562,24 @@ export default function Reviews() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Discipline Score</Label>
+                  <Label className="text-label">Discipline Score</Label>
                   <Input value={dailyForm.disciplineScore} onChange={(event) => setDailyForm((current) => ({ ...current, disciplineScore: event.target.value }))} />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>What Went Well</Label>
+                <Label className="text-label">What Went Well</Label>
                 <Textarea rows={4} value={dailyForm.wentWell} onChange={(event) => setDailyForm((current) => ({ ...current, wentWell: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Mistakes</Label>
+                <Label className="text-label">Mistakes</Label>
                 <Textarea rows={4} value={dailyForm.mistakes} onChange={(event) => setDailyForm((current) => ({ ...current, mistakes: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Lesson Learned</Label>
+                <Label className="text-label">Lesson Learned</Label>
                 <Textarea rows={4} value={dailyForm.lessonLearned} onChange={(event) => setDailyForm((current) => ({ ...current, lessonLearned: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Improvement Plan</Label>
+                <Label className="text-label">Improvement Plan</Label>
                 <Textarea rows={4} value={dailyForm.improvementPlan} onChange={(event) => setDailyForm((current) => ({ ...current, improvementPlan: event.target.value }))} />
               </div>
             </div>
@@ -553,17 +587,17 @@ export default function Reviews() {
             <div className="grid gap-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Week Start</Label>
+                  <Label className="text-label">Week Start</Label>
                   <Input type="date" value={weeklyForm.weekStart} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekStart: event.target.value }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Week End</Label>
+                  <Label className="text-label">Week End</Label>
                   <Input type="date" value={weeklyForm.weekEnd} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekEnd: event.target.value }))} />
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Risk Management</Label>
+                  <Label className="text-label">Risk Management</Label>
                   <Select value={weeklyForm.riskManagement} onValueChange={(value) => setWeeklyForm((current) => ({ ...current, riskManagement: value as ReviewRiskStatus }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -572,34 +606,34 @@ export default function Reviews() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Weekly Rating</Label>
+                  <Label className="text-label">Weekly Rating</Label>
                   <Input value={weeklyForm.weeklyRating} onChange={(event) => setWeeklyForm((current) => ({ ...current, weeklyRating: event.target.value }))} />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Weekly Summary</Label>
+                <Label className="text-label">Weekly Summary</Label>
                 <Textarea rows={4} value={weeklyForm.weeklySummary} onChange={(event) => setWeeklyForm((current) => ({ ...current, weeklySummary: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Biggest Win</Label>
+                <Label className="text-label">Biggest Win</Label>
                 <Textarea rows={4} value={weeklyForm.biggestWin} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestWin: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Biggest Mistake</Label>
+                <Label className="text-label">Biggest Mistake</Label>
                 <Textarea rows={4} value={weeklyForm.biggestMistake} onChange={(event) => setWeeklyForm((current) => ({ ...current, biggestMistake: event.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Next Goal</Label>
+                <Label className="text-label">Next Goal</Label>
                 <Textarea rows={4} value={weeklyForm.nextGoal} onChange={(event) => setWeeklyForm((current) => ({ ...current, nextGoal: event.target.value }))} />
               </div>
             </div>
           )}
 
           <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button className="w-full sm:w-auto" onClick={() => dailyWeeklyMutation.mutate()} disabled={dailyWeeklyMutation.isPending}>
+            <Button onClick={() => dailyWeeklyMutation.mutate()} disabled={dailyWeeklyMutation.isPending}>
               {dailyWeeklyMutation.isPending ? "Saving..." : editingReview ? "Save Changes" : "Save Review"}
             </Button>
           </div>
@@ -607,7 +641,7 @@ export default function Reviews() {
       </Dialog>
 
       <Dialog open={Boolean(viewingReview)} onOpenChange={(openState) => !openState && setViewingReview(null)}>
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-4xl overflow-y-auto rounded-2xl">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-4xl overflow-y-auto rounded-[1.75rem]">
           <DialogHeader>
             <DialogTitle>{viewingReview ? getReviewTitle(viewingReview, viewingTrade) : "Review Details"}</DialogTitle>
           </DialogHeader>
@@ -616,7 +650,7 @@ export default function Reviews() {
       </Dialog>
 
       {tradeReviewTrade ? (
-      <TradeReviewDialog
+        <TradeReviewDialog
           open={Boolean(tradeReviewTrade)}
           onOpenChange={(openState) => {
             if (!openState) {
@@ -649,6 +683,6 @@ export default function Reviews() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

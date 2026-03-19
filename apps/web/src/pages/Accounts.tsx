@@ -1,14 +1,28 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bitcoin, FlaskConical, Landmark, Pencil, Plus, Trash2, Trophy, UserRound } from "lucide-react";
+import { Bitcoin, FlaskConical, Landmark, Pencil, Plus, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
+import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
+import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
+import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { StatCard } from "@/components/StatCard";
+import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
@@ -17,18 +31,17 @@ import { getAnalyticsBreakdowns } from "@/lib/api/analytics";
 import { setStoredAccountFilter } from "@/lib/account-filter";
 import {
   ACCOUNT_CURRENCY_MAX_LENGTH,
-  ACCOUNT_CURRENCY_MIN_LENGTH,
   ACCOUNT_NAME_MAX_LENGTH,
   getAccountApiErrorMessage,
   validateAccountForm,
 } from "@/lib/account-validation";
+import { formatCurrencyDisplay, formatPercentageDisplay } from "@/lib/analytics-rendering";
 import { getPageErrorState } from "@/lib/page-errors";
+import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
 import type { Account, AccountType } from "@/lib/types";
 import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/lib/types";
-
-const summaryCardClass = "rounded-xl border bg-card p-5 shadow-sm";
-const accountCardClass = "rounded-xl border bg-card p-6 shadow-sm";
+import { cn } from "@/lib/utils";
 
 type AccountFormState = {
   name: string;
@@ -46,13 +59,6 @@ const emptyForm: AccountFormState = {
   currency: "USD",
 };
 
-const usdFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 function formatBalance(balance: number, currency: string): string {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -62,35 +68,29 @@ function formatBalance(balance: number, currency: string): string {
       maximumFractionDigits: 2,
     }).format(balance);
   } catch {
-    return `${currency || "USD"} ${usdFormatter.format(balance).replace("$", "")}`;
+    return `${currency || "USD"} ${balance.toFixed(2)}`;
   }
 }
 
-function formatPnl(value: number) {
-  if (value > 0) return `+${usdFormatter.format(value)}`;
-  if (value < 0) return `-${usdFormatter.format(Math.abs(value))}`;
-  return usdFormatter.format(0);
-}
-
 function getProfitTone(value: number) {
-  if (value > 0) return "text-emerald-600";
-  if (value < 0) return "text-rose-600";
+  if (value > 0) return "text-success";
+  if (value < 0) return "text-danger";
   return "text-foreground";
 }
 
 function getAccountIcon(type: AccountType) {
   switch (type) {
     case "Funded":
-      return { icon: Trophy, className: "bg-emerald-50 text-emerald-600" };
+      return { icon: Trophy, badgeTone: "success" as const };
     case "Challenge":
-      return { icon: Landmark, className: "bg-amber-50 text-amber-600" };
+      return { icon: Landmark, badgeTone: "warning" as const };
     case "Demo":
-      return { icon: FlaskConical, className: "bg-sky-50 text-sky-600" };
+      return { icon: FlaskConical, badgeTone: "primary" as const };
     case "Crypto":
-      return { icon: Bitcoin, className: "bg-orange-50 text-orange-600" };
+      return { icon: Bitcoin, badgeTone: "warning" as const };
     case "Personal":
     default:
-      return { icon: UserRound, className: "bg-slate-100 text-slate-600" };
+      return { icon: UserRound, badgeTone: "neutral" as const };
   }
 }
 
@@ -117,10 +117,11 @@ export default function Accounts() {
   const accountsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "accounts"),
     queryFn: async () => {
-      const response = await listAccounts();
+      const response = await withMinimumDelay(() => listAccounts());
       return response.items;
     },
   });
+
   const breakdownsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "analytics-breakdowns", "all"),
     queryFn: () => getAnalyticsBreakdowns(),
@@ -218,18 +219,8 @@ export default function Accounts() {
     saveMutation.mutate(form);
   };
 
-  const handleOpenDashboard = (accountId: string) => {
-    setStoredAccountFilter(accountId);
-    navigate("/dashboard");
-  };
-
-  const handleOpenAnalytics = (accountId: string) => {
-    setStoredAccountFilter(accountId);
-    navigate("/analytics");
-  };
-
   if (accountsQuery.isLoading && !accountsQuery.data) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading accounts...</div>;
+    return <AccountsSkeleton />;
   }
 
   if (accountsQuery.isError) {
@@ -254,263 +245,263 @@ export default function Accounts() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1440px]">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground sm:text-2xl">Accounts</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Track each account like its own trading business with clean account-level visibility.
-            </p>
-          </div>
-
-          <Button size="sm" onClick={openCreateModal} className="w-full sm:w-auto">
-            <Plus className="mr-1 h-4 w-4" />
+    <PageShell size="wide">
+      <PageHeader
+        title="Accounts"
+        actions={(
+          <Button onClick={openCreateModal}>
+            <Plus className="h-4 w-4" />
             Add Account
           </Button>
-        </div>
+        )}
+      />
 
-        <div className="mb-8 grid gap-4 md:grid-cols-3">
-          <div className={summaryCardClass}>
-            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Total Accounts</p>
-            <p className="mt-3 text-3xl font-semibold text-foreground">{accounts.length}</p>
-          </div>
-          <div className={summaryCardClass}>
-            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Combined Balance</p>
-            <p className="mt-3 text-3xl font-semibold text-foreground">{usdFormatter.format(totalBalance)}</p>
-          </div>
-          <div className={summaryCardClass}>
-            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Total PnL</p>
-            <p className={`mt-3 text-3xl font-semibold ${totalPnl > 0 ? "text-emerald-600" : totalPnl < 0 ? "text-rose-600" : "text-foreground"}`}>
-              {formatPnl(totalPnl)}
-            </p>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard label="Total Accounts" value={String(accounts.length)} icon={Wallet} />
+        <StatCard label="Combined Balance" value={formatCurrencyDisplay(totalBalance, { showPlus: false })} icon={Landmark} />
+        <StatCard
+          label="Total PnL"
+          value={formatCurrencyDisplay(totalPnl)}
+          tone={totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "default"}
+          icon={Trophy}
+        />
+      </div>
 
-        {accounts.length === 0 ? (
-          <div className="rounded-2xl border bg-card p-16 text-center shadow-sm">
-            <p className="text-base font-medium text-foreground">No accounts yet.</p>
-            <p className="mt-2 text-sm text-muted-foreground">Create your first account to start logging trades and tracking performance.</p>
-            <Button className="mt-4" size="sm" onClick={openCreateModal}>
-              <Plus className="mr-1 h-4 w-4" />
+      {accounts.length === 0 ? (
+        <EmptyState
+          icon={Wallet}
+          title="No accounts created yet"
+          description="Add an account to start tracking performance."
+          action={(
+            <Button onClick={openCreateModal}>
+              <Plus className="h-4 w-4" />
               Create your first account
             </Button>
-          </div>
-        ) : (
-          <div className="grid gap-6 xl:grid-cols-2">
-            {accounts.map((account) => {
-              const iconData = getAccountIcon(account.type);
-              const Icon = iconData.icon;
-              const performance = accountPerformance[account.id];
+          )}
+        />
+      ) : (
+        <div className="grid gap-5 xl:grid-cols-2">
+          {accounts.map((account) => {
+            const performance = accountPerformance[account.id];
+            const iconData = getAccountIcon(account.type);
+            const Icon = iconData.icon;
 
-              return (
-                <article key={account.id} className={accountCardClass}>
-                  <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            return (
+              <SectionCard
+                key={account.id}
+                className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-28px_rgba(15,23,42,0.32)]"
+              >
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-4">
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${iconData.className}`}>
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/80 text-foreground">
                         <Icon className="h-5 w-5" />
                       </div>
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-semibold text-foreground">{account.name}</h2>
-                          {account.isDefault ? (
-                            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                              Default
-                            </span>
-                          ) : null}
+                          <h2 className="text-lg font-medium text-foreground">{account.name}</h2>
+                          <DataBadge tone={iconData.badgeTone}>{account.type}</DataBadge>
+                          {account.isDefault ? <DataBadge tone="primary">Default</DataBadge> : null}
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {account.type} • {account.broker}
-                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">{account.broker}</p>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-2 opacity-100 transition-opacity group-hover:opacity-100">
                       <Button variant="outline" size="sm" onClick={() => openEditModal(account)}>
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="h-4 w-4" />
                         Edit
                       </Button>
                       <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(account)}>
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
                     </div>
                   </div>
 
-                  <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-xl border bg-background/70 p-3">
-                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Balance</p>
-                      <p className="mt-2 text-lg font-semibold text-foreground">{formatBalance(account.balance, account.currency)}</p>
+                  <div className="surface-muted px-5 py-5">
+                    <p className="text-label mb-2">Balance</p>
+                    <p className="font-mono-price text-3xl font-semibold text-foreground">
+                      {formatBalance(account.balance, account.currency)}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="surface-muted px-4 py-4">
+                      <p className="text-label mb-2">Trades</p>
+                      <p className="text-lg font-semibold text-foreground">{formatNumberSafe(performance?.trades)}</p>
                     </div>
-                    <div className="rounded-xl border bg-background/70 p-3">
-                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Trades</p>
-                      <p className="mt-2 text-lg font-semibold text-foreground">{performance?.trades ?? 0}</p>
-                    </div>
-                    <div className="rounded-xl border bg-background/70 p-3">
-                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">PnL</p>
-                      <p className={`mt-2 text-lg font-semibold ${getProfitTone(performance?.profit ?? 0)}`}>
-                        {formatPnl(performance?.profit ?? 0)}
+                    <div className="surface-muted px-4 py-4">
+                      <p className="text-label mb-2">PnL</p>
+                      <p className={cn("font-mono-price text-lg font-semibold", getProfitTone(performance?.profit ?? 0))}>
+                        {formatCurrencyDisplay(performance?.profit ?? 0)}
                       </p>
                     </div>
-                    <div className="rounded-xl border bg-background/70 p-3">
-                      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Win Rate</p>
-                      <p className="mt-2 text-lg font-semibold text-foreground">{(performance?.winRate ?? 0).toFixed(1)}%</p>
+                    <div className="surface-muted px-4 py-4">
+                      <p className="text-label mb-2">Win Rate</p>
+                      <p className="text-lg font-semibold text-foreground">{formatPercentageDisplay(performance?.winRate ?? 0)}</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
                       Created {new Date(account.createdAt).toLocaleDateString("en-US")}
                     </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleOpenDashboard(account.id)}>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setStoredAccountFilter(account.id);
+                          navigate("/dashboard");
+                        }}
+                      >
                         View Overview
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenAnalytics(account.id)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setStoredAccountFilter(account.id);
+                          navigate("/analytics");
+                        }}
+                      >
                         View Analytics
                       </Button>
                     </div>
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
+                </div>
+              </SectionCard>
+            );
+          })}
+        </div>
+      )}
 
-        <Dialog
-          open={open}
-          onOpenChange={(nextOpen) => {
-            setOpen(nextOpen);
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
 
-            if (!nextOpen) {
-              setEditingAccount(null);
-              setForm(emptyForm);
-              setFormError("");
-            }
-          }}
-        >
-          <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingAccount ? "Edit Account" : "Add Account"}</DialogTitle>
-            </DialogHeader>
+          if (!nextOpen) {
+            setEditingAccount(null);
+            setForm(emptyForm);
+            setFormError("");
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-[1.75rem]">
+          <DialogHeader>
+            <DialogTitle>{editingAccount ? "Edit Account" : "Add Account"}</DialogTitle>
+          </DialogHeader>
 
-            <div className="grid gap-4">
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label className="text-label">Account Name</Label>
+              <Input
+                maxLength={ACCOUNT_NAME_MAX_LENGTH}
+                placeholder="Primary Account"
+                value={form.name}
+                onChange={(event) => {
+                  setForm((current) => ({ ...current, name: event.target.value }));
+                  setFormError("");
+                }}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Account Name</Label>
+                <Label className="text-label">Broker</Label>
+                <Select value={form.broker} onValueChange={(value) => {
+                  setForm((current) => ({ ...current, broker: value }));
+                  setFormError("");
+                }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ACCOUNT_BROKERS.map((broker) => (
+                      <SelectItem key={broker} value={broker}>{broker}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-label">Type</Label>
+                <Select value={form.type} onValueChange={(value) => {
+                  setForm((current) => ({ ...current, type: value as AccountType }));
+                  setFormError("");
+                }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ACCOUNT_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-label">Balance</Label>
                 <Input
-                  maxLength={ACCOUNT_NAME_MAX_LENGTH}
-                  placeholder="Primary Account"
-                  value={form.name}
+                  inputMode="decimal"
+                  placeholder="10000"
+                  value={form.balance}
                   onChange={(event) => {
-                    setForm((current) => ({ ...current, name: event.target.value }));
+                    setForm((current) => ({ ...current, balance: event.target.value }));
                     setFormError("");
                   }}
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Broker</Label>
-                  <Select value={form.broker} onValueChange={(value) => {
-                    setForm((current) => ({ ...current, broker: value }));
+              <div className="space-y-2">
+                <Label className="text-label">Currency</Label>
+                <Input
+                  maxLength={ACCOUNT_CURRENCY_MAX_LENGTH}
+                  placeholder="USD"
+                  value={form.currency}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }));
                     setFormError("");
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_BROKERS.map((broker) => (
-                        <SelectItem key={broker} value={broker}>
-                          {broker}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Account Type</Label>
-                  <Select value={form.type} onValueChange={(value) => {
-                    setForm((current) => ({ ...current, type: value as AccountType }));
-                    setFormError("");
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Balance</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={form.balance}
-                    onChange={(event) => {
-                      setForm((current) => ({ ...current, balance: event.target.value }));
-                      setFormError("");
-                    }}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Currency</Label>
-                  <Input
-                    maxLength={ACCOUNT_CURRENCY_MAX_LENGTH}
-                    value={form.currency}
-                    onChange={(event) => {
-                      setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }));
-                      setFormError("");
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {ACCOUNT_CURRENCY_MIN_LENGTH}-{ACCOUNT_CURRENCY_MAX_LENGTH} characters.
-                  </p>
-                </div>
+                  }}
+                />
               </div>
             </div>
 
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 
-            <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button className="w-full sm:w-auto" onClick={handleSaveAccount} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : editingAccount ? "Save Changes" : "Save Account"}
+              <Button onClick={handleSaveAccount} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Saving..." : editingAccount ? "Save Changes" : "Create Account"}
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-        <AlertDialog open={!!deleteTarget} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Account</AlertDialogTitle>
-              <AlertDialogDescription>
-                {deleteTarget?.name
-                  ? `Delete ${deleteTarget.name}? This only works when the account has no active trades.`
-                  : "Delete this account?"}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending}>
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </div>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone and may affect existing trade references.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </PageShell>
   );
+}
+
+function formatNumberSafe(value: number | undefined) {
+  return typeof value === "number" ? value.toLocaleString("en-US") : "0";
 }

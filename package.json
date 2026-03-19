@@ -6,18 +6,18 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,api -c cyan,green \"npm run dev:web\" \"npm run dev:api\"",
-    "dev:web": "npm run dev --workspace @izledger/web",
-    "dev:api": "npm run dev --workspace @izledger/api",
+    "dev": "bash -lc \"/usr/bin/node ./scripts/dev.mjs\"",
+    "dev:web": "bash -lc \"cd apps/web && /usr/bin/node ../../node_modules/vite/bin/vite.js\"",
+    "dev:api": "bash -lc \"cd apps/api && TMPDIR=/tmp TMP=/tmp TEMP=/tmp /usr/bin/node ../../node_modules/tsx/dist/cli.mjs watch src/server.ts\"",
     "build": "npm run build --workspaces --if-present",
     "build:web": "npm run build --workspace @izledger/web",
     "build:api": "npm run build --workspace @izledger/api",
     "test": "npm run test --workspace @izledger/web",
     "lint": "npm run lint --workspace @izledger/web",
-    "prisma:generate": "npm run prisma:generate --workspace @izledger/api",
-    "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace @izledger/api",
-    "prisma:migrate:deploy": "npm run prisma:migrate:deploy --workspace @izledger/api",
-    "prisma:studio": "npm run prisma:studio --workspace @izledger/api"
+    "prisma:generate": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js generate\"",
+    "prisma:migrate:dev": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js migrate dev\"",
+    "prisma:migrate:deploy": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js migrate deploy\"",
+    "prisma:studio": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js studio\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

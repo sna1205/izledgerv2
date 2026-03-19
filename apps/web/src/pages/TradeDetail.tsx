@@ -4,6 +4,7 @@ import { format, parseISO } from "date-fns";
 import { ArrowLeft, Camera, CameraOff, CheckCircle2, Clock3, ImagePlus, Pencil, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
+import { TradeDetailSkeleton } from "@/components/skeletons/TradeDetailSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -22,6 +23,7 @@ import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
 import { listSetups } from "@/lib/api/setups";
 import { deleteTrade, getTrade, updateTrade } from "@/lib/api/trades";
 import { useAuth } from "@/lib/auth";
+import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
 import type { Review, Trade } from "@/lib/types";
@@ -209,7 +211,7 @@ export default function TradeDetail() {
   const tradeQuery = useQuery({
     queryKey: privateQueryKey(user.id, "trades", "detail", id),
     queryFn: async () => {
-      const response = await getTrade(id);
+      const response = await withMinimumDelay(() => getTrade(id));
       return response.trade;
     },
     enabled: Boolean(id),
@@ -315,7 +317,7 @@ export default function TradeDetail() {
   const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
 
   if (isTradeLoading) {
-    return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading trade...</div>;
+    return <TradeDetailSkeleton />;
   }
 
   if (tradeError) {
@@ -354,7 +356,7 @@ export default function TradeDetail() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="page-enter p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1500px] space-y-6">
         <section className="rounded-[28px] border bg-card p-5 shadow-sm sm:p-6 lg:p-8">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">

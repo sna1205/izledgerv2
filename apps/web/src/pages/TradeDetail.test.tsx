@@ -195,7 +195,7 @@ describe("TradeDetail", () => {
 
     renderTradeDetail();
 
-    expect(screen.getByText("Loading trade...")).toBeInTheDocument();
+    expect(screen.getByTestId("trade-detail-skeleton")).toBeInTheDocument();
 
     deferredTrade.resolve({ trade: baseTrade });
 
@@ -209,7 +209,7 @@ describe("TradeDetail", () => {
 
     renderTradeDetail();
 
-    expect(screen.getByText("Loading trade...")).toBeInTheDocument();
+    expect(screen.getByTestId("trade-detail-skeleton")).toBeInTheDocument();
 
     deferredTrade.resolve({ trade: baseTrade });
 

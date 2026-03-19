@@ -3,12 +3,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
 export function ProtectedRoute() {
-  const { isReady, user, sessionMessage, sessionState, refreshSession } = useAuth();
+  const { user, sessionMessage, sessionState, refreshSession } = useAuth();
   const location = useLocation();
-
-  if (!isReady) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading session...</div>;
-  }
 
   if (!user && sessionState === "backend-unavailable") {
     return (

@@ -5,10 +5,10 @@ export function ResultBadge({ result }: { result: Result }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium",
         result === "Win"
-          ? "bg-success/10 text-success"
-          : "bg-danger/10 text-danger"
+          ? "border-success/20 bg-success/10 text-success"
+          : "border-danger/20 bg-danger/10 text-danger"
       )}
     >
       {result}

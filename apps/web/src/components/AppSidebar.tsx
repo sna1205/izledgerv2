@@ -36,9 +36,16 @@ export function AppSidebar() {
       <SidebarContent>
         <div className="px-4 py-5">
           {!collapsed && (
-            <div className="space-y-1">
-              <h1 className="text-sm font-semibold tracking-tight text-foreground">IZLedger</h1>
-              <p className="text-xs text-muted-foreground">Trading journal</p>
+            <div className="surface-muted space-y-3 px-4 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h1 className="text-sm font-semibold tracking-tight text-sidebar-foreground">IZLedger</h1>
+                  <p className="text-xs text-muted-foreground">Trading Journal</p>
+                </div>
+                <div className="rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-success">
+                  Live
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -51,8 +58,8 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/dashboard"}
-                      className="min-h-11 rounded-xl px-2 py-2 hover:bg-accent/50"
-                      activeClassName="bg-accent text-foreground font-medium"
+                      className="min-h-11 rounded-2xl px-3 py-2 text-sm text-sidebar-foreground/78 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      activeClassName="bg-sidebar-accent text-sidebar-foreground font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_16px_30px_-18px_rgba(0,0,0,0.72)] ring-1 ring-white/10"
                       onClick={() => {
                         if (isMobile) {
                           setOpenMobile(false);
@@ -70,14 +77,13 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="flex items-center gap-3 rounded-xl border bg-background/70 px-3 py-3">
-          <Avatar className="h-9 w-9 border">
-            <AvatarFallback className="bg-muted text-xs font-medium">{initials}</AvatarFallback>
+        <div className="surface-muted flex items-center gap-3 px-3 py-3">
+          <Avatar className="h-9 w-9 border border-sidebar-border/80">
+            <AvatarFallback className="bg-sidebar-accent text-xs font-medium text-sidebar-foreground">{initials}</AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">{user?.username}</p>
-              <p className="text-xs text-muted-foreground">Logged in</p>
+              <p className="truncate text-sm font-medium text-sidebar-foreground">{user?.username}</p>
             </div>
           )}
         </div>

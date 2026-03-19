@@ -11,7 +11,7 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Settings from "@/pages/Settings";
 
-const AUTH_STORAGE_KEY = "izledger-auth-user";
+const LEGACY_AUTH_STORAGE_KEY = "izledger-auth-user";
 const originalFetch = global.fetch;
 const { toast } = vi.hoisted(() => ({
   toast: {
@@ -137,7 +137,7 @@ describe("auth session behavior", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the local session and shows a clear error when logout fails offline", async () => {
+  it("keeps the current in-memory session and shows a clear error when logout fails offline", async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(createJsonResponse({
         user: {
@@ -159,11 +159,27 @@ describe("auth session behavior", () => {
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Log in" })).not.toBeInTheDocument();
-    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toContain("\"username\":\"trader\"");
   });
 
-  it("restores the cached session after refresh when the previous logout failed", async () => {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+  it("boots the authenticated session without repeatedly refetching /auth/me", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createJsonResponse({
+      user: {
+        id: "user-1",
+        username: "trader",
+      },
+    })) as typeof fetch;
+
+    renderAuthRoutes();
+
+    await screen.findByText("trader");
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not trust a legacy browser auth cache when the server cannot verify the session", async () => {
+    localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, JSON.stringify({
       id: "user-1",
       username: "trader",
     }));
@@ -172,14 +188,15 @@ describe("auth session behavior", () => {
 
     renderAuthRoutes();
 
-    await screen.findByText("trader");
+    await screen.findByRole("heading", { name: "Unable to verify your session" });
 
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Log in" })).not.toBeInTheDocument();
+    expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
   });
 
   it("redirects to login with a session expired message when bootstrap returns 401", async () => {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, JSON.stringify({
       id: "user-1",
       username: "trader",
     }));
@@ -199,7 +216,7 @@ describe("auth session behavior", () => {
     await screen.findByRole("heading", { name: "Log in" });
 
     expect(screen.getByText("Your session expired. Please log in again.")).toBeInTheDocument();
-    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
   });
 
   it("blocks invalid registration payloads before submitting them", async () => {
@@ -369,7 +386,7 @@ describe("auth session behavior", () => {
   });
 
   it("treats invalid bootstrap credentials as a true session expiry", async () => {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, JSON.stringify({
       id: "user-1",
       username: "trader",
     }));
@@ -389,7 +406,7 @@ describe("auth session behavior", () => {
     await screen.findByRole("heading", { name: "Log in" });
 
     expect(screen.getByText("Your session expired. Please log in again.")).toBeInTheDocument();
-    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
   });
 
   it("clears the previous user's private caches when logging in as another user", async () => {
@@ -401,6 +418,10 @@ describe("auth session behavior", () => {
       },
     });
     queryClient.setQueryData(privateQueryKey("user-1", "trades", "list"), { items: [{ id: "trade-1" }] });
+    localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, JSON.stringify({
+      id: "legacy-user",
+      username: "legacy-user",
+    }));
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(createJsonResponse({
@@ -424,6 +445,6 @@ describe("auth session behavior", () => {
     await screen.findByText("next-user");
 
     expect(queryClient.getQueryData(privateQueryKey("user-1", "trades", "list"))).toBeUndefined();
-    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toContain("\"id\":\"user-2\"");
+    expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
   });
 });
