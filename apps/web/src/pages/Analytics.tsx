@@ -358,33 +358,15 @@ export default function Analytics() {
 
   const breakdowns = breakdownsQuery.data ?? normalizeAnalyticsBreakdownsResponse(null);
 
-  const accountRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.accountPerformance)),
-    [breakdowns.accountPerformance],
-  );
-  const pairRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.pairPerformance)),
-    [breakdowns.pairPerformance],
-  );
-  const emotionRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.emotionPerformance)),
-    [breakdowns.emotionPerformance],
-  );
-  const sessionRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.sessionPerformance)),
-    [breakdowns.sessionPerformance],
-  );
-  const outcomeRows = useMemo(
-    () => breakdowns.winLoss.map((entry, index) => ({
-      ...entry,
-      fill: index === 0 ? POSITIVE_BAR : NEGATIVE_BAR,
-    })),
-    [breakdowns.winLoss],
-  );
-  const riskDistribution = useMemo(
-    () => buildRiskDistribution(allDetailedTrades),
-    [allDetailedTrades],
-  );
+  const accountRows = createPerformanceDataset(sortRowsDescending(breakdowns.accountPerformance));
+  const pairRows = createPerformanceDataset(sortRowsDescending(breakdowns.pairPerformance));
+  const emotionRows = createPerformanceDataset(sortRowsDescending(breakdowns.emotionPerformance));
+  const sessionRows = createPerformanceDataset(sortRowsDescending(breakdowns.sessionPerformance));
+  const outcomeRows = breakdowns.winLoss.map((entry, index) => ({
+    ...entry,
+    fill: index === 0 ? POSITIVE_BAR : NEGATIVE_BAR,
+  }));
+  const riskDistribution = buildRiskDistribution(allDetailedTrades);
   const bestSession = sessionRows[0]?.label;
   const dominantOutcome = outcomeRows.reduce<(typeof outcomeRows)[number] | null>((winner, entry) => {
     if (winner === null || entry.value > winner.value) {
@@ -405,7 +387,7 @@ export default function Analytics() {
   }, null);
 
   const drawerTrades = breakdownDrawer?.trades ?? breakdownDrawerQuery.data ?? [];
-  const drawerStats = useMemo(() => buildBreakdownDrawerStats(drawerTrades), [drawerTrades]);
+  const drawerStats = buildBreakdownDrawerStats(drawerTrades);
 
   return (
     <>
