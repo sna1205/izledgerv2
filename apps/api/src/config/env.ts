@@ -52,7 +52,7 @@ const envSchema = z.object({
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(1),
-  STORAGE_ENABLED: booleanFromEnv.default(true),
+  STORAGE_ENABLED: booleanFromEnv.default(false),
   STORAGE_BUCKET: optionalStringFromEnv,
   STORAGE_REGION: z.string().default("auto"),
   STORAGE_ENDPOINT: optionalUrlFromEnv,
