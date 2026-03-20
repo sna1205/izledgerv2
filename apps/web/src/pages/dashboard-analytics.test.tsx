@@ -62,8 +62,15 @@ vi.mock("@/components/ui/chart", () => ({
 vi.mock("recharts", () => ({
   AreaChart: () => <div />,
   Area: () => null,
+  BarChart: () => <div />,
+  Bar: () => null,
   CartesianGrid: () => null,
+  Cell: () => null,
+  Pie: () => null,
+  PieChart: () => <div />,
   ReferenceLine: () => null,
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Tooltip: () => null,
   XAxis: () => null,
   YAxis: () => null,
 }));

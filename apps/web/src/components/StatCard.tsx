@@ -24,7 +24,7 @@ export function StatCard({ label, value, subtext, description, icon: Icon, tone 
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-label mb-2">{label}</p>
-          <p className={cn("text-3xl font-semibold tabular sm:text-[2rem]", toneClasses[tone])}>
+          <p className={cn("numeric-safe max-w-full text-3xl font-semibold tabular sm:text-[2rem]", toneClasses[tone])}>
             {value}
           </p>
           {subtext && (

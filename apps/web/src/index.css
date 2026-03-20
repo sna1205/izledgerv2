@@ -150,6 +150,11 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }
+  .numeric-safe {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.1;
+  }
   .page-enter {
     animation: page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1);
   }

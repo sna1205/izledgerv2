@@ -358,33 +358,15 @@ export default function Analytics() {
 
   const breakdowns = breakdownsQuery.data ?? normalizeAnalyticsBreakdownsResponse(null);
 
-  const accountRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.accountPerformance)),
-    [breakdowns.accountPerformance],
-  );
-  const pairRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.pairPerformance)),
-    [breakdowns.pairPerformance],
-  );
-  const emotionRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.emotionPerformance)),
-    [breakdowns.emotionPerformance],
-  );
-  const sessionRows = useMemo(
-    () => createPerformanceDataset(sortRowsDescending(breakdowns.sessionPerformance)),
-    [breakdowns.sessionPerformance],
-  );
-  const outcomeRows = useMemo(
-    () => breakdowns.winLoss.map((entry, index) => ({
-      ...entry,
-      fill: index === 0 ? POSITIVE_BAR : NEGATIVE_BAR,
-    })),
-    [breakdowns.winLoss],
-  );
-  const riskDistribution = useMemo(
-    () => buildRiskDistribution(allDetailedTrades),
-    [allDetailedTrades],
-  );
+  const accountRows = createPerformanceDataset(sortRowsDescending(breakdowns.accountPerformance));
+  const pairRows = createPerformanceDataset(sortRowsDescending(breakdowns.pairPerformance));
+  const emotionRows = createPerformanceDataset(sortRowsDescending(breakdowns.emotionPerformance));
+  const sessionRows = createPerformanceDataset(sortRowsDescending(breakdowns.sessionPerformance));
+  const outcomeRows = breakdowns.winLoss.map((entry, index) => ({
+    ...entry,
+    fill: index === 0 ? POSITIVE_BAR : NEGATIVE_BAR,
+  }));
+  const riskDistribution = buildRiskDistribution(allDetailedTrades);
   const bestSession = sessionRows[0]?.label;
   const dominantOutcome = outcomeRows.reduce<(typeof outcomeRows)[number] | null>((winner, entry) => {
     if (winner === null || entry.value > winner.value) {
@@ -405,7 +387,7 @@ export default function Analytics() {
   }, null);
 
   const drawerTrades = breakdownDrawer?.trades ?? breakdownDrawerQuery.data ?? [];
-  const drawerStats = useMemo(() => buildBreakdownDrawerStats(drawerTrades), [drawerTrades]);
+  const drawerStats = buildBreakdownDrawerStats(drawerTrades);
 
   return (
     <>
@@ -819,7 +801,7 @@ export default function Analytics() {
               <div className="mt-5 grid gap-4 lg:grid-cols-3">
                 <div className="surface-muted px-4 py-4">
                   <p className="text-label mb-2">Month PnL</p>
-                  <p className={cn("font-mono-price text-2xl font-semibold", getProfitTone(calendar.summary.totalProfit))}>
+                  <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", getProfitTone(calendar.summary.totalProfit))}>
                     {formatCurrencyDisplay(calendar.summary.totalProfit)}
                   </p>
                 </div>
@@ -858,7 +840,7 @@ export default function Analytics() {
                     <div className="surface-muted flex flex-col justify-between px-4 py-4">
                       <div>
                         <p className="text-label mb-2">Weekly Summary</p>
-                        <p className={cn("font-mono-price text-xl font-semibold", getProfitTone(week.summary.totalProfit))}>
+                        <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", getProfitTone(week.summary.totalProfit))}>
                           {formatCurrencyDisplay(week.summary.totalProfit)}
                         </p>
                       </div>

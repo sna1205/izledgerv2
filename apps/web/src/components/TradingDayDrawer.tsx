@@ -86,7 +86,7 @@ export function TradingDayDrawer({
                     <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
                       <div>
                         <p className="text-label mb-2">Total PnL</p>
-                        <p className={cn("font-mono-price text-4xl font-semibold", day.totalProfit > 0 ? "text-success" : day.totalProfit < 0 ? "text-danger" : "text-foreground")}>
+                        <p className={cn("font-mono-price numeric-safe max-w-full text-4xl font-semibold", day.totalProfit > 0 ? "text-success" : day.totalProfit < 0 ? "text-danger" : "text-foreground")}>
                           {formatCurrencyDisplay(day.totalProfit, { showPlus: true })}
                         </p>
                       </div>

@@ -187,7 +187,7 @@ export default function Dashboard() {
           action={equityCurve.length > 0 ? (
             <div className="surface-muted px-4 py-3 text-right">
               <p className="text-label mb-2">Current Equity</p>
-              <p className={cn("font-mono-price text-xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
+              <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
                 {formatCurrencyDisplay(currentEquity)}
               </p>
             </div>

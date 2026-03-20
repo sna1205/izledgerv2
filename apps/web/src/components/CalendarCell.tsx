@@ -34,7 +34,7 @@ export function CalendarCell({
           whileTap={{ scale: 0.99 }}
           onClick={onClick}
           className={cn(
-            "group min-h-[128px] rounded-[1.35rem] border p-3 text-left transition-all duration-200",
+            "group min-h-[128px] overflow-hidden rounded-[1.35rem] border p-3 text-left transition-all duration-200",
             getDayTone(day),
             !day.inCurrentMonth && "opacity-45",
             selected && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background",
@@ -47,7 +47,7 @@ export function CalendarCell({
             </span>
           </div>
           <div className="mt-7">
-            <p className={cn("font-mono-price text-xl font-semibold", day.totalProfit === 0 && "text-foreground")}>
+            <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", day.totalProfit === 0 && "text-foreground")}>
               {day.tradeCount > 0 ? formatCurrencyDisplay(day.totalProfit) : "$0.00"}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">{formatNumberDisplay(day.tradeCount)} trades</p>
