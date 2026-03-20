@@ -10,14 +10,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-[0_16px_34px_-18px_hsl(var(--primary)/0.72)] hover:bg-primary/94 hover:shadow-[0_20px_40px_-20px_hsl(var(--primary)/0.76)] dark:shadow-[0_18px_38px_-18px_hsl(var(--primary)/0.42)]",
+          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/94",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-[0_16px_34px_-18px_hsl(var(--destructive)/0.56)] hover:bg-destructive/94 dark:shadow-[0_18px_38px_-18px_hsl(var(--destructive)/0.34)]",
+          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/94",
         outline:
-          "border border-border/80 bg-background/82 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.03)] hover:border-border hover:bg-accent/75 hover:text-accent-foreground dark:bg-white/[0.03] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:hover:bg-white/[0.06]",
+          "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
         secondary:
-          "bg-secondary/92 text-secondary-foreground shadow-[inset_0_1px_0_hsl(var(--foreground)/0.03)] hover:bg-secondary dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-        ghost: "text-muted-foreground hover:bg-accent/75 hover:text-accent-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

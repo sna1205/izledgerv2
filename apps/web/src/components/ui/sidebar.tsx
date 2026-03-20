@@ -156,7 +156,7 @@ const Sidebar = React.forwardRef<
         <SheetContent
           data-sidebar="sidebar"
           data-mobile="true"
-          className="w-[--sidebar-width] border-r border-sidebar-border/80 bg-[radial-gradient(circle_at_top,hsl(var(--sidebar-primary)/0.14),transparent_34%),linear-gradient(180deg,hsl(var(--sidebar-background)),hsl(var(--sidebar-background)))] p-0 text-sidebar-foreground shadow-[0_0_80px_-28px_rgba(1,8,24,0.92)] [&>button]:hidden"
+          className="w-[--sidebar-width] border-r border-sidebar-border bg-sidebar-background p-0 text-sidebar-foreground shadow-sm [&>button]:hidden"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -206,7 +206,7 @@ const Sidebar = React.forwardRef<
       >
         <div
           data-sidebar="sidebar"
-          className="flex h-full w-full flex-col bg-[radial-gradient(circle_at_top,hsl(var(--sidebar-primary)/0.12),transparent_30%),linear-gradient(180deg,hsl(var(--sidebar-background)),hsl(var(--sidebar-background)))] group-data-[variant=floating]:rounded-[1.5rem] group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border/80 group-data-[variant=floating]:shadow-[0_30px_80px_-38px_rgba(1,8,24,0.9)]"
+          className="flex h-full w-full flex-col bg-sidebar-background group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm"
         >
           {children}
         </div>
@@ -412,13 +412,13 @@ const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentProps<"li
 SidebarMenuItem.displayName = "SidebarMenuItem";
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-2xl px-3 py-2.5 text-left text-sm text-sidebar-foreground/78 outline-none ring-sidebar-ring transition-[width,height,padding,background-color,color,box-shadow,transform] duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_16px_30px_-18px_rgba(0,0,0,0.7)] data-[active=true]:ring-1 data-[active=true]:ring-white/10 data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:!p-2.5 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-2xl px-3 py-2.5 text-left text-sm text-sidebar-foreground/78 outline-none ring-sidebar-ring transition-[width,height,padding,background-color,color,box-shadow,transform] duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-sidebar-border data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:!p-2.5 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
   {
     variants: {
       variant: {
         default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         outline:
-          "bg-background/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_0_1px_hsl(var(--sidebar-accent))]",
+          "bg-background/70 shadow-sm ring-1 ring-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
       },
       size: {
         default: "h-11 text-sm",

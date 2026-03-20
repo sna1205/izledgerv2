@@ -21,7 +21,7 @@ export function AccountFilterSelect({
     <div className="w-full max-w-[260px] space-y-2">
       <p className="text-label">{label}</p>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className={triggerClassName ?? "h-11 rounded-2xl"}>
+        <SelectTrigger className={triggerClassName ?? "h-10 rounded-2xl"}>
           <SelectValue placeholder="All Accounts" />
         </SelectTrigger>
         <SelectContent>

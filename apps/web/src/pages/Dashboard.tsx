@@ -151,12 +151,12 @@ export default function Dashboard() {
             accounts={accounts ?? []}
             value={resolvedAccountFilter}
             onValueChange={setAccountFilter}
-            triggerClassName="h-11 rounded-2xl min-w-[220px]"
+            triggerClassName="h-10 min-w-[220px] rounded-2xl"
           />
         )}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Today"
           value={String(summary.todayTrades)}
@@ -187,7 +187,7 @@ export default function Dashboard() {
           action={equityCurve.length > 0 ? (
             <div className="surface-muted px-4 py-3 text-right">
               <p className="text-label mb-2">Current Equity</p>
-              <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
+              <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
                 {formatCurrencyDisplay(currentEquity)}
               </p>
             </div>
@@ -203,7 +203,7 @@ export default function Dashboard() {
               action={(
                 <Link
                   to="/trades"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm"
                 >
                   Log your first trade
                   <ArrowRight className="h-4 w-4" />
@@ -259,7 +259,7 @@ export default function Dashboard() {
                         <div className="flex min-w-[11rem] items-center justify-between gap-4">
                           <div className="grid gap-1">
                             <span className="text-muted-foreground">Equity</span>
-                            <span className="text-[11px] text-muted-foreground">{item.payload.pair}</span>
+                            <span className="text-xs text-muted-foreground">{item.payload.pair}</span>
                           </div>
                           <span className="font-mono-price font-medium text-foreground">
                             {formatCurrencyDisplay(value)}
@@ -312,7 +312,7 @@ export default function Dashboard() {
             />
           </div>
         ) : (
-          <div className="mt-6 overflow-hidden rounded-[1.25rem] border border-border/70">
+          <div className="mt-4 overflow-hidden rounded-2xl border border-border">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -334,8 +334,8 @@ export default function Dashboard() {
                       {formatDateDisplay(trade.date, { fallback: "--" })}
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-2">
-                        <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">{trade.pair}</p>
                         <DataBadge tone={trade.direction === "Buy" ? "success" : "danger"}>
                           {trade.direction ?? "Unknown"}
                         </DataBadge>

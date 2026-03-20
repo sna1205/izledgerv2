@@ -256,7 +256,7 @@ export default function Accounts() {
         )}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <StatCard label="Total Accounts" value={String(accounts.length)} icon={Wallet} />
         <StatCard label="Combined Balance" value={formatCurrencyDisplay(totalBalance, { showPlus: false })} icon={Landmark} />
         <StatCard
@@ -280,7 +280,7 @@ export default function Accounts() {
           )}
         />
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2">
           {accounts.map((account) => {
             const performance = accountPerformance[account.id];
             const iconData = getAccountIcon(account.type);
@@ -289,25 +289,24 @@ export default function Accounts() {
             return (
               <SectionCard
                 key={account.id}
-                className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-28px_rgba(15,23,42,0.32)]"
               >
-                <div className="flex flex-col gap-5">
+                <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/80 text-foreground">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-background/60 text-foreground">
                         <Icon className="h-5 w-5" />
                       </div>
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-medium text-foreground">{account.name}</h2>
+                          <h2 className="text-base font-medium text-foreground">{account.name}</h2>
                           <DataBadge tone={iconData.badgeTone}>{account.type}</DataBadge>
                           {account.isDefault ? <DataBadge tone="primary">Default</DataBadge> : null}
                         </div>
-                        <p className="mt-2 text-sm text-muted-foreground">{account.broker}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{account.broker}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 opacity-100 transition-opacity group-hover:opacity-100">
+                    <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => openEditModal(account)}>
                         <Pencil className="h-4 w-4" />
                         Edit
@@ -319,9 +318,9 @@ export default function Accounts() {
                     </div>
                   </div>
 
-                  <div className="surface-muted px-5 py-5">
+                  <div className="surface-muted px-4 py-4">
                     <p className="text-label mb-2">Balance</p>
-                    <p className="font-mono-price numeric-safe max-w-full text-3xl font-semibold text-foreground">
+                    <p className="font-mono-price numeric-safe max-w-full text-2xl font-semibold text-foreground">
                       {formatBalance(account.balance, account.currency)}
                     </p>
                   </div>
@@ -343,8 +342,8 @@ export default function Accounts() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-muted-foreground">
+                  <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
                       Created {new Date(account.createdAt).toLocaleDateString("en-US")}
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -389,7 +388,7 @@ export default function Accounts() {
           }
         }}
       >
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto rounded-[1.75rem]">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingAccount ? "Edit Account" : "Add Account"}</DialogTitle>
           </DialogHeader>

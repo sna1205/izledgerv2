@@ -184,7 +184,7 @@ export default function Setups() {
         )}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <StatCard label="Total Setups" value={String(totalSetups)} icon={Layers3} />
         <StatCard label="Active" value={String(activeSetups)} icon={Sparkles} />
         <StatCard label="Mapped Trades" value={formatNumberDisplay(totalTradesMapped)} icon={SwatchBook} />
@@ -258,29 +258,28 @@ export default function Setups() {
           ) : null}
         />
       ) : (
-        <div className="space-y-5">
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {setups.map((setup) => {
               const tradeCount = setup.tradeCount ?? 0;
 
               return (
                 <SectionCard
                   key={setup.id}
-                  className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-28px_rgba(15,23,42,0.32)]"
                 >
                   <div className="flex h-full flex-col">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-medium text-foreground">{setup.name}</h2>
+                          <h2 className="text-base font-medium text-foreground">{setup.name}</h2>
                           <DataBadge tone={setup.isArchived ? "warning" : "primary"}>
                             {setup.isArchived ? "Archived" : "Active"}
                           </DataBadge>
                         </div>
-                        <p className="mt-2 text-sm text-muted-foreground">Created {new Date(setup.createdAt).toLocaleDateString("en-US")}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Created {new Date(setup.createdAt).toLocaleDateString("en-US")}</p>
                       </div>
 
-                      <div className="flex items-center gap-2 opacity-100 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-center gap-2">
                         <Button variant="outline" size="icon" onClick={() => openEditModal(setup)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -290,18 +289,18 @@ export default function Setups() {
                       </div>
                     </div>
 
-                    <p className="mt-5 min-h-[72px] text-sm leading-6 text-muted-foreground">
+                    <p className="mt-4 min-h-[72px] text-sm text-muted-foreground">
                       {setup.description || "No description."}
                     </p>
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="surface-muted px-4 py-4">
                         <p className="text-label mb-2">Color Token</p>
-                        <p className="font-mono-price text-sm font-semibold text-foreground">{setup.color.toUpperCase()}</p>
+                        <p className="font-mono-price text-base font-medium text-foreground">{setup.color.toUpperCase()}</p>
                       </div>
                       <div className="surface-muted px-4 py-4">
                         <p className="text-label mb-2">Trades</p>
-                        <p className="text-lg font-semibold text-foreground">{formatNumberDisplay(tradeCount)}</p>
+                        <p className="text-2xl font-semibold text-foreground">{formatNumberDisplay(tradeCount)}</p>
                       </div>
                     </div>
                   </div>
@@ -310,7 +309,7 @@ export default function Setups() {
             })}
           </div>
 
-          <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/70">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <PaginationControls
               currentPage={page}
               totalPages={totalSetupPages}
@@ -333,7 +332,7 @@ export default function Setups() {
           }
         }}
       >
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-[1.75rem]">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingSetup ? "Edit Setup" : "Create Setup"}</DialogTitle>
           </DialogHeader>

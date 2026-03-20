@@ -42,7 +42,7 @@ export function AppSidebar() {
                   <h1 className="text-sm font-semibold tracking-tight text-sidebar-foreground">IZLedger</h1>
                   <p className="text-xs text-muted-foreground">Trading Journal</p>
                 </div>
-                <div className="rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-success">
+                <div className="rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
                   Live
                 </div>
               </div>
@@ -59,7 +59,7 @@ export function AppSidebar() {
                       to={item.url}
                       end={item.url === "/dashboard"}
                       className="min-h-11 rounded-2xl px-3 py-2 text-sm text-sidebar-foreground/78 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                      activeClassName="bg-sidebar-accent text-sidebar-foreground font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_16px_30px_-18px_rgba(0,0,0,0.72)] ring-1 ring-white/10"
+                      activeClassName="bg-sidebar-accent text-sidebar-foreground font-medium shadow-sm ring-1 ring-sidebar-border"
                       onClick={() => {
                         if (isMobile) {
                           setOpenMobile(false);
