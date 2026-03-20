@@ -41,7 +41,7 @@ export function TradeReviewStatusBadge({ trade, reviewed }: TradeReviewStatusBad
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-tight dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        "inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-tight",
         status.className,
       )}
     >

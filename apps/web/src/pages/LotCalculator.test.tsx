@@ -15,22 +15,22 @@ describe("LotCalculator", () => {
 
     expect(riskPercentInput).toBeEnabled();
     expect(riskAmountInput).toBeDisabled();
-    expect(riskAmountInput).toHaveValue(100);
+    expect(riskAmountInput).toHaveValue("100");
 
-    fireEvent.change(screen.getByLabelText("Entry Price"), { target: { value: "3000" } });
-    fireEvent.change(screen.getByLabelText("Stop Loss Price"), { target: { value: "2990" } });
+    fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "3000" } });
+    fireEvent.change(screen.getByLabelText("SL"), { target: { value: "2990" } });
 
     await waitFor(() => {
-      expect(screen.getByText("0.10")).toBeInTheDocument();
+      expect(screen.getByTestId("lot-size-value")).toHaveTextContent("0.10");
     });
   });
 
   it("switches to amount mode, syncs the percent input, and recalculates instantly", async () => {
     render(<LotCalculator />);
 
-    fireEvent.change(screen.getByLabelText("Entry Price"), { target: { value: "3000" } });
-    fireEvent.change(screen.getByLabelText("Stop Loss Price"), { target: { value: "2990" } });
-    fireEvent.click(screen.getByRole("button", { name: "Risk $" }));
+    fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "3000" } });
+    fireEvent.change(screen.getByLabelText("SL"), { target: { value: "2990" } });
+    fireEvent.click(screen.getByRole("button", { name: /fixed/i }));
 
     const riskPercentInput = screen.getByLabelText("Risk Percent");
     const riskAmountInput = screen.getByLabelText("Risk Amount");
@@ -41,20 +41,20 @@ describe("LotCalculator", () => {
     fireEvent.change(riskAmountInput, { target: { value: "250" } });
 
     await waitFor(() => {
-      expect(riskPercentInput).toHaveValue(2.5);
-      expect(screen.getByText("0.25")).toBeInTheDocument();
+      expect(riskPercentInput).toHaveValue("2.5");
+      expect(screen.getByTestId("lot-size-value")).toHaveTextContent("0.25");
     });
   });
 
   it("handles equal entry and stop loss safely without crashing", async () => {
     render(<LotCalculator />);
 
-    fireEvent.change(screen.getByLabelText("Entry Price"), { target: { value: "3000" } });
-    fireEvent.change(screen.getByLabelText("Stop Loss Price"), { target: { value: "3000" } });
+    fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "3000" } });
+    fireEvent.change(screen.getByLabelText("SL"), { target: { value: "3000" } });
 
     await waitFor(() => {
       expect(screen.getByText("Entry and stop loss must be different.")).toBeInTheDocument();
-      expect(screen.getByText("0.00")).toBeInTheDocument();
+      expect(screen.getByTestId("lot-size-value")).toHaveTextContent("0.00");
     });
   });
 });

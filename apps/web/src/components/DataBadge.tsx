@@ -12,8 +12,8 @@ export function DataBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-[inset_0_1px_0_hsl(var(--foreground)/0.03)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-        tone === "neutral" && "border-border/80 bg-background/80 text-muted-foreground dark:bg-white/[0.03]",
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
+        tone === "neutral" && "border-border bg-background text-muted-foreground",
         tone === "success" && "border-success/20 bg-success/10 text-success",
         tone === "danger" && "border-danger/20 bg-danger/10 text-danger",
         tone === "primary" && "border-primary/20 bg-primary/10 text-primary",

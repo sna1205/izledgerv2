@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
+import { PageShell } from "@/components/PageShell";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ResultBadge } from "@/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
@@ -47,11 +48,11 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn("rounded-2xl border bg-card p-5 shadow-sm sm:p-6", className)}>
-      <div className="mb-5 flex items-start justify-between gap-4">
+    <section className={cn("surface p-4", className)}>
+      <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-foreground sm:text-lg">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+          <h2 className="text-lg font-medium text-foreground">{title}</h2>
+          {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
         </div>
         {action}
       </div>
@@ -70,9 +71,9 @@ function MetricTile({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-background/60 p-4">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <div className={cn("mt-2 text-sm font-medium text-foreground", valueClassName)}>{value}</div>
+    <div className="surface-muted p-4">
+      <p className="text-label mb-2">{label}</p>
+      <div className={cn("text-sm font-medium text-foreground", valueClassName)}>{value}</div>
     </div>
   );
 }
@@ -85,8 +86,8 @@ function InsightRow({
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3 last:border-b-0 last:pb-0 first:pt-0">
-      <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
+    <div className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0 last:pb-0 first:pt-0">
+      <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
       <span className="text-sm font-medium text-foreground">{value}</span>
     </div>
   );
@@ -131,12 +132,12 @@ function ScreenshotGalleryCard({
             ) : null}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border bg-background text-muted-foreground">
+          <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
               <CameraOff className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-sm font-medium text-foreground">No screenshots added</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            <h3 className="mt-4 text-base font-medium text-foreground">No screenshots added</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
               Add charts or execution images to improve future review.
             </p>
             <Button className="mt-4" variant="outline" size="sm" onClick={onAddScreenshot}>
@@ -356,11 +357,10 @@ export default function TradeDetail() {
   }
 
   return (
-    <div className="page-enter p-4 sm:p-6">
-      <div className="mx-auto w-full max-w-[1500px] space-y-6">
-        <section className="rounded-[28px] border bg-card p-5 shadow-sm sm:p-6 lg:p-8">
+    <PageShell size="wide">
+      <section className="surface p-4 sm:p-6">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-5">
+            <div className="space-y-4">
               <Button variant="ghost" size="sm" onClick={() => navigate("/trades")} className="-ml-2 w-fit">
                 <ArrowLeft className="mr-1 h-4 w-4" />
                 Back to Trades
@@ -368,18 +368,18 @@ export default function TradeDetail() {
 
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                  <h1 className="text-2xl font-semibold text-foreground">
                     {trade.pair}
                   </h1>
                   <ResultBadge result={trade.result} />
                   <TradeReviewStatusBadge trade={trade} reviewed={Boolean(review)} />
                   {trade.session ? (
-                    <span className="inline-flex items-center rounded-full border bg-background px-3 py-1 text-xs font-medium text-foreground">
+                    <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
                       {trade.session}
                     </span>
                   ) : null}
                   {trade.emotion ? (
-                    <span className="inline-flex items-center rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
+                    <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
                       {trade.emotion}
                     </span>
                   ) : null}
@@ -390,12 +390,12 @@ export default function TradeDetail() {
                     {formatTradeDate(trade.date)}
                     {trade.setup ? ` • ${trade.setup}` : ""}
                   </p>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
                       <Clock3 className="h-4 w-4" />
                       Trade logged
                     </span>
-                    <span className={cn("inline-flex items-center gap-2", review ? "text-emerald-700" : "text-muted-foreground")}>
+                    <span className={cn("inline-flex items-center gap-2", review ? "text-success" : "text-muted-foreground")}>
                       <CheckCircle2 className="h-4 w-4" />
                       {review ? `Review completed ${reviewUpdatedLabel || ""}` : "Review pending"}
                     </span>
@@ -405,16 +405,16 @@ export default function TradeDetail() {
             </div>
 
             <div className="flex w-full flex-col gap-4 xl:max-w-[420px] xl:items-end">
-              <div className="w-full rounded-3xl border bg-background/70 p-5 xl:max-w-[360px]">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Net Result</p>
-                <ProfitDisplay value={trade.profit} className="mt-3 block text-2xl font-semibold sm:text-4xl" />
+              <div className="surface-muted w-full p-4 xl:max-w-[360px]">
+                <p className="text-label mb-2">Net Result</p>
+                <ProfitDisplay value={trade.profit} className="block text-2xl font-semibold" />
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border bg-card px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Direction</p>
+                  <div className="surface p-3">
+                    <p className="text-label mb-2">Direction</p>
                     <p className="mt-2 text-sm font-medium text-foreground">{trade.direction}</p>
                   </div>
-                  <div className="rounded-2xl border bg-card px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Account</p>
+                  <div className="surface p-3">
+                    <p className="text-label mb-2">Account</p>
                     <p className="mt-2 text-sm font-medium text-foreground">{accountName}</p>
                   </div>
                 </div>
@@ -462,8 +462,8 @@ export default function TradeDetail() {
                   <MetricTile label="Risk : Reward" value={rrValue ? `1:${rrValue.toFixed(2)}` : "—"} valueClassName="font-mono-price" />
                 </div>
 
-                <div className="rounded-2xl border bg-background/60 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Performance</p>
+                <div className="surface-muted p-4">
+                  <p className="text-label mb-3">Performance</p>
                   <div className="mt-3 space-y-1">
                     <InsightRow label="Result" value={<ResultBadge result={trade.result} />} />
                     <InsightRow label="Setup" value={trade.setup ? <SetupTag label={trade.setup} /> : "No setup tagged"} />
@@ -480,8 +480,8 @@ export default function TradeDetail() {
               action={<Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>{review ? "Edit Review" : "Write Review"}</Button>}
             >
               {review ? (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-background/60 px-4 py-3">
+                <div className="space-y-4">
+                  <div className="surface-muted flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                     <div>
                       <p className="text-sm font-medium text-foreground">Review completed</p>
                       <p className="mt-1 text-xs text-muted-foreground">{reviewUpdatedLabel || "Recently updated"}</p>
@@ -491,15 +491,15 @@ export default function TradeDetail() {
                   <TradeReviewContent review={review} />
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border bg-background text-muted-foreground">
+                <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
                     <Sparkles className="h-5 w-5" />
                   </div>
-                  <h3 className="mt-4 text-lg font-medium text-foreground">No review yet</h3>
-                  <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  <h3 className="mt-4 text-base font-medium text-foreground">No review yet</h3>
+                  <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
                     Capture mistakes, discipline, and lessons while the trade is still fresh.
                   </p>
-                  <Button className="mt-5" onClick={() => setReviewOpen(true)}>
+                  <Button className="mt-4" onClick={() => setReviewOpen(true)}>
                     Write Review
                   </Button>
                 </div>
@@ -512,11 +512,11 @@ export default function TradeDetail() {
 
             <SectionCard title="Journal Notes" description="Execution context, planning notes, or post-trade comments.">
               {trade.notes ? (
-                <div className="rounded-2xl border bg-background/60 p-5">
-                  <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{trade.notes}</p>
+                <div className="surface-muted p-4">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">{trade.notes}</p>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">
                   No notes added yet. Add pre-trade context or post-trade observations to deepen the review.
                 </div>
               )}
@@ -528,10 +528,10 @@ export default function TradeDetail() {
                   <div
                     key={`${insight.text}-${index}`}
                     className={cn(
-                      "rounded-2xl border px-4 py-4 text-sm leading-relaxed",
-                      insight.tone === "good" && "border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100",
-                      insight.tone === "warn" && "border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
-                      insight.tone === "neutral" && "bg-background/60 text-foreground",
+                      "rounded-2xl border px-4 py-4 text-sm",
+                      insight.tone === "good" && "border-success/20 bg-success/10 text-foreground",
+                      insight.tone === "warn" && "border-amber-400/20 bg-amber-500/10 text-foreground",
+                      insight.tone === "neutral" && "border-border bg-background/60 text-foreground",
                     )}
                   >
                     {insight.text}
@@ -541,8 +541,6 @@ export default function TradeDetail() {
             </SectionCard>
           </div>
         </div>
-      </div>
-
       <TradeFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}
@@ -587,6 +585,6 @@ export default function TradeDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

@@ -68,10 +68,10 @@ type BreakdownDrawerState = {
   trades?: Trade[];
 };
 
-const POSITIVE_BAR = "#34d399";
-const NEGATIVE_BAR = "#fb7185";
-const ACCENT_BAR = "#60a5fa";
-const NEUTRAL_BAR = "#94a3b8";
+const POSITIVE_BAR = "#5f9b83";
+const NEGATIVE_BAR = "#c97b83";
+const ACCENT_BAR = "#6e98c7";
+const NEUTRAL_BAR = "#8b97a7";
 const GRID_STROKE = "hsl(var(--border) / 0.4)";
 const AXIS_TEXT = "hsl(var(--muted-foreground))";
 const REFERENCE_LINE = "hsl(var(--border) / 0.8)";
@@ -399,7 +399,7 @@ export default function Analytics() {
               accounts={accounts ?? []}
               value={resolvedAccountFilter}
               onValueChange={setAccountFilter}
-              triggerClassName="h-11 rounded-2xl min-w-[220px]"
+              triggerClassName="h-10 min-w-[220px] rounded-2xl"
             />
           )}
         />
@@ -420,7 +420,7 @@ export default function Analytics() {
           </div>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
               <StatCard label="Total Trades" value={String(breakdowns.summary.totalTrades)} icon={Layers3} />
               <StatCard label="Win Rate" value={formatPercentageDisplay(breakdowns.summary.winRate)} icon={TrendingUp} />
               <StatCard label="Avg RR" value={`1:${formatNumberDisplay(breakdowns.summary.avgRR, { minimumFractionDigits: 2 })}`} icon={Radar} />
@@ -435,12 +435,12 @@ export default function Analytics() {
             <div className="grid gap-6 xl:grid-cols-3">
               <SectionCard className="h-full">
                 <SectionHeader title="Setup Performance" />
-                <div className="mt-5 space-y-3">
+                <div className="mt-4 space-y-3">
                   {breakdowns.setupPerformance.slice(0, 6).map((row) => (
                     <div key={row.key} className="surface-muted flex items-start justify-between gap-4 px-4 py-4">
                       <div>
                         <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
                         </p>
                       </div>
@@ -454,12 +454,12 @@ export default function Analytics() {
 
               <SectionCard className="h-full">
                 <SectionHeader title="Session Performance" />
-                <div className="mt-5 space-y-3">
+                <div className="mt-4 space-y-3">
                   {breakdowns.sessionPerformance.slice(0, 6).map((row) => (
                     <div key={row.key} className="surface-muted flex items-start justify-between gap-4 px-4 py-4">
                       <div>
                         <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
                         </p>
                       </div>
@@ -473,12 +473,12 @@ export default function Analytics() {
 
               <SectionCard className="h-full">
                 <SectionHeader title="Emotion Performance" />
-                <div className="mt-5 space-y-3">
+                <div className="mt-4 space-y-3">
                   {breakdowns.emotionPerformance.slice(0, 6).map((row) => (
                     <div key={row.key} className="surface-muted flex items-start justify-between gap-4 px-4 py-4">
                       <div>
                         <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
                         </p>
                       </div>
@@ -798,15 +798,15 @@ export default function Analytics() {
                 )}
               />
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                <div className="surface-muted px-4 py-4">
-                  <p className="text-label mb-2">Month PnL</p>
+                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                  <div className="surface-muted px-4 py-4">
+                    <p className="text-label mb-2">Month PnL</p>
                   <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", getProfitTone(calendar.summary.totalProfit))}>
-                    {formatCurrencyDisplay(calendar.summary.totalProfit)}
-                  </p>
-                </div>
-                <div className="surface-muted px-4 py-4">
-                  <p className="text-label mb-2">Trades</p>
+                      {formatCurrencyDisplay(calendar.summary.totalProfit)}
+                    </p>
+                  </div>
+                  <div className="surface-muted px-4 py-4">
+                    <p className="text-label mb-2">Trades</p>
                   <p className="text-2xl font-semibold text-foreground">{formatNumberDisplay(calendar.summary.totalTrades)}</p>
                 </div>
                 <div className="surface-muted px-4 py-4">
@@ -817,7 +817,7 @@ export default function Analytics() {
             </SectionCard>
 
             <SectionCard className="overflow-hidden">
-              <div className="mb-4 grid grid-cols-7 gap-2 pr-0 text-center text-[11px] font-medium uppercase tracking-[0.26em] text-muted-foreground lg:pr-[220px]">
+              <div className="mb-4 grid grid-cols-7 gap-2 pr-0 text-center text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground lg:pr-[220px]">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
                   <div key={day}>{day}</div>
                 ))}
@@ -840,11 +840,11 @@ export default function Analytics() {
                     <div className="surface-muted flex flex-col justify-between px-4 py-4">
                       <div>
                         <p className="text-label mb-2">Weekly Summary</p>
-                        <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", getProfitTone(week.summary.totalProfit))}>
+                        <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", getProfitTone(week.summary.totalProfit))}>
                           {formatCurrencyDisplay(week.summary.totalProfit)}
                         </p>
                       </div>
-                      <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                      <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                         <p>{formatPercentageDisplay(week.summary.winRate)} win rate</p>
                         <p>{formatNumberDisplay(week.summary.tradeCount)} trades</p>
                       </div>

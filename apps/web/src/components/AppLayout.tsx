@@ -29,10 +29,10 @@ export function AppLayout() {
       <div className="flex min-h-screen w-full bg-transparent">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 px-3 pt-3 sm:px-4 lg:px-6">
-            <div className="surface flex min-h-[72px] shrink-0 items-center justify-between px-3 py-3 sm:px-4">
+          <header className="sticky top-0 z-30 px-4 pt-4 sm:px-6 sm:pt-6">
+            <div className="surface flex min-h-[64px] shrink-0 items-center justify-between px-4 py-3">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <SidebarTrigger className="h-10 w-10 rounded-2xl border border-border/70 bg-background/78 text-muted-foreground shadow-[inset_0_1px_0_hsl(var(--foreground)/0.03)] hover:bg-accent/75 hover:text-foreground dark:bg-white/[0.03] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" />
+              <SidebarTrigger className="h-10 w-10 rounded-2xl border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground" />
               <div className="min-w-0">
                 <p className="truncate text-base font-semibold text-foreground">{pageTitle}</p>
               </div>
@@ -41,10 +41,10 @@ export function AppLayout() {
               <ThemeToggle />
               <Button
                 variant="outline"
-                className="h-11 max-w-[210px] rounded-2xl px-2 sm:px-3"
+                className="h-10 max-w-[210px] rounded-2xl px-2 sm:px-3"
                 onClick={() => navigate("/settings")}
               >
-                <Avatar className="h-9 w-9 border border-border/70">
+                <Avatar className="h-8 w-8 border border-border">
                   <AvatarFallback className="bg-secondary text-xs font-medium">{initials}</AvatarFallback>
                 </Avatar>
                 <span className="hidden max-w-[120px] truncate text-sm font-medium sm:inline-block">{user?.username}</span>

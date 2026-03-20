@@ -6,14 +6,14 @@ import { cn } from "@/lib/utils";
 
 function getDayTone(day: NormalizedCalendarDay) {
   if (day.totalProfit > 0) {
-    return "border-success/20 bg-success/10 text-success";
+    return "border-success/25 bg-success/10 text-success";
   }
 
   if (day.totalProfit < 0) {
-    return "border-danger/20 bg-danger/10 text-danger";
+    return "border-danger/25 bg-danger/10 text-danger";
   }
 
-  return "border-border/70 bg-background/80 text-foreground";
+  return "border-border bg-background/60 text-foreground";
 }
 
 export function CalendarCell({
@@ -34,7 +34,7 @@ export function CalendarCell({
           whileTap={{ scale: 0.99 }}
           onClick={onClick}
           className={cn(
-            "group min-h-[128px] overflow-hidden rounded-[1.35rem] border p-3 text-left transition-all duration-200",
+            "group min-h-[120px] overflow-hidden rounded-2xl border p-3 text-left transition-all duration-200",
             getDayTone(day),
             !day.inCurrentMonth && "opacity-45",
             selected && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background",
@@ -42,12 +42,12 @@ export function CalendarCell({
         >
           <div className="flex items-start justify-between gap-3">
             <span className="text-sm font-medium text-foreground/90">{day.dayLabel}</span>
-            <span className="rounded-full bg-white/55 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground dark:bg-black/20">
+            <span className="rounded-full bg-background/70 px-2 py-1 text-xs font-medium text-muted-foreground">
               {day.tradeCount === 0 ? "Flat" : day.totalProfit > 0 ? "Green" : day.totalProfit < 0 ? "Red" : "Flat"}
             </span>
           </div>
-          <div className="mt-7">
-            <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", day.totalProfit === 0 && "text-foreground")}>
+          <div className="mt-6">
+            <p className={cn("font-mono-price numeric-safe max-w-full text-base font-medium", day.totalProfit === 0 && "text-foreground")}>
               {day.tradeCount > 0 ? formatCurrencyDisplay(day.totalProfit) : "$0.00"}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">{formatNumberDisplay(day.tradeCount)} trades</p>

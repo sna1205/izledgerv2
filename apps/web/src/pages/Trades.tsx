@@ -307,7 +307,7 @@ export default function Trades() {
         )}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <StatCard label="Trades In View" value={formatNumberDisplay(totalTrades)} icon={LayoutList} />
         <StatCard label="Reviewed" value={formatNumberDisplay(reviewedCount)} icon={Eye} />
         <StatCard
@@ -368,7 +368,7 @@ export default function Trades() {
         </FilterField>
       </FilterBar>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "ledger" | "screenbook")} className="w-full">
           <TabsList className="grid h-auto w-full grid-cols-2 sm:max-w-[320px]">
             <TabsTrigger value="ledger" className="gap-2">
@@ -408,7 +408,7 @@ export default function Trades() {
             </div>
           </div>
 
-          <TabsContent value="ledger" className="space-y-5">
+          <TabsContent value="ledger" className="space-y-6">
             {totalTrades === 0 ? (
               <EmptyState
                 icon={LayoutList}
@@ -449,8 +449,8 @@ export default function Trades() {
                         >
                           <TableCell className="text-sm text-muted-foreground">{formatTradeDate(trade.date)}</TableCell>
                           <TableCell>
-                            <div className="space-y-2">
-                              <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">{trade.pair}</p>
                               <div className="flex flex-wrap gap-2">
                                 <DataBadge tone={toneForDirection(trade.direction)}>{trade.direction}</DataBadge>
                                 <ResultBadge result={trade.result} />
@@ -479,10 +479,10 @@ export default function Trades() {
                             </button>
                           </TableCell>
                           <TableCell className="text-right">
-                            <ProfitDisplay value={trade.profit} />
+                            <ProfitDisplay value={trade.profit} className="text-base" />
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                            <div className="flex justify-end gap-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                               <Button
                                 variant="outline"
                                 size="icon"
@@ -534,7 +534,7 @@ export default function Trades() {
             )}
           </TabsContent>
 
-          <TabsContent value="screenbook" className="space-y-5">
+          <TabsContent value="screenbook" className="space-y-6">
             {totalTrades === 0 ? (
               <EmptyState
                 icon={Images}
@@ -544,13 +544,13 @@ export default function Trades() {
                   : "Add screenshots to trades to populate this view."}
               />
             ) : (
-              <SectionCard className="overflow-hidden">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <SectionCard>
+                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {trades.map((trade) => {
                     const screenshots = trade.screenshotAssets ?? [];
 
                     return (
-                      <article key={trade.id} className="surface-muted overflow-hidden p-0">
+                      <article key={trade.id} className="surface flex h-full flex-col overflow-hidden p-0">
                         {screenshots.length > 0 ? (
                           <button type="button" className="block w-full text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
                             <img src={screenshots[0].url} alt={`${trade.pair} screenshot`} className="aspect-[16/10] w-full object-cover" />
@@ -562,15 +562,15 @@ export default function Trades() {
                           </div>
                         )}
 
-                        <div className="space-y-4 p-4">
+                        <div className="flex h-full flex-col gap-4 p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <button type="button" className="text-left" onClick={() => navigate(`/trades/${trade.id}`)}>
-                                <p className="text-sm font-semibold text-foreground">{trade.pair}</p>
+                                <p className="text-sm font-medium text-foreground">{trade.pair}</p>
                               </button>
                               <p className="mt-1 text-xs text-muted-foreground">{formatTradeDate(trade.date)}</p>
                             </div>
-                            <ProfitDisplay value={trade.profit} />
+                            <ProfitDisplay value={trade.profit} className="text-base" />
                           </div>
 
                           <div className="flex flex-wrap gap-2">
@@ -580,7 +580,7 @@ export default function Trades() {
                             <TradeReviewStatusBadge trade={trade} reviewed={Boolean(tradeReviewMap[trade.id])} />
                           </div>
 
-                          <div className="flex justify-between gap-2">
+                          <div className="mt-auto flex justify-between gap-2">
                             <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${trade.id}`)}>
                               <Eye className="h-4 w-4" />
                               View
@@ -603,7 +603,7 @@ export default function Trades() {
                   })}
                 </div>
 
-                <div className="mt-5 overflow-hidden rounded-[1.25rem] border border-border/70">
+                <div className="mt-6 overflow-hidden rounded-2xl border border-border">
                   <PaginationControls
                     currentPage={currentPage}
                     totalPages={totalTradePages}
