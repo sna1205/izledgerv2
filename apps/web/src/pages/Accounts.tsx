@@ -321,7 +321,7 @@ export default function Accounts() {
 
                   <div className="surface-muted px-5 py-5">
                     <p className="text-label mb-2">Balance</p>
-                    <p className="font-mono-price text-3xl font-semibold text-foreground">
+                    <p className="font-mono-price numeric-safe max-w-full text-3xl font-semibold text-foreground">
                       {formatBalance(account.balance, account.currency)}
                     </p>
                   </div>
@@ -333,7 +333,7 @@ export default function Accounts() {
                     </div>
                     <div className="surface-muted px-4 py-4">
                       <p className="text-label mb-2">PnL</p>
-                      <p className={cn("font-mono-price text-lg font-semibold", getProfitTone(performance?.profit ?? 0))}>
+                      <p className={cn("font-mono-price numeric-safe max-w-full text-lg font-semibold", getProfitTone(performance?.profit ?? 0))}>
                         {formatCurrencyDisplay(performance?.profit ?? 0)}
                       </p>
                     </div>

@@ -801,7 +801,7 @@ export default function Analytics() {
               <div className="mt-5 grid gap-4 lg:grid-cols-3">
                 <div className="surface-muted px-4 py-4">
                   <p className="text-label mb-2">Month PnL</p>
-                  <p className={cn("font-mono-price text-2xl font-semibold", getProfitTone(calendar.summary.totalProfit))}>
+                  <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", getProfitTone(calendar.summary.totalProfit))}>
                     {formatCurrencyDisplay(calendar.summary.totalProfit)}
                   </p>
                 </div>
@@ -840,7 +840,7 @@ export default function Analytics() {
                     <div className="surface-muted flex flex-col justify-between px-4 py-4">
                       <div>
                         <p className="text-label mb-2">Weekly Summary</p>
-                        <p className={cn("font-mono-price text-xl font-semibold", getProfitTone(week.summary.totalProfit))}>
+                        <p className={cn("font-mono-price numeric-safe max-w-full text-xl font-semibold", getProfitTone(week.summary.totalProfit))}>
                           {formatCurrencyDisplay(week.summary.totalProfit)}
                         </p>
                       </div>

@@ -74,7 +74,7 @@ export function BreakdownDrawer({
                   {stats.map((stat) => (
                     <div key={stat.label} className="rounded-2xl border border-border/60 bg-background/70 px-4 py-4 dark:bg-white/[0.03]">
                       <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">{stat.label}</p>
-                      <p className={`mt-2 text-lg font-semibold ${
+                      <p className={`numeric-safe mt-2 max-w-full text-lg font-semibold ${
                         stat.tone === "success" ? "text-success" : stat.tone === "danger" ? "text-danger" : "text-foreground"
                       }`}>
                         {stat.value}
