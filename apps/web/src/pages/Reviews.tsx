@@ -75,13 +75,14 @@ const emptyWeeklyForm = {
 
 const EMPTY_REVIEWS: Review[] = [];
 
-type CalendarTone = "good" | "warn" | "bad" | "empty";
+type CalendarTone = "good" | "warn" | "bad" | "review" | "empty";
 type CalendarReviewDay = {
   key: string;
   date: Date;
   dayLabel: string;
   inCurrentMonth: boolean;
   review: Review | null;
+  hasTradeReviews: boolean;
   tone: CalendarTone;
   icon: string | null;
 };
@@ -293,13 +294,16 @@ function getTradeReviewMeta(trade: Trade | null, review: Review) {
   ].filter(Boolean).join(" · ");
 }
 
-function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>) {
+function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>, tradeReviewDates: Set<string>) {
   const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
   const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
 
   return eachDayOfInterval({ start, end }).map((date) => {
     const key = format(date, "yyyy-MM-dd");
     const review = reviewMap.get(key) ?? null;
+    const hasTradeReviews = tradeReviewDates.has(key);
+    const tone = review ? getDailyTone(review) : hasTradeReviews ? "review" : "empty";
+    const icon = review ? getDailyIcon(review) : hasTradeReviews ? "✎" : null;
 
     return {
       key,
@@ -307,8 +311,9 @@ function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>) {
       dayLabel: format(date, "d"),
       inCurrentMonth: isSameMonth(date, currentMonth),
       review,
-      tone: getDailyTone(review),
-      icon: getDailyIcon(review),
+      hasTradeReviews,
+      tone,
+      icon,
     } satisfies CalendarReviewDay;
   });
 }
@@ -392,13 +397,26 @@ export default function Reviews() {
     () => new Map(dailyReviews.filter((review) => review.reviewDate).map((review) => [review.reviewDate as string, review])),
     [dailyReviews],
   );
-
-  const calendarDays = useMemo(
-    () => buildCalendarDays(currentMonth, dailyReviewMap),
-    [currentMonth, dailyReviewMap],
+  const tradeReviewDates = useMemo(
+    () => new Set(
+      tradeReviews
+        .map((review) => review.reviewDate || review.tradeSnapshot?.date || null)
+        .filter((value): value is string => Boolean(value)),
+    ),
+    [tradeReviews],
   );
 
+  const calendarDays = useMemo(
+    () => buildCalendarDays(currentMonth, dailyReviewMap, tradeReviewDates),
+    [currentMonth, dailyReviewMap, tradeReviewDates],
+  );
+  const isCalendarSelectionReady = dailyReviewsQuery.isFetched && tradeReviewsQuery.isFetched;
+
   useEffect(() => {
+    if (!isCalendarSelectionReady) {
+      return;
+    }
+
     if (calendarDays.length === 0) {
       setSelectedDayKey(null);
       return;
@@ -412,10 +430,10 @@ export default function Reviews() {
       return;
     }
 
-    const reviewedDay = [...calendarDays].reverse().find((day) => day.review && day.inCurrentMonth);
+    const reviewedDay = [...calendarDays].reverse().find((day) => (day.review || day.hasTradeReviews) && day.inCurrentMonth);
     const fallbackDay = calendarDays.find((day) => day.inCurrentMonth) ?? calendarDays[0];
     setSelectedDayKey((reviewedDay ?? fallbackDay)?.key ?? null);
-  }, [calendarDays, selectedDayKey]);
+  }, [calendarDays, isCalendarSelectionReady, selectedDayKey]);
 
   useEffect(() => {
     if (sortedWeeklyReviews.length === 0) {
@@ -784,6 +802,7 @@ export default function Reviews() {
                     day.tone === "good" && "border-emerald-500/20 bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300",
                     day.tone === "warn" && "border-amber-500/20 bg-amber-500/[0.12] text-amber-700 dark:text-amber-300",
                     day.tone === "bad" && "border-rose-500/20 bg-rose-500/[0.12] text-rose-700 dark:text-rose-300",
+                    day.tone === "review" && "border-rose-500/20 bg-rose-500/[0.12] text-rose-700 dark:text-rose-300",
                     day.tone === "empty" && "border-border/60 bg-background/70 text-muted-foreground",
                     selectedDayKey === day.key && "ring-2 ring-primary/45 ring-offset-2 ring-offset-background",
                   )}

@@ -82,7 +82,7 @@ export function TradeReviewDialog({
     } else {
       setForm(defaultForm);
     }
-  }, [open, review]);
+  }, [open, review, trade.id]);
 
   const handleSave = async () => {
     setSubmitError(null);
