@@ -1,73 +1,53 @@
 import { format, parseISO } from "date-fns";
-import { CameraOff } from "lucide-react";
 import type { Review, Trade } from "@/lib/types";
 import { getReviewScope } from "@/lib/reviews";
 import { Progress } from "@/components/ui/progress";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { ResultBadge } from "@/components/ResultBadge";
+import { formatPrice } from "@/lib/trade-sharing";
 import { cn } from "@/lib/utils";
 
-function formatReviewTradeDate(value?: string | null) {
+type JudgementTone = "good" | "bad" | "warn";
+
+function formatShortDate(value?: string | null) {
   if (!value) {
-    return "Trade date";
+    return "Review";
   }
 
   try {
-    return format(parseISO(value), "MMM d, yyyy");
+    return format(parseISO(value), "MMM d");
   } catch {
     return value;
   }
 }
 
-function describeExecutionQuality(rating?: number | null) {
-  if (!rating || rating <= 0) {
-    return "Not rated";
+function formatWeekWindow(review: Review) {
+  if (!review.weekStart || !review.weekEnd) {
+    return "Weekly review";
   }
 
-  if (rating >= 5) {
-    return "Excellent";
+  try {
+    return `${format(parseISO(review.weekStart), "MMM d")} - ${format(parseISO(review.weekEnd), "MMM d")}`;
+  } catch {
+    return "Weekly review";
   }
-
-  if (rating >= 4) {
-    return "Good";
-  }
-
-  if (rating >= 3) {
-    return "Mixed";
-  }
-
-  if (rating >= 2) {
-    return "Weak";
-  }
-
-  return "Poor";
 }
 
-function compactStatus(value?: string | null) {
+function oneLine(value?: string | null, fallback = "Keep reviewing to sharpen the next decision.") {
   if (!value) {
-    return "—";
+    return fallback;
   }
 
-  if (value === "Yes") {
-    return "✓";
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const firstSentence = normalized.split(/(?<=[.!?])\s+/)[0] || normalized;
+
+  if (firstSentence.length <= 92) {
+    return firstSentence;
   }
 
-  if (value === "No") {
-    return "✕";
-  }
-
-  if (value === "Partially") {
-    return "±";
-  }
-
-  return value;
+  return `${firstSentence.slice(0, 89).trimEnd()}...`;
 }
 
 function compactSession(value?: string | null) {
-  if (!value) {
-    return "—";
-  }
-
   if (value === "New York") {
     return "NY";
   }
@@ -76,14 +56,92 @@ function compactSession(value?: string | null) {
     return "LDN";
   }
 
-  if (value === "Overlap") {
-    return "OVR";
+  if (value === "Asia") {
+    return "Asia";
   }
 
-  return value;
+  return value ?? null;
 }
 
-function InlineMeta({
+function describeDailyDiscipline(score?: number | null) {
+  if (score == null) {
+    return "Discipline: Unrated";
+  }
+
+  if (score >= 8) {
+    return "Discipline: High";
+  }
+
+  if (score >= 6) {
+    return "Discipline: Steady";
+  }
+
+  if (score >= 4) {
+    return "Discipline: Mixed";
+  }
+
+  return "Discipline: Low";
+}
+
+function describeWeeklyState(rating?: number | null) {
+  if (rating == null) {
+    return "Week still taking shape";
+  }
+
+  if (rating >= 7) {
+    return "Strong week overall";
+  }
+
+  if (rating >= 5) {
+    return "Solid week overall";
+  }
+
+  if (rating >= 4) {
+    return "Mixed week overall";
+  }
+
+  return "Tough week overall";
+}
+
+function getDailyJudgement(review: Review): { tone: JudgementTone; text: string } {
+  const score = review.disciplineScore ?? 0;
+
+  if (score >= 8 && review.followedRules === "Yes") {
+    return { tone: "good", text: "Good discipline" };
+  }
+
+  if (score <= 4 || review.followedRules === "No") {
+    return { tone: "bad", text: "Bad discipline control" };
+  }
+
+  return { tone: "warn", text: "Warning: discipline felt uneven" };
+}
+
+function getWeeklyJudgement(review: Review): { tone: JudgementTone; text: string } {
+  if (review.riskManagement === "Yes" && (review.weeklyRating ?? 0) >= 7) {
+    return { tone: "good", text: "Good risk consistency" };
+  }
+
+  if (review.riskManagement === "No" || (review.weeklyRating ?? 10) <= 4) {
+    return { tone: "bad", text: "Bad risk consistency" };
+  }
+
+  return { tone: "warn", text: "Warning: risk consistency drifted" };
+}
+
+function getTradeJudgement(review: Review): { tone: JudgementTone; text: string } {
+  if ((review.executionRating ?? 0) >= 4 || review.whatWentWell) {
+    return { tone: "good", text: "Good execution" };
+  }
+
+  if ((review.executionRating ?? 5) <= 2 || review.wouldTakeAgain === false) {
+    return { tone: "bad", text: "Bad execution drift" };
+  }
+
+  return { tone: "warn", text: "Warning: execution had friction" };
+}
+
+function MetaRow({
   items,
   className,
 }: {
@@ -108,68 +166,107 @@ function InlineMeta({
   );
 }
 
-function ReflectionLine({
-  label,
+function JudgementIndicator({
+  tone,
   value,
 }: {
-  label: string;
-  value?: string | null;
+  tone: JudgementTone;
+  value: string;
 }) {
-  if (!value) {
-    return null;
-  }
+  const toneClasses = {
+    good: "text-emerald-700 dark:text-emerald-300",
+    bad: "text-rose-700 dark:text-rose-300",
+    warn: "text-amber-700 dark:text-amber-300",
+  } as const;
+
+  const icon = {
+    good: "✔",
+    bad: "✖",
+    warn: "⚠",
+  } as const;
 
   return (
-    <p className="text-sm leading-6 text-muted-foreground">
-      <span className="font-medium text-foreground">{label}:</span>{" "}
-      {value}
+    <p className={cn("text-sm font-medium leading-6", toneClasses[tone])}>
+      {icon[tone]} {value}
+    </p>
+  );
+}
+
+function TakeawayLine({
+  value,
+  fallback,
+}: {
+  value?: string | null;
+  fallback: string;
+}) {
+  return (
+    <p className="text-[15px] font-medium leading-7 text-foreground">
+      → {oneLine(value, fallback)}
     </p>
   );
 }
 
 function DailyReviewSummary({ review }: { review: Review }) {
-  const takeaway = review.lessonLearned || review.improvementPlan || review.wentWell || review.mistakes;
+  const judgement = getDailyJudgement(review);
 
   return (
-    <div className="space-y-3">
-      <InlineMeta
-        items={[
-          `${review.disciplineScore ?? 0}/10`,
-          compactStatus(review.followedRules),
-          review.emotion ?? "—",
-        ]}
-      />
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="text-[1.9rem] font-semibold tracking-tight text-foreground">
+          {formatShortDate(review.reviewDate)}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {review.emotion ? `${review.emotion} session` : "Emotion not captured"}
+        </p>
+      </div>
 
-      {takeaway ? <p className="text-sm leading-6 text-muted-foreground">{takeaway}</p> : null}
+      <p className="text-lg font-medium text-foreground">{describeDailyDiscipline(review.disciplineScore)}</p>
+      <JudgementIndicator tone={judgement.tone} value={judgement.text} />
+      <TakeawayLine
+        value={review.mistakes || review.lessonLearned || review.improvementPlan || review.wentWell}
+        fallback="Capture the turning point from the day."
+      />
     </div>
   );
 }
 
-function WeeklyReviewSummary({ review }: { review: Review }) {
+function WeeklyReviewSummary({
+  review,
+  weeklyDelta,
+}: {
+  review: Review;
+  weeklyDelta?: number | null;
+}) {
   const rating = review.weeklyRating ?? 0;
+  const judgement = getWeeklyJudgement(review);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xl font-semibold tracking-tight text-foreground">{rating}/10</p>
-          <InlineMeta
-            items={[
-              compactStatus(review.riskManagement),
-              review.nextGoal || "—",
-            ]}
-            className="mt-1"
-          />
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-[2rem] font-semibold tracking-tight text-foreground">{rating}/10</h2>
+          <p className="text-sm text-muted-foreground">{formatWeekWindow(review)}</p>
         </div>
-        <div className="w-full sm:w-40">
-          <Progress value={rating * 10} className="h-1.5 bg-muted/70 dark:bg-white/[0.06]" />
-        </div>
+        {typeof weeklyDelta === "number" ? (
+          <p
+            className={cn(
+              "pt-1 text-xs font-medium",
+              weeklyDelta > 0 ? "text-emerald-700 dark:text-emerald-300" : weeklyDelta < 0 ? "text-rose-700 dark:text-rose-300" : "text-muted-foreground",
+            )}
+          >
+            {weeklyDelta > 0 ? "+" : ""}
+            {weeklyDelta} vs last week
+          </p>
+        ) : null}
       </div>
 
-      <div className="space-y-2">
-        <ReflectionLine label="Summary" value={review.weeklySummary} />
-        <ReflectionLine label="Goal" value={review.nextGoal} />
-      </div>
+      <p className="text-lg font-medium text-foreground">{describeWeeklyState(rating)}</p>
+      <Progress value={rating * 10} className="h-1.5 bg-muted/60 dark:bg-white/[0.06]" />
+      <JudgementIndicator tone={judgement.tone} value={judgement.text} />
+      <TakeawayLine
+        value={review.nextGoal || review.biggestMistake || review.weeklySummary || review.biggestWin}
+        fallback="Name the one improvement that carries into next week."
+      />
     </div>
   );
 }
@@ -189,74 +286,36 @@ function TradeReviewListSummary({
     );
   }
 
-  const keyTakeaway = review.lessonLearned
-    || review.improvementForNextTrade
-    || review.mistakesMade
-    || review.whatWentWrong
-    || review.whatWentWell;
+  const judgement = getTradeJudgement(review);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">
-              {trade.pair}
-              <span className="font-normal text-muted-foreground"> · {formatReviewTradeDate(trade.date)}</span>
-            </h2>
-            <ResultBadge result={trade.result} />
-          </div>
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            {trade.pair}
+            <span className="font-normal text-muted-foreground"> · {formatShortDate(trade.date)}</span>
+          </h2>
         </div>
         <ProfitDisplay value={trade.profit} className="text-xl font-semibold sm:text-2xl" />
       </div>
 
-      <div className="border-l-2 border-primary/20 pl-3">
-        <p className="text-[15px] leading-7 text-foreground">
-          {keyTakeaway || "Add your review insight..."}
-        </p>
-      </div>
-
-      <InlineMeta
-        items={[
-          trade.emotion || "—",
-          compactSession(trade.session),
-          `${review.disciplineScore ?? 0}/5`,
-          describeExecutionQuality(review.executionRating),
-        ]}
+      <JudgementIndicator tone={judgement.tone} value={judgement.text} />
+      <TakeawayLine
+        value={review.whatWentWrong || review.mistakesMade || review.improvementForNextTrade || review.lessonLearned || review.whatWentWell}
+        fallback="Write the one adjustment that changes the replay."
       />
-
-      {(review.mistakesMade || review.whatWentWell || review.whatWentWrong) ? (
-        <div className="space-y-2">
-          <ReflectionLine label="Mistake" value={review.mistakesMade || review.whatWentWrong} />
-          <ReflectionLine label="What went well" value={review.whatWentWell} />
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <InlineMeta
-          items={[
-            `E ${trade.entry}`,
-            `SL ${trade.stopLoss}`,
-            `TP ${trade.takeProfit}`,
-          ]}
-          className="font-mono-price text-[13px]"
-        />
-
-        {trade.screenshots[0] ? (
-          <div className="group relative h-[68px] w-full overflow-hidden rounded-xl bg-background/60 sm:w-[104px] dark:bg-white/[0.03]">
-            <img
-              src={trade.screenshots[0]}
-              alt={`${trade.pair} screenshot`}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-            />
-            <div className="absolute inset-0 bg-slate-950/0 transition-colors duration-200 group-hover:bg-slate-950/10" />
-          </div>
-        ) : (
-          <div className="flex h-[68px] w-full items-center justify-center rounded-xl border border-dashed border-border/60 text-muted-foreground sm:w-[104px]">
-            <CameraOff className="h-4 w-4" />
-          </div>
-        )}
-      </div>
+      <MetaRow
+        items={[
+          trade.emotion || null,
+          compactSession(trade.session),
+          review.disciplineScore != null ? `${review.disciplineScore}/5` : null,
+        ]}
+        className="text-[15px] text-muted-foreground"
+      />
+      <p className="font-mono-price text-xs text-muted-foreground">
+        Entry {formatPrice(trade.entry)} | SL {formatPrice(trade.stopLoss)} | TP {formatPrice(trade.takeProfit)}
+      </p>
     </div>
   );
 }
@@ -264,9 +323,10 @@ function TradeReviewListSummary({
 interface ReviewListSummaryProps {
   review: Review;
   linkedTrade?: Trade | null;
+  weeklyDelta?: number | null;
 }
 
-export function ReviewListSummary({ review, linkedTrade }: ReviewListSummaryProps) {
+export function ReviewListSummary({ review, linkedTrade, weeklyDelta }: ReviewListSummaryProps) {
   const scope = getReviewScope(review);
 
   if (scope === "daily") {
@@ -274,7 +334,7 @@ export function ReviewListSummary({ review, linkedTrade }: ReviewListSummaryProp
   }
 
   if (scope === "weekly") {
-    return <WeeklyReviewSummary review={review} />;
+    return <WeeklyReviewSummary review={review} weeklyDelta={weeklyDelta} />;
   }
 
   return <TradeReviewListSummary review={review} trade={linkedTrade} />;

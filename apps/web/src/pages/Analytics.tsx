@@ -80,7 +80,7 @@ type BreakdownDrawerState = {
   kind: BreakdownKind;
   title: string;
   description: string;
-  trades: Trade[];
+  label: string;
 };
 
 type PerformanceRow = NormalizedBreakdownRow & {
@@ -119,6 +119,7 @@ const REFERENCE_LINE = "hsl(var(--border) / 0.8)";
 const CURSOR_FILL = "hsl(var(--accent) / 0.32)";
 const ANALYTICS_EMPTY_MESSAGE = "Add trades to unlock insights.";
 const EMPTY_TRADES: Trade[] = [];
+const ANALYTICS_TRADE_PAGE_SIZE = 100;
 
 function getProfitTone(value: number) {
   if (value > 0) return "text-success";
@@ -393,6 +394,28 @@ function filterTradesForBreakdown(kind: BreakdownKind, label: string, trades: Tr
   }
 
   return trades.filter((trade) => (trade.setup ?? "Unknown") === label);
+}
+
+async function listAllTradesForAnalytics(accountId?: string) {
+  const allTrades: Trade[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const response = await listTrades({
+      accountId,
+      page,
+      pageSize: ANALYTICS_TRADE_PAGE_SIZE,
+      sortBy: "date",
+      sortOrder: "asc",
+    });
+
+    allTrades.push(...response.items);
+    totalPages = response.pagination.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+
+  return allTrades;
 }
 
 function TrendTooltip({ active, payload }: TooltipProps<ValueType, NameType>) {
@@ -694,17 +717,7 @@ export default function Analytics() {
 
   const detailedTradesQuery = useQuery({
     queryKey: privateQueryKey(user.id, "analytics-detailed-trades", accountId ?? "all"),
-    queryFn: async () => {
-      const response = await withMinimumDelay(() => listTrades({
-        accountId,
-        page: 1,
-        pageSize: 500,
-        sortBy: "date",
-        sortOrder: "asc",
-      }));
-
-      return response.items;
-    },
+    queryFn: async () => withMinimumDelay(() => listAllTradesForAnalytics(accountId)),
   });
 
   const calendarQuery = useQuery({
@@ -885,7 +898,11 @@ export default function Analytics() {
     },
   ];
 
-  const drawerStats = buildBreakdownDrawerStats(breakdownDrawer?.trades ?? []);
+  const breakdownDrawerTrades = breakdownDrawer
+    ? filterTradesForBreakdown(breakdownDrawer.kind, breakdownDrawer.label, allDetailedTrades)
+    : EMPTY_TRADES;
+
+  const drawerStats = buildBreakdownDrawerStats(breakdownDrawerTrades);
   const hasAnalyticsData = effectiveSummary.totalTrades > 0
     || calendar.summary.totalTrades > 0
     || allDetailedTrades.length > 0;
@@ -894,13 +911,11 @@ export default function Analytics() {
     : ANALYTICS_EMPTY_MESSAGE;
 
   function openBreakdownSlice(definition: BreakdownDefinition, row: PerformanceRow) {
-    const trades = filterTradesForBreakdown(definition.kind, row.label, allDetailedTrades);
-
     setBreakdownDrawer({
       kind: definition.kind,
       title: row.label,
-      description: `${formatNumberDisplay(trades.length)} trades`,
-      trades,
+      description: `${formatNumberDisplay(row.trades)} trades`,
+      label: row.label,
     });
   }
 
@@ -1168,8 +1183,8 @@ export default function Analytics() {
         title={breakdownDrawer?.title ?? ""}
         description={breakdownDrawer?.description ?? ""}
         stats={drawerStats}
-        trades={breakdownDrawer?.trades ?? []}
-        loading={false}
+        trades={breakdownDrawerTrades}
+        loading={detailedTradesQuery.isLoading || detailedTradesQuery.isFetching}
         onClose={() => setBreakdownDrawer(null)}
         onTradeClick={(tradeId) => navigate(`/trades/${tradeId}`)}
         onViewAllTrades={() => navigate("/trades")}

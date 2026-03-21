@@ -1,46 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { endOfWeek, format, startOfWeek } from "date-fns";
-import { BookOpenText, Ellipsis, Eye, Pencil, Plus, Sparkles, Target, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameMonth,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { ArrowRight, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
-import { PaginationControls } from "@/components/PaginationControls";
+import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ReviewContent } from "@/components/ReviewContent";
-import { ReviewListSummary } from "@/components/ReviewListSummary";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TagChip } from "@/components/ui/TagChip";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
-import { createReview, deleteReview, listReviews, updateReview } from "@/lib/api/reviews";
+import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
 import { getTrade } from "@/lib/api/trades";
-import { getPageErrorState } from "@/lib/page-errors";
+import { formatNumberDisplay } from "@/lib/analytics-rendering";
 import { withMinimumDelay } from "@/lib/loading";
+import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey } from "@/lib/react-query";
 import { getReviewScope, getReviewTitle } from "@/lib/reviews";
 import {
@@ -55,8 +49,7 @@ import {
   type ReviewType,
   type Trade,
 } from "@/lib/types";
-
-type ReviewScopeFilter = "all" | ReviewType;
+import { cn } from "@/lib/utils";
 
 const emptyDailyForm = {
   reviewDate: new Date().toISOString().split("T")[0],
@@ -79,8 +72,19 @@ const emptyWeeklyForm = {
   nextGoal: "",
   weeklyRating: "7",
 };
-const REVIEWS_PAGE_SIZE = 10;
+
 const EMPTY_REVIEWS: Review[] = [];
+
+type CalendarTone = "good" | "warn" | "bad" | "empty";
+type CalendarReviewDay = {
+  key: string;
+  date: Date;
+  dayLabel: string;
+  inCurrentMonth: boolean;
+  review: Review | null;
+  tone: CalendarTone;
+  icon: string | null;
+};
 
 function invalidateReviewQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string) {
   return Promise.all([
@@ -89,7 +93,7 @@ function invalidateReviewQueries(queryClient: ReturnType<typeof useQueryClient>,
   ]);
 }
 
-function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null): Trade | null {
+function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null | undefined): Trade | null {
   if (!snapshot) {
     return null;
   }
@@ -118,116 +122,323 @@ function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null): Trade | n
   };
 }
 
-function formatDailyWeeklyRatio(daily: number, weekly: number) {
-  if (daily === 0 && weekly === 0) {
-    return "0:0";
-  }
-
-  return `${daily}:${weekly}`;
+function reviewSortValue(review: Review) {
+  const fallback = review.updatedAt || review.createdAt;
+  const candidate = review.reviewDate || review.weekEnd || review.weekStart || fallback;
+  return new Date(candidate).getTime();
 }
 
-function InsightSegment({
-  value,
-  icon: Icon,
-}: {
-  value: string;
-  icon: typeof BookOpenText;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-5 py-4 sm:px-6">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/75 text-muted-foreground dark:bg-white/[0.03]">
-        <Icon className="h-4 w-4" />
-      </div>
-      <p className="text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-    </div>
+function oneLine(value?: string | null, fallback = "Keep reviewing to sharpen the next session.") {
+  if (!value) {
+    return fallback;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const firstSentence = normalized.split(/(?<=[.!?])\s+/)[0] || normalized;
+
+  if (firstSentence.length <= 110) {
+    return firstSentence;
+  }
+
+  return `${firstSentence.slice(0, 107).trimEnd()}...`;
+}
+
+function getDailyTone(review: Review | null): CalendarTone {
+  if (!review) {
+    return "empty";
+  }
+
+  const score = review.disciplineScore ?? 0;
+
+  if (score >= 8 && review.followedRules === "Yes") {
+    return "good";
+  }
+
+  if (score <= 4 || review.followedRules === "No") {
+    return "bad";
+  }
+
+  return "warn";
+}
+
+function getDailyIcon(review: Review | null) {
+  const tone = getDailyTone(review);
+
+  if (tone === "good") {
+    return (review?.disciplineScore ?? 0) >= 9 ? "🔥" : "✔";
+  }
+
+  if (tone === "bad") {
+    return "⚠";
+  }
+
+  return null;
+}
+
+function getDailyDisciplineLabel(review: Review | null) {
+  const score = review?.disciplineScore ?? null;
+
+  if (score == null) {
+    return "Not scored";
+  }
+
+  if (score >= 8) {
+    return "High discipline";
+  }
+
+  if (score >= 6) {
+    return "Steady discipline";
+  }
+
+  if (score >= 4) {
+    return "Mixed discipline";
+  }
+
+  return "Low discipline";
+}
+
+function getDailyInsight(review: Review | null) {
+  return oneLine(
+    review?.lessonLearned || review?.improvementPlan || review?.mistakes || review?.wentWell,
+    "No key insight logged for this day.",
   );
 }
 
-type ReviewSection = {
-  key: string;
-  title: string;
-  reviews: Review[];
-};
+function getWeeklyStrength(review: Review | null) {
+  return oneLine(review?.biggestWin || review?.weeklySummary, "No strength logged yet.");
+}
+
+function getWeeklyImprovement(review: Review | null) {
+  return oneLine(review?.nextGoal || review?.biggestMistake, "Add one concrete improvement for next week.");
+}
+
+function getWeeklyTrend(current: Review | null, previous: Review | null) {
+  if (!current || current.weeklyRating == null || !previous || previous.weeklyRating == null) {
+    return {
+      label: "No prior trend yet",
+      tone: "default" as const,
+      value: 0,
+    };
+  }
+
+  const delta = current.weeklyRating - previous.weeklyRating;
+
+  if (delta > 0) {
+    return {
+      label: `Up ${delta} vs last week`,
+      tone: "success" as const,
+      value: delta,
+    };
+  }
+
+  if (delta < 0) {
+    return {
+      label: `Down ${Math.abs(delta)} vs last week`,
+      tone: "danger" as const,
+      value: delta,
+    };
+  }
+
+  return {
+    label: "Flat vs last week",
+    tone: "default" as const,
+    value: 0,
+  };
+}
+
+function getTradeReviewTakeaway(review: Review) {
+  return oneLine(
+    review.whatWentWrong || review.mistakesMade || review.improvementForNextTrade || review.lessonLearned || review.whatWentWell,
+    "No takeaway yet.",
+  );
+}
+
+function getTradeReviewJudgement(review: Review) {
+  if ((review.executionRating ?? 0) >= 4 || review.whatWentWell) {
+    return "✔ Good execution";
+  }
+
+  if ((review.executionRating ?? 5) <= 2 || review.wouldTakeAgain === false) {
+    return "⚠ Needs review";
+  }
+
+  return "⚠ Mixed execution";
+}
+
+function compactSession(value?: string | null) {
+  if (value === "New York") {
+    return "NY";
+  }
+
+  if (value === "London") {
+    return "LDN";
+  }
+
+  return value ?? "—";
+}
+
+function compactTradePrice(value?: number | null) {
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return formatNumberDisplay(value, { maximumFractionDigits: 2 });
+}
+
+function getTradeReviewMeta(trade: Trade | null, review: Review) {
+  return [
+    trade?.emotion || null,
+    compactSession(trade?.session),
+    review.disciplineScore != null ? `${review.disciplineScore}/5` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>) {
+  const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
+  const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
+
+  return eachDayOfInterval({ start, end }).map((date) => {
+    const key = format(date, "yyyy-MM-dd");
+    const review = reviewMap.get(key) ?? null;
+
+    return {
+      key,
+      date,
+      dayLabel: format(date, "d"),
+      inCurrentMonth: isSameMonth(date, currentMonth),
+      review,
+      tone: getDailyTone(review),
+      icon: getDailyIcon(review),
+    } satisfies CalendarReviewDay;
+  });
+}
+
+function isReviewForDate(review: Review, dateKey: string) {
+  const candidate = review.reviewDate || review.tradeSnapshot?.date || null;
+  return candidate === dateKey;
+}
 
 export default function Reviews() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [scopeFilter, setScopeFilter] = useState<ReviewScopeFilter>("all");
-  const [page, setPage] = useState(1);
-  const [sortBy, setSortBy] = useState<"updatedAt" | "createdAt">("updatedAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [open, setOpen] = useState(false);
   const [editingReview, setEditingReview] = useState<Review | null>(null);
   const [viewingReview, setViewingReview] = useState<Review | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [reviewType, setReviewType] = useState<Exclude<ReviewType, "trade">>("daily");
   const [dailyForm, setDailyForm] = useState(emptyDailyForm);
   const [weeklyForm, setWeeklyForm] = useState(emptyWeeklyForm);
   const [tradeReviewTrade, setTradeReviewTrade] = useState<Trade | null>(null);
   const [tradeReviewEditing, setTradeReviewEditing] = useState<Review | null>(null);
+  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [selectedWeeklyIndex, setSelectedWeeklyIndex] = useState(0);
 
-  const reviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "list", {
-      page,
-      pageSize: REVIEWS_PAGE_SIZE,
-      type: scopeFilter,
-      sortBy,
-      sortOrder,
-    }),
+  const dailyReviewsQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "reviews", "daily-calendar"),
     queryFn: async () => withMinimumDelay(() => listReviews({
-      page,
-      pageSize: REVIEWS_PAGE_SIZE,
-      type: scopeFilter === "all" ? undefined : scopeFilter,
-      sortBy,
-      sortOrder,
+      type: "daily",
+      page: 1,
+      pageSize: 100,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
     })),
-    placeholderData: keepPreviousData,
   });
 
-  const visibleReviews = reviewsQuery.data?.items;
-  const reviews = visibleReviews ?? EMPTY_REVIEWS;
-  const totalReviewPages = reviewsQuery.data?.pagination.totalPages ?? 1;
-  const totalReviews = reviewsQuery.data?.pagination.total ?? 0;
-
-  const linkedTradeQueries = useQueries({
-    queries: (visibleReviews ?? [])
-      .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
-      .map((review) => ({
-        queryKey: privateQueryKey(user.id, "trades", "detail", review.tradeId, "review-page"),
-        queryFn: async () => {
-          const response = await getTrade(review.tradeId as string);
-          return response.trade;
-        },
-      })),
+  const weeklyReviewsQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "reviews", "weekly-top"),
+    queryFn: async () => withMinimumDelay(() => listReviews({
+      type: "weekly",
+      page: 1,
+      pageSize: 60,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    })),
   });
 
-  const linkedTradeMap = useMemo(() => {
-    let queryIndex = 0;
+  const tradeReviewsQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "reviews", "trade-panel"),
+    queryFn: async () => withMinimumDelay(() => listReviews({
+      type: "trade",
+      page: 1,
+      pageSize: 100,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    })),
+  });
 
-    return Object.fromEntries(
-      (visibleReviews ?? [])
-        .filter((review) => (review.reviewScope || review.type) === "trade" && review.tradeId)
-        .map((review) => {
-          const trade = linkedTradeQueries[queryIndex]?.data ?? null;
-          queryIndex += 1;
-          return [review.tradeId as string, trade];
-        }),
-    );
-  }, [linkedTradeQueries, visibleReviews]);
+  const dailyReviews = dailyReviewsQuery.data?.items ?? EMPTY_REVIEWS;
+  const weeklyReviews = weeklyReviewsQuery.data?.items ?? EMPTY_REVIEWS;
+  const tradeReviews = tradeReviewsQuery.data?.items ?? EMPTY_REVIEWS;
 
   const viewingTrade = useMemo(() => {
     if (!viewingReview || getReviewScope(viewingReview) !== "trade") {
       return null;
     }
 
-    const linkedTrade = viewingReview.tradeId ? linkedTradeMap[viewingReview.tradeId] : null;
-    return linkedTrade ?? buildTradeFromSnapshot(viewingReview.tradeSnapshot);
-  }, [linkedTradeMap, viewingReview]);
+    return buildTradeFromSnapshot(viewingReview.tradeSnapshot);
+  }, [viewingReview]);
+
+  const sortedWeeklyReviews = useMemo(
+    () => [...weeklyReviews].sort((left, right) => reviewSortValue(right) - reviewSortValue(left)),
+    [weeklyReviews],
+  );
+  const clampedWeeklyIndex = Math.min(selectedWeeklyIndex, Math.max(sortedWeeklyReviews.length - 1, 0));
+  const activeWeeklyReview = sortedWeeklyReviews[clampedWeeklyIndex] ?? null;
+  const previousWeeklyReview = sortedWeeklyReviews[clampedWeeklyIndex + 1] ?? null;
+  const weeklyTrend = getWeeklyTrend(activeWeeklyReview, previousWeeklyReview);
+
+  const dailyReviewMap = useMemo(
+    () => new Map(dailyReviews.filter((review) => review.reviewDate).map((review) => [review.reviewDate as string, review])),
+    [dailyReviews],
+  );
+
+  const calendarDays = useMemo(
+    () => buildCalendarDays(currentMonth, dailyReviewMap),
+    [currentMonth, dailyReviewMap],
+  );
 
   useEffect(() => {
-    setPage(1);
-  }, [scopeFilter, sortBy, sortOrder]);
+    if (calendarDays.length === 0) {
+      setSelectedDayKey(null);
+      return;
+    }
+
+    const selectedDayInMonth = selectedDayKey
+      ? calendarDays.find((day) => day.key === selectedDayKey && day.inCurrentMonth)
+      : null;
+
+    if (selectedDayInMonth) {
+      return;
+    }
+
+    const reviewedDay = [...calendarDays].reverse().find((day) => day.review && day.inCurrentMonth);
+    const fallbackDay = calendarDays.find((day) => day.inCurrentMonth) ?? calendarDays[0];
+    setSelectedDayKey((reviewedDay ?? fallbackDay)?.key ?? null);
+  }, [calendarDays, selectedDayKey]);
+
+  useEffect(() => {
+    if (sortedWeeklyReviews.length === 0) {
+      if (selectedWeeklyIndex !== 0) {
+        setSelectedWeeklyIndex(0);
+      }
+      return;
+    }
+
+    if (selectedWeeklyIndex > sortedWeeklyReviews.length - 1) {
+      setSelectedWeeklyIndex(sortedWeeklyReviews.length - 1);
+    }
+  }, [selectedWeeklyIndex, sortedWeeklyReviews]);
+
+  const selectedDay = calendarDays.find((day) => day.key === selectedDayKey) ?? null;
+  const selectedDailyReview = selectedDayKey ? dailyReviewMap.get(selectedDayKey) ?? null : null;
+
+  const selectedTradeReviews = useMemo(
+    () => [...tradeReviews]
+      .filter((review) => selectedDayKey ? isReviewForDate(review, selectedDayKey) : false)
+      .sort((left, right) => reviewSortValue(right) - reviewSortValue(left)),
+    [selectedDayKey, tradeReviews],
+  );
 
   const dailyWeeklyMutation = useMutation({
     mutationFn: async () => {
@@ -283,19 +494,6 @@ export default function Reviews() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (reviewId: string) => deleteReview(reviewId),
-    onSuccess: async () => {
-      await invalidateReviewQueries(queryClient, user.id);
-      toast.success("Review deleted.");
-      setDeleteId(null);
-    },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not delete the review right now.";
-      toast.error(message);
-    },
-  });
-
   const tradeReviewMutation = useMutation({
     mutationFn: async (review: Review) => {
       const payload = {
@@ -325,22 +523,28 @@ export default function Reviews() {
       setTradeReviewTrade(null);
       setTradeReviewEditing(null);
     },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not save the trade review right now.";
+      toast.error(message);
+    },
   });
 
-  const openCreateModal = (type: Exclude<ReviewType, "trade">) => {
+  function openCreateModal(type: Exclude<ReviewType, "trade">, presetDate?: string) {
     setReviewType(type);
     setEditingReview(null);
-    setDailyForm(emptyDailyForm);
+    setDailyForm({ ...emptyDailyForm, reviewDate: presetDate ?? emptyDailyForm.reviewDate });
     setWeeklyForm(emptyWeeklyForm);
     setOpen(true);
-  };
+  }
 
-  const openEditModal = async (review: Review) => {
-    if ((review.reviewScope || review.type) === "trade") {
-      const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
+  async function openEditModal(review: Review) {
+    const scope = getReviewScope(review);
 
-      if (linkedTrade) {
-        setTradeReviewTrade(linkedTrade);
+    if (scope === "trade") {
+      const snapshotTrade = buildTradeFromSnapshot(review.tradeSnapshot);
+
+      if (snapshotTrade) {
+        setTradeReviewTrade(snapshotTrade);
         setTradeReviewEditing(review);
         return;
       }
@@ -359,9 +563,9 @@ export default function Reviews() {
     }
 
     setEditingReview(review);
-    setReviewType((review.reviewScope || review.type) as Exclude<ReviewType, "trade">);
+    setReviewType(scope as Exclude<ReviewType, "trade">);
 
-    if ((review.reviewScope || review.type) === "daily") {
+    if (scope === "daily") {
       setDailyForm({
         reviewDate: review.reviewDate || emptyDailyForm.reviewDate,
         wentWell: review.wentWell || "",
@@ -386,70 +590,17 @@ export default function Reviews() {
     }
 
     setOpen(true);
-  };
+  }
 
-  const reviewMix = useMemo(() => {
-    return reviews.reduce(
-      (acc, review) => {
-        const scope = getReviewScope(review);
-        acc[scope] += 1;
-        return acc;
-      },
-      { daily: 0, weekly: 0, trade: 0 } as Record<ReviewType, number>,
-    );
-  }, [reviews]);
+  const isInitialLoading = !dailyReviewsQuery.data && !weeklyReviewsQuery.data && !tradeReviewsQuery.data
+    && (dailyReviewsQuery.isLoading || weeklyReviewsQuery.isLoading || tradeReviewsQuery.isLoading);
 
-  const reviewSections = useMemo<ReviewSection[]>(() => {
-    if (scopeFilter === "trade") {
-      return [{
-        key: "trade",
-        title: "Trade Reviews",
-        reviews,
-      }];
-    }
-
-    if (scopeFilter === "daily") {
-      return [{
-        key: "daily",
-        title: "Daily Reviews",
-        reviews,
-      }];
-    }
-
-    if (scopeFilter === "weekly") {
-      return [{
-        key: "weekly",
-        title: "Weekly Reviews",
-        reviews,
-      }];
-    }
-
-    const reflectiveReviews = reviews.filter((review) => {
-      const scope = getReviewScope(review);
-      return scope === "daily" || scope === "weekly";
-    });
-    const tradeReviews = reviews.filter((review) => getReviewScope(review) === "trade");
-
-    return [
-      reflectiveReviews.length > 0 ? {
-        key: "reflective",
-        title: "Daily & Weekly Reviews",
-        reviews: reflectiveReviews,
-      } : null,
-      tradeReviews.length > 0 ? {
-        key: "trade",
-        title: "Trade Reviews",
-        reviews: tradeReviews,
-      } : null,
-    ].filter((section): section is ReviewSection => Boolean(section));
-  }, [reviews, scopeFilter]);
-
-  if (reviewsQuery.isLoading && !reviewsQuery.data) {
+  if (isInitialLoading) {
     return <ReviewsSkeleton />;
   }
 
-  if (reviewsQuery.isError) {
-    const errorState = getPageErrorState(reviewsQuery.error, {
+  if (dailyReviewsQuery.isError || weeklyReviewsQuery.isError || tradeReviewsQuery.isError) {
+    const errorState = getPageErrorState(dailyReviewsQuery.error ?? weeklyReviewsQuery.error ?? tradeReviewsQuery.error, {
       unavailableTitle: "Reviews unavailable",
       unavailableDescription: "The reviews service is temporarily unavailable. Please try again in a moment.",
       unauthorizedDescription: "Your session is not allowed to view reviews right now.",
@@ -463,207 +614,326 @@ export default function Reviews() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
-        onRetry={errorState.allowRetry ? () => void reviewsQuery.refetch() : undefined}
-        isRetrying={reviewsQuery.isFetching}
+        onRetry={errorState.allowRetry ? () => {
+          void Promise.all([
+            dailyReviewsQuery.refetch(),
+            weeklyReviewsQuery.refetch(),
+            tradeReviewsQuery.refetch(),
+          ]);
+        } : undefined}
+        isRetrying={dailyReviewsQuery.isFetching || weeklyReviewsQuery.isFetching || tradeReviewsQuery.isFetching}
       />
     );
   }
 
+  const monthLabel = format(currentMonth, "MMMM yyyy");
+
   return (
     <PageShell size="wide">
-      <PageHeader title="Reviews" />
+      <PageHeader
+        title="Reviews"
+        actions={(
+          <>
+            <Button variant="outline" className="rounded-2xl px-4" onClick={() => openCreateModal("daily", selectedDayKey ?? emptyDailyForm.reviewDate)}>
+              <Plus className="h-4 w-4" />
+              Daily Review
+            </Button>
+            <Button className="rounded-2xl px-4" onClick={() => openCreateModal("weekly")}>
+              <Plus className="h-4 w-4" />
+              Weekly Review
+            </Button>
+          </>
+        )}
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-        <SectionCard className="overflow-hidden p-0">
-          <div className="grid divide-y divide-border/50 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <InsightSegment value={String(totalReviews)} icon={BookOpenText} />
-            <InsightSegment value={formatDailyWeeklyRatio(reviewMix.daily, reviewMix.weekly)} icon={Sparkles} />
-            <InsightSegment value={String(reviewMix.trade)} icon={Target} />
-          </div>
-        </SectionCard>
-
-        <div className="flex flex-col gap-3 sm:flex-row xl:justify-end">
-          <Button variant="outline" className="rounded-2xl px-4" onClick={() => openCreateModal("daily")}>
-            <Plus className="h-4 w-4" />
-            Daily Review
-          </Button>
-          <Button className="rounded-2xl px-4" onClick={() => openCreateModal("weekly")}>
-            <Plus className="h-4 w-4" />
-            Weekly Review
-          </Button>
-        </div>
-      </div>
-
-      <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)}>
-        <SectionCard className="p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl bg-muted/65 p-1 sm:max-w-[420px] dark:bg-white/[0.03]">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="daily">Daily</TabsTrigger>
-              <TabsTrigger value="weekly">Weekly</TabsTrigger>
-              <TabsTrigger value="trade">Trade</TabsTrigger>
-            </TabsList>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                      <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="updatedAt">Updated</SelectItem>
-                        <SelectItem value="createdAt">Created</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
-                      <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="desc">Newest</SelectItem>
-                        <SelectItem value="asc">Oldest</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-          </div>
-        </SectionCard>
-
-        <TabsContent value={scopeFilter} className="space-y-6">
-          {reviews.length === 0 ? (
-            <EmptyState
-              icon={BookOpenText}
-              title="No reviews yet"
-              description="Create a review to populate this view."
-            />
-          ) : (
-            <div className="space-y-6">
-              {reviewSections.map((section) => (
-                <section key={section.key} className="space-y-4">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/90">{section.title}</p>
-
-                  <div className="grid gap-5 lg:grid-cols-2">
-                    {section.reviews.map((review) => {
-                      const scope = getReviewScope(review);
-                      const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
-                      const snapshotTrade = buildTradeFromSnapshot(review.tradeSnapshot);
-                      const summaryTrade = linkedTrade ?? snapshotTrade;
-                      const updatedLabel = new Date(review.updatedAt).toLocaleDateString("en-US");
-                      const openReview = () => setViewingReview(review);
-                      const isTradeReview = scope === "trade";
-
-                      return (
-                        <article
-                          key={review.id}
-                          role="button"
-                          tabIndex={0}
-                          className="group h-full rounded-[1.6rem] border border-border/50 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--card)/0.95))] p-4 text-left shadow-[0_14px_38px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/15 hover:shadow-[0_20px_48px_-30px_rgba(15,23,42,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--card)/0.92))]"
-                          onClick={openReview}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              openReview();
-                            }
-                          }}
-                        >
-                          <div className="flex h-full flex-col gap-4">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="space-y-1">
-                                {!isTradeReview ? (
-                                  <h2 className="text-xl font-semibold tracking-tight text-foreground">
-                                    {getReviewTitle(review, summaryTrade)}
-                                  </h2>
-                                ) : null}
-                                {!isTradeReview ? <p className="text-sm text-muted-foreground">{updatedLabel}</p> : null}
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  className="h-8 rounded-xl px-3.5"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    if (isTradeReview && review.tradeId) {
-                                      navigate(`/trades/${review.tradeId}`);
-                                      return;
-                                    }
-
-                                    openReview();
-                                  }}
-                                >
-                                  View
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 rounded-xl"
-                                  aria-label="Edit"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void openEditModal(review);
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 rounded-xl"
-                                      onClick={(event) => event.stopPropagation()}
-                                    >
-                                      <Ellipsis className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-40">
-                                    {isTradeReview ? (
-                                      <DropdownMenuItem
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          openReview();
-                                        }}
-                                      >
-                                        <Eye className="mr-2 h-4 w-4" />
-                                        View Review
-                                      </DropdownMenuItem>
-                                    ) : null}
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setDeleteId(review.id);
-                                      }}
-                                    >
-                                      <Trash2 className="mr-2 h-4 w-4" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </div>
-
-                            <ReviewListSummary review={review} linkedTrade={summaryTrade} />
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-
-              <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/70">
-                <PaginationControls
-                  currentPage={page}
-                  totalPages={totalReviewPages}
-                  itemLabel="review pages"
-                  onPrevious={() => setPage((current) => Math.max(1, current - 1))}
-                  onNext={() => setPage((current) => Math.min(totalReviewPages, current + 1))}
-                />
+      <SectionCard className="overflow-hidden border-primary/10 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.12),transparent_34%),linear-gradient(180deg,hsl(var(--card)),hsl(var(--card)/0.96))] p-0">
+        <div className="grid gap-6 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-label mb-2">Weekly Review</p>
+                <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+                  {activeWeeklyReview ? `${activeWeeklyReview.weeklyRating ?? 0}/10` : "No weekly review yet"}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {activeWeeklyReview ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Previous week"
+                      onClick={() => setSelectedWeeklyIndex((value) => Math.min(value + 1, sortedWeeklyReviews.length - 1))}
+                      disabled={clampedWeeklyIndex >= sortedWeeklyReviews.length - 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Next week"
+                      onClick={() => setSelectedWeeklyIndex((value) => Math.max(value - 1, 0))}
+                      disabled={clampedWeeklyIndex === 0}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="View weekly review" onClick={() => setViewingReview(activeWeeklyReview)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Edit weekly review" onClick={() => void openEditModal(activeWeeklyReview)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </div>
-          )}
-        </TabsContent>
-      </Tabs>
+
+            <p className="text-sm text-muted-foreground">
+              {activeWeeklyReview
+                ? `${format(parseISO(activeWeeklyReview.weekStart || activeWeeklyReview.createdAt), "MMM d")} - ${format(parseISO(activeWeeklyReview.weekEnd || activeWeeklyReview.updatedAt), "MMM d, yyyy")}`
+                : "Add a weekly review to see your summary."}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div
+                className={cn(
+                  "inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium",
+                  weeklyTrend.tone === "success" && "border-success/20 bg-success/[0.08] text-success",
+                  weeklyTrend.tone === "danger" && "border-danger/20 bg-danger/[0.08] text-danger",
+                  weeklyTrend.tone === "default" && "border-border/60 bg-background/70 text-muted-foreground",
+                )}
+              >
+                {weeklyTrend.label}
+              </div>
+              {activeWeeklyReview ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-sm text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {clampedWeeklyIndex === 0 ? "Latest" : "Earlier week"}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[1.5rem] border border-border/60 bg-background/70 p-4">
+              <p className="text-label mb-2">Strength</p>
+              <p className="text-base font-medium leading-7 text-foreground">{getWeeklyStrength(activeWeeklyReview)}</p>
+            </div>
+            <div className="rounded-[1.5rem] border border-border/60 bg-background/70 p-4">
+              <p className="text-label mb-2">Improvement</p>
+              <p className="text-base font-medium leading-7 text-foreground">{getWeeklyImprovement(activeWeeklyReview)}</p>
+            </div>
+            <div className="lg:col-span-2">
+              <Progress value={(activeWeeklyReview?.weeklyRating ?? 0) * 10} className="h-2 bg-background/70" />
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_380px]">
+        <SectionCard className="space-y-5 p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-label mb-2">Calendar</p>
+              <h2 className="text-2xl font-semibold text-foreground">{monthLabel}</h2>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" aria-label="Previous month" onClick={() => setCurrentMonth((value) => addMonths(value, -1))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" aria-label="Next month" onClick={() => setCurrentMonth((value) => addMonths(value, 1))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" /> Strong</span>
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500/70" /> Mixed</span>
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" /> Review</span>
+          </div>
+
+          <div className="grid grid-cols-7 gap-3 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/80">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <div key={day}>{day}</div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-3">
+            {calendarDays.map((day) => (
+              <button
+                key={day.key}
+                type="button"
+                aria-label={format(day.date, "MMMM d, yyyy")}
+                className={cn(
+                  "rounded-[1.45rem] p-2 text-center transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  !day.inCurrentMonth && "opacity-40",
+                )}
+                onClick={() => {
+                  setSelectedDayKey(day.key);
+                  if (!day.inCurrentMonth) {
+                    setCurrentMonth(startOfMonth(day.date));
+                  }
+                }}
+              >
+                <p className="text-[11px] font-medium text-muted-foreground">{day.dayLabel}</p>
+                <div
+                  className={cn(
+                    "mt-2 flex aspect-square items-center justify-center rounded-[1.25rem] border",
+                    day.tone === "good" && "border-emerald-500/20 bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300",
+                    day.tone === "warn" && "border-amber-500/20 bg-amber-500/[0.12] text-amber-700 dark:text-amber-300",
+                    day.tone === "bad" && "border-rose-500/20 bg-rose-500/[0.12] text-rose-700 dark:text-rose-300",
+                    day.tone === "empty" && "border-border/60 bg-background/70 text-muted-foreground",
+                    selectedDayKey === day.key && "ring-2 ring-primary/45 ring-offset-2 ring-offset-background",
+                  )}
+                >
+                  {day.icon ? (
+                    <span className="text-lg" aria-hidden="true">{day.icon}</span>
+                  ) : (
+                    <span className="h-2.5 w-2.5 rounded-full bg-current/25" aria-hidden="true" />
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard className="h-fit overflow-hidden p-0 xl:sticky xl:top-6">
+          <div className="border-b border-border/60 px-5 py-5 sm:px-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-label mb-2">Day</p>
+                <h2 className="text-2xl font-semibold text-foreground">
+                  {selectedDay ? format(selectedDay.date, "EEE, MMM d") : "Select a day"}
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selectedDailyReview ? (
+                  <>
+                    <Button variant="ghost" size="icon" aria-label="View daily review" onClick={() => setViewingReview(selectedDailyReview)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Edit daily review" onClick={() => void openEditModal(selectedDailyReview)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" onClick={() => openCreateModal("daily", selectedDayKey ?? emptyDailyForm.reviewDate)}>
+                    <Plus className="h-4 w-4" />
+                    Add
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6 px-5 py-5 sm:px-6">
+            <section className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {selectedDailyReview?.emotion ? <TagChip label={selectedDailyReview.emotion} kind="emotion" /> : null}
+                {selectedDailyReview?.followedRules ? <TagChip label={selectedDailyReview.followedRules} kind="emotion" /> : null}
+              </div>
+
+              <div className="rounded-[1.4rem] border border-border/60 bg-background/70 p-4">
+                <p className="text-label mb-2">Discipline</p>
+                <p className="text-lg font-semibold text-foreground">{getDailyDisciplineLabel(selectedDailyReview)}</p>
+                {selectedDailyReview?.disciplineScore != null ? (
+                  <p className="mt-1 text-sm text-muted-foreground">{selectedDailyReview.disciplineScore}/10 score</p>
+                ) : null}
+              </div>
+
+              <div className="rounded-[1.4rem] border border-border/60 bg-background/70 p-4">
+                <p className="text-label mb-2">Key Insight</p>
+                <p className="text-base font-medium leading-7 text-foreground">{getDailyInsight(selectedDailyReview)}</p>
+              </div>
+
+              {!selectedDailyReview ? (
+                <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-background/60 p-4 text-sm text-muted-foreground">
+                  Add a daily review for this day.
+                </div>
+              ) : null}
+            </section>
+
+            <section className="space-y-3 border-t border-border/60 pt-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-medium text-foreground">Trades</h3>
+                </div>
+                {selectedTradeReviews.length > 0 ? (
+                  <span className="text-sm text-muted-foreground">{formatNumberDisplay(selectedTradeReviews.length)} linked</span>
+                ) : null}
+              </div>
+
+              {selectedTradeReviews.length === 0 ? (
+                <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-background/60 p-4 text-sm text-muted-foreground">
+                  No trade reviews yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedTradeReviews.map((review) => {
+                    const trade = buildTradeFromSnapshot(review.tradeSnapshot);
+                    const meta = getTradeReviewMeta(trade, review);
+
+                    return (
+                      <div
+                        key={review.id}
+                        className="rounded-[1.4rem] border border-border/60 bg-background/70 px-4 py-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <button type="button" className="min-w-0 text-left" onClick={() => setViewingReview(review)}>
+                            <p className="text-base font-semibold text-foreground">{trade?.pair || "Linked trade"}</p>
+                          </button>
+                          {trade ? <ProfitDisplay value={trade.profit} /> : null}
+                        </div>
+
+                        <p className="mt-1 text-sm font-medium text-muted-foreground">{getTradeReviewJudgement(review)}</p>
+
+                        <button type="button" className="mt-2 block text-left" onClick={() => setViewingReview(review)}>
+                          <p className="text-sm font-medium leading-6 text-foreground">→ {getTradeReviewTakeaway(review)}</p>
+                        </button>
+
+                        {meta ? (
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            {meta}
+                          </p>
+                        ) : null}
+
+                        {trade ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Entry {compactTradePrice(trade.entry)} · SL {compactTradePrice(trade.stopLoss)} · TP {compactTradePrice(trade.takeProfit)}
+                          </p>
+                        ) : null}
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <Button size="sm" className="rounded-xl px-4" onClick={() => setViewingReview(review)}>
+                            View
+                          </Button>
+                          <Button variant="ghost" size="sm" className="px-2 text-muted-foreground hover:text-foreground" onClick={() => void openEditModal(review)}>
+                            Edit
+                          </Button>
+                          {review.tradeId ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="ml-auto rounded-xl text-muted-foreground hover:text-foreground"
+                              aria-label="Open trade"
+                              onClick={() => navigate(`/trades/${review.tradeId}`)}
+                            >
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+        </SectionCard>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-3xl overflow-y-auto rounded-[1.75rem]">
@@ -801,23 +1071,6 @@ export default function Reviews() {
           isSaving={tradeReviewMutation.isPending}
         />
       ) : null}
-
-      <AlertDialog open={Boolean(deleteId)} onOpenChange={(openState) => !openState && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Review</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </PageShell>
   );
 }

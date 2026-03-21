@@ -443,6 +443,250 @@ describe("analytics rendering", () => {
     expect(screen.queryByRole("heading", { name: "No trades yet" })).not.toBeInTheDocument();
   });
 
+  it("loads all detailed-trade pages so all-account breakdown tabs display complete data", async () => {
+    apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
+      summary: {
+        totalTrades: 0,
+        wins: 0,
+        losses: 0,
+        totalProfit: 0,
+        totalGross: 0,
+        totalLoss: 0,
+        winRate: 0,
+        avgRR: 0,
+      },
+      winLoss: [],
+      setupPerformance: [],
+      sessionPerformance: [],
+      emotionPerformance: [],
+      pairPerformance: [],
+      accountPerformance: [],
+    });
+    apiMocks.getAnalyticsCalendar.mockResolvedValue({
+      month: "2026-03",
+      days: [],
+      weeks: [],
+      summary: {
+        totalTrades: 0,
+        totalProfit: 0,
+        winRate: 0,
+      },
+    });
+    apiMocks.listTrades.mockImplementation(async (params?: { page?: number; pageSize?: number; accountId?: string }) => {
+      if ((params?.page ?? 1) === 1) {
+        return {
+          items: [
+            {
+              id: "trade-1",
+              date: "2026-03-15",
+              pair: "XAUUSD",
+              accountId: "account-1",
+              direction: "Buy",
+              entry: 3000,
+              stopLoss: 2980,
+              takeProfit: 3040,
+              profit: 150,
+              result: "Win",
+              setupId: null,
+              setup: "CRT",
+              session: "London",
+              emotion: "Focused",
+              notes: "",
+              screenshots: [],
+              createdAt: "2026-03-15T10:00:00.000Z",
+              updatedAt: "2026-03-15T10:00:00.000Z",
+            },
+          ],
+          pagination: {
+            page: 1,
+            pageSize: 100,
+            total: 2,
+            totalPages: 2,
+            hasNextPage: true,
+            hasPreviousPage: false,
+          },
+        };
+      }
+
+      return {
+        items: [
+          {
+            id: "trade-2",
+            date: "2026-03-16",
+            pair: "EURUSD",
+            accountId: "account-1",
+            direction: "Sell",
+            entry: 1.09,
+            stopLoss: 1.1,
+            takeProfit: 1.07,
+            profit: -60,
+            result: "Loss",
+            setupId: null,
+            setup: "FVG",
+            session: "New York",
+            emotion: "Calm",
+            notes: "",
+            screenshots: [],
+            createdAt: "2026-03-16T10:00:00.000Z",
+            updatedAt: "2026-03-16T10:00:00.000Z",
+          },
+        ],
+        pagination: {
+          page: 2,
+          pageSize: 100,
+          total: 2,
+          totalPages: 2,
+          hasNextPage: false,
+          hasPreviousPage: true,
+        },
+      };
+    });
+
+    renderPage(<Analytics />);
+
+    await screen.findByText("Performance Score");
+    fireEvent.click(screen.getByRole("button", { name: "Breakdown" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pairs" }));
+
+    expect(await screen.findByText("XAUUSD")).toBeInTheDocument();
+    expect(screen.getByText("EURUSD")).toBeInTheDocument();
+    expect(apiMocks.listTrades).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      accountId: undefined,
+      page: 1,
+      pageSize: 100,
+      sortBy: "date",
+      sortOrder: "asc",
+    }));
+    expect(apiMocks.listTrades).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      accountId: undefined,
+      page: 2,
+      pageSize: 100,
+      sortBy: "date",
+      sortOrder: "asc",
+    }));
+  });
+
+  it("keeps breakdown drawers reactive while detailed trades are still loading", async () => {
+    const detailedTradesDeferred = createDeferred<{
+      items: Array<Record<string, unknown>>;
+      pagination: {
+        page: number;
+        pageSize: number;
+        total: number;
+        totalPages: number;
+        hasNextPage: boolean;
+        hasPreviousPage: boolean;
+      };
+    }>();
+
+    apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
+      summary: {
+        totalTrades: 2,
+        wins: 1,
+        losses: 1,
+        totalProfit: 70,
+        totalGross: 120,
+        totalLoss: -50,
+        winRate: 50,
+        avgRR: 1.8,
+      },
+      winLoss: [],
+      setupPerformance: [
+        {
+          key: "CRT",
+          label: "CRT",
+          trades: 2,
+          wins: 1,
+          winRate: 50,
+          profit: 70,
+          averageProfit: 35,
+        },
+      ],
+      sessionPerformance: [],
+      emotionPerformance: [],
+      pairPerformance: [],
+      accountPerformance: [],
+    });
+    apiMocks.getAnalyticsCalendar.mockResolvedValue({
+      month: "2026-03",
+      days: [],
+      weeks: [],
+      summary: {
+        totalTrades: 0,
+        totalProfit: 0,
+        winRate: 0,
+      },
+    });
+    apiMocks.listTrades.mockReturnValue(detailedTradesDeferred.promise);
+
+    renderPage(<Analytics />);
+
+    await screen.findByText("Performance Score");
+
+    fireEvent.click(screen.getByRole("button", { name: "Breakdown" }));
+    fireEvent.click(await screen.findByText("CRT"));
+
+    expect(await screen.findByRole("heading", { name: "CRT" })).toBeInTheDocument();
+    expect(screen.getByText("2 trades")).toBeInTheDocument();
+    expect(screen.queryByText("No trades")).not.toBeInTheDocument();
+
+    detailedTradesDeferred.resolve({
+      items: [
+        {
+          id: "trade-crt-1",
+          date: "2026-03-18",
+          pair: "XAUUSD",
+          accountId: "account-1",
+          direction: "Buy",
+          entry: 3000,
+          stopLoss: 2985,
+          takeProfit: 3045,
+          profit: 120,
+          result: "Win",
+          setupId: null,
+          setup: "CRT",
+          session: "London",
+          emotion: "Focused",
+          notes: "",
+          screenshots: [],
+          createdAt: "2026-03-18T10:00:00.000Z",
+          updatedAt: "2026-03-18T10:00:00.000Z",
+        },
+        {
+          id: "trade-crt-2",
+          date: "2026-03-19",
+          pair: "EURUSD",
+          accountId: "account-1",
+          direction: "Sell",
+          entry: 1.09,
+          stopLoss: 1.1,
+          takeProfit: 1.07,
+          profit: -50,
+          result: "Loss",
+          setupId: null,
+          setup: "CRT",
+          session: "New York",
+          emotion: "Calm",
+          notes: "",
+          screenshots: [],
+          createdAt: "2026-03-19T10:00:00.000Z",
+          updatedAt: "2026-03-19T10:00:00.000Z",
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 500,
+        total: 2,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+
+    expect(await screen.findByText("XAUUSD")).toBeInTheDocument();
+    expect(screen.getByText("EURUSD")).toBeInTheDocument();
+  });
+
   it("does not show the no-trades chart state when summary data exists but detailed trades are empty", async () => {
     apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
       summary: {
