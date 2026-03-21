@@ -1,13 +1,19 @@
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { z } from "zod";
 import { env } from "../../config/env.js";
 import { toNumber } from "../../lib/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { AppError } from "../../utils/errors.js";
 import { sessionFromDb } from "../../utils/domain-mappers.js";
-import { tradeShareSettingsSchema, type TradeShareSettingsInput } from "./schemas.js";
+import { type TradeShareSettingsInput } from "./schemas.js";
+import {
+  parseStoredTradeShareSettings,
+  parseStoredTradeShareSnapshot,
+  serializeTradeShareSettings,
+  serializeTradeShareSnapshot,
+  type TradeShareSnapshot,
+} from "./storage.js";
 
 const ownedTradeInclude = Prisma.validator<Prisma.TradeInclude>()({
   account: true,
@@ -17,33 +23,6 @@ const ownedTradeInclude = Prisma.validator<Prisma.TradeInclude>()({
     },
   },
 });
-
-const tradeShareSnapshotSchema = z.object({
-  tradeId: z.string().uuid(),
-  pair: z.string(),
-  direction: z.enum(["Buy", "Sell"]),
-  result: z.enum(["Win", "Loss", "Breakeven"]),
-  date: z.string(),
-  entry: z.number(),
-  stopLoss: z.number(),
-  takeProfit: z.number(),
-  pnl: z.number(),
-  rr: z.number().nullable(),
-  setup: z.string().nullable(),
-  session: z.enum(["Asia", "London", "New York"]).nullable(),
-  emotion: z.enum(["Calm", "Focused", "Confident", "Anxious", "Frustrated"]).nullable(),
-  notes: z.string().nullable(),
-  accountName: z.string().nullable(),
-  screenshots: z.array(
-    z.object({
-      storageKey: z.string(),
-      sortOrder: z.number().int().nonnegative(),
-    }),
-  ),
-});
-
-type StoredTradeShareSettings = z.infer<typeof tradeShareSettingsSchema>;
-type TradeShareSnapshot = z.infer<typeof tradeShareSnapshotSchema>;
 
 function generateTradeShareId() {
   return crypto.randomBytes(24).toString("base64url");
@@ -83,14 +62,6 @@ function assertValidExpiration(expiresAt?: string | null) {
 
 function isOwnedScreenshotStorageKey(userId: string, tradeId: string, storageKey: string) {
   return storageKey.startsWith(`users/${userId}/trades/${tradeId}/`);
-}
-
-function parseShareSettings(value: Prisma.JsonValue) {
-  return tradeShareSettingsSchema.parse(value) satisfies StoredTradeShareSettings;
-}
-
-function parseTradeSnapshot(value: Prisma.JsonValue) {
-  return tradeShareSnapshotSchema.parse(value) satisfies TradeShareSnapshot;
 }
 
 async function getOwnedTradeForShare(userId: string, tradeId: string) {
@@ -164,7 +135,9 @@ function toOwnerTradeShareDto(share: {
   updatedAt: Date;
 }) {
   const status = getTradeShareStatus(share);
-  const settings = parseShareSettings(share.shareSettings);
+  const settings = parseStoredTradeShareSettings(share.shareSettings, {
+    fallbackToDefaults: true,
+  });
 
   return {
     id: share.id,
@@ -216,8 +189,8 @@ export async function createOrUpdateTradeShare(userId: string, tradeId: string, 
           isActive: true,
           viewCount: shouldRotateShareId ? 0 : undefined,
           expiresAt,
-          shareSettings: input.settings,
-          snapshot,
+          shareSettings: serializeTradeShareSettings(input.settings),
+          snapshot: serializeTradeShareSnapshot(snapshot),
         },
       })
     : await prisma.tradeShare.create({
@@ -228,8 +201,8 @@ export async function createOrUpdateTradeShare(userId: string, tradeId: string, 
           isActive: true,
           viewCount: 0,
           expiresAt,
-          shareSettings: input.settings,
-          snapshot,
+          shareSettings: serializeTradeShareSettings(input.settings),
+          snapshot: serializeTradeShareSnapshot(snapshot),
         },
       });
 
@@ -292,8 +265,8 @@ export async function getPublicTradeShare(shareId: string) {
     throw new AppError(410, "TRADE_SHARE_EXPIRED", "This shared trade link has expired.");
   }
 
-  const settings = parseShareSettings(share.shareSettings);
-  const snapshot = parseTradeSnapshot(share.snapshot);
+  const settings = parseStoredTradeShareSettings(share.shareSettings);
+  const snapshot = parseStoredTradeShareSnapshot(share.snapshot);
 
   await prisma.tradeShare.update({
     where: { id: share.id },

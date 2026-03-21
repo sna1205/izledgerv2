@@ -229,6 +229,7 @@ const account = {
   balance: 1000,
   currency: "USD",
   isDefault: true,
+  isArchived: false,
 };
 
 const trade = {
@@ -248,6 +249,15 @@ const trade = {
   screenshotAssets: [],
   createdAt: "2026-03-16T10:00:00.000Z",
   updatedAt: "2026-03-16T10:00:00.000Z",
+  account: {
+    id: "account-1",
+    name: "Primary",
+    broker: "Manual",
+    type: "Personal" as const,
+    currency: "USD",
+    isDefault: true,
+    isArchived: false,
+  },
 };
 
 const review = {
@@ -276,7 +286,7 @@ beforeEach(() => {
   apiMocks.listAccounts.mockResolvedValue({ items: [account] });
   apiMocks.getTrade.mockResolvedValue({ trade });
   apiMocks.listSetups.mockResolvedValue({
-    items: [{ id: "setup-1", name: "Breakout", description: "Retest entry", color: "#10b981", tradeCount: 42 }],
+    items: [{ id: "setup-1", name: "Breakout", description: "Retest entry", color: "#10b981", tradeCount: 42, isArchived: false }],
     pagination: { page: 1, pageSize: 12, total: 33, totalPages: 3, hasNextPage: true, hasPreviousPage: false },
   });
 });
@@ -350,6 +360,38 @@ describe("server-backed list pages", () => {
         sortBy: "pair",
       }));
     });
+  });
+
+  it("renders historical account names from the trade payload when archived accounts are not in the active list", async () => {
+    apiMocks.listAccounts.mockResolvedValue({ items: [] });
+    apiMocks.listTrades.mockResolvedValue({
+      items: [{
+        ...trade,
+        accountId: "account-archived",
+        account: {
+          id: "account-archived",
+          name: "Legacy Account",
+          broker: "Manual",
+          type: "Personal" as const,
+          currency: "USD",
+          isDefault: false,
+          isArchived: true,
+        },
+      }],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        total: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+    apiMocks.listReviews.mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 1, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+
+    renderPage(<Trades />);
+
+    await screen.findByText("Legacy Account");
   });
 
   it("uses the server-backed hybrid review queries and renders the returned review data", async () => {
@@ -431,24 +473,208 @@ describe("server-backed list pages", () => {
     expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
       type: "daily",
       page: 1,
-      pageSize: 100,
-      sortBy: "updatedAt",
-      sortOrder: "desc",
+      pageSize: 50,
+      dateFrom: "2026-03-01",
+      dateTo: "2026-04-04",
+      sortBy: "reviewDate",
+      sortOrder: "asc",
     }));
     expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
       type: "weekly",
       page: 1,
-      pageSize: 60,
-      sortBy: "updatedAt",
+      pageSize: 12,
+      sortBy: "weekEnd",
       sortOrder: "desc",
     }));
     expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
       type: "trade",
       page: 1,
-      pageSize: 100,
-      sortBy: "updatedAt",
-      sortOrder: "desc",
+      pageSize: 50,
+      dateFrom: "2026-03-01",
+      dateTo: "2026-04-04",
+      sortBy: "reviewDate",
+      sortOrder: "asc",
     }));
+  });
+
+  it("loads additional review pages instead of silently truncating calendar and weekly history", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-03-21T12:00:00.000Z"));
+
+    apiMocks.listReviews.mockImplementation(async (params) => {
+      if (params?.type === "daily") {
+        if ((params.page ?? 1) === 1) {
+          return {
+            items: [{
+              ...review,
+              id: "review-daily-page-1",
+              type: "daily" as const,
+              reviewScope: "daily" as const,
+              reviewDate: "2026-03-05",
+              lessonLearned: "First page",
+            }],
+            pagination: {
+              page: 1,
+              pageSize: params.pageSize ?? 50,
+              total: 2,
+              totalPages: 2,
+              hasNextPage: true,
+              hasPreviousPage: false,
+            },
+          };
+        }
+
+        return {
+          items: [{
+            ...review,
+            id: "review-daily-page-2",
+            type: "daily" as const,
+            reviewScope: "daily" as const,
+            reviewDate: "2026-03-21",
+            lessonLearned: "Second page",
+            disciplineScore: 8,
+            emotion: "Calm" as const,
+            followedRules: "Yes" as const,
+          }],
+          pagination: {
+            page: 2,
+            pageSize: params.pageSize ?? 50,
+            total: 2,
+            totalPages: 2,
+            hasNextPage: false,
+            hasPreviousPage: true,
+          },
+        };
+      }
+
+      if (params?.type === "weekly") {
+        if ((params.page ?? 1) === 1) {
+          return {
+            items: [{
+              ...review,
+              id: "review-weekly-page-1",
+              type: "weekly" as const,
+              reviewScope: "weekly" as const,
+              weekStart: "2026-03-16",
+              weekEnd: "2026-03-22",
+              biggestWin: "Current week",
+              nextGoal: "Keep it steady",
+              weeklyRating: 7,
+            }],
+            pagination: {
+              page: 1,
+              pageSize: params.pageSize ?? 12,
+              total: 2,
+              totalPages: 2,
+              hasNextPage: true,
+              hasPreviousPage: false,
+            },
+          };
+        }
+
+        return {
+          items: [{
+            ...review,
+            id: "review-weekly-page-2",
+            type: "weekly" as const,
+            reviewScope: "weekly" as const,
+            weekStart: "2026-03-09",
+            weekEnd: "2026-03-15",
+            biggestWin: "Older week",
+            nextGoal: "Tighten entries",
+            weeklyRating: 5,
+          }],
+          pagination: {
+            page: 2,
+            pageSize: params.pageSize ?? 12,
+            total: 2,
+            totalPages: 2,
+            hasNextPage: false,
+            hasPreviousPage: true,
+          },
+        };
+      }
+
+      if ((params.page ?? 1) === 1) {
+        return {
+          items: [],
+          pagination: {
+            page: 1,
+            pageSize: params.pageSize ?? 50,
+            total: 0,
+            totalPages: 2,
+            hasNextPage: true,
+            hasPreviousPage: false,
+          },
+        };
+      }
+
+      return {
+        items: [{
+          ...review,
+          id: "review-trade-page-2",
+          type: "trade" as const,
+          reviewScope: "trade" as const,
+          tradeId: trade.id,
+          reviewDate: "2026-03-21",
+          disciplineScore: 4,
+          executionRating: 5,
+          whatWentWrong: "Needed a second page.",
+          tradeSnapshot: {
+            id: trade.id,
+            date: "2026-03-21",
+            pair: trade.pair,
+            direction: trade.direction,
+            entry: trade.entry,
+            stopLoss: trade.stopLoss,
+            takeProfit: trade.takeProfit,
+            profit: trade.profit,
+            result: trade.result,
+            setup: trade.setup,
+            setupColor: null,
+            session: "New York" as const,
+            emotion: "Focused" as const,
+            notes: "Paged trade review.",
+            screenshots: [],
+          },
+        }],
+        pagination: {
+          page: 2,
+          pageSize: params.pageSize ?? 50,
+          total: 1,
+          totalPages: 2,
+          hasNextPage: false,
+          hasPreviousPage: true,
+        },
+      };
+    });
+
+    renderPage(<Reviews />);
+
+    expect(await screen.findByText("Second page")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+        type: "daily",
+        page: 2,
+      }));
+    });
+
+    await waitFor(() => {
+      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+        type: "trade",
+        page: 2,
+      }));
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
+
+    await waitFor(() => {
+      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+        type: "weekly",
+        page: 2,
+      }));
+    });
   });
 
   it("uses server-backed search, sorting, paging, and totals for setups", async () => {

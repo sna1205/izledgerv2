@@ -51,9 +51,11 @@ export type ReviewPatch = Partial<Omit<Review, "id" | "createdAt" | "updatedAt">
 export type ListReviewsParams = {
   type?: ReviewType;
   tradeId?: string;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
   pageSize?: number;
-  sortBy?: "updatedAt" | "createdAt";
+  sortBy?: "updatedAt" | "createdAt" | "reviewDate" | "weekEnd";
   sortOrder?: "asc" | "desc";
 };
 

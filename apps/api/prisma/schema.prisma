@@ -68,6 +68,19 @@ enum ReviewEmotion {
   Frustrated
 }
 
+enum ScreenshotCleanupAction {
+  deleteObject
+  deleteExpiredUploadRecord
+  deleteDanglingScreenshotRecord
+}
+
+enum ScreenshotCleanupReason {
+  screenshotDelete
+  expiredUpload
+  orphanObject
+  danglingReference
+}
+
 model User {
   id           String    @id @default(uuid()) @db.Uuid
   username     String    @unique @db.Citext
@@ -112,6 +125,7 @@ model Account {
   balance   Decimal     @db.Decimal(18, 2)
   currency  String
   isDefault Boolean     @default(false) @map("is_default")
+  isArchived Boolean    @default(false) @map("is_archived")
   createdAt DateTime    @default(now()) @map("created_at")
   updatedAt DateTime    @updatedAt @map("updated_at")
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -125,6 +139,7 @@ model Setup {
   id         String    @id @default(uuid()) @db.Uuid
   userId     String    @map("user_id") @db.Uuid
   name       String
+  nameNormalized String @map("name_normalized")
   description String
   color      String
   isArchived Boolean   @default(false) @map("is_archived")
@@ -133,7 +148,7 @@ model Setup {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades     Trade[]
 
-  @@index([userId, name])
+  @@unique([userId, nameNormalized])
   @@map("setups")
 }
 
@@ -210,6 +225,31 @@ model TradeScreenshot {
   @@map("trade_screenshots")
 }
 
+model ScreenshotCleanupTask {
+  id              String                  @id @default(uuid()) @db.Uuid
+  dedupeKey       String                  @unique @map("dedupe_key")
+  action          ScreenshotCleanupAction
+  reason          ScreenshotCleanupReason
+  storageKey      String?                 @map("storage_key")
+  screenshotId    String?                 @map("screenshot_id") @db.Uuid
+  uploadId        String?                 @map("upload_id") @db.Uuid
+  userId          String?                 @map("user_id") @db.Uuid
+  tradeId         String?                 @map("trade_id") @db.Uuid
+  attemptCount    Int                     @default(0) @map("attempt_count")
+  nextAttemptAt   DateTime                @default(now()) @map("next_attempt_at")
+  leaseExpiresAt  DateTime?               @map("lease_expires_at")
+  lastError       String?                 @map("last_error")
+  lastAttemptAt   DateTime?               @map("last_attempt_at")
+  completedAt     DateTime?               @map("completed_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  @@index([completedAt, nextAttemptAt])
+  @@index([action, completedAt, nextAttemptAt])
+  @@index([storageKey])
+  @@map("screenshot_cleanup_tasks")
+}
+
 model TradeShare {
   id            String   @id @default(uuid()) @db.Uuid
   tradeId       String   @map("trade_id") @db.Uuid
@@ -238,8 +278,10 @@ model Review {
   tradeId                 String?           @unique @map("trade_id") @db.Uuid
   tradeSnapshot           Json?             @map("trade_snapshot")
   reviewDate              DateTime?         @map("review_date") @db.Date
+  dailyScopeDate          DateTime?         @map("daily_scope_date") @db.Date
   weekStart               DateTime?         @map("week_start") @db.Date
   weekEnd                 DateTime?         @map("week_end") @db.Date
+  weeklyScopeStart        DateTime?         @map("weekly_scope_start") @db.Date
   wentWell                String?           @map("went_well")
   mistakes                String?
   followedRules           ReviewRuleStatus? @map("followed_rules")
@@ -265,6 +307,8 @@ model Review {
   user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   trade                   Trade?            @relation(fields: [tradeId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, dailyScopeDate])
+  @@unique([userId, weeklyScopeStart])
   @@index([userId, type, updatedAt(sort: Desc)])
   @@map("reviews")
 }

@@ -87,6 +87,20 @@ export function TradeFormDialog({
 }: TradeFormDialogProps) {
   const [form, setForm] = useState<TradeFormValue>(() => buildEmptyForm(accounts));
 
+  const availableAccountOptions = useMemo(() => {
+    const baseOptions = accounts.map((account) => ({
+      value: account.id,
+      label: account.name,
+      isArchived: false,
+    }));
+
+    if (editTrade?.account && !accounts.some((account) => account.id === editTrade.accountId)) {
+      return [{ value: editTrade.accountId, label: `${editTrade.account.name} (archived)`, isArchived: true }, ...baseOptions];
+    }
+
+    return baseOptions;
+  }, [accounts, editTrade?.account, editTrade?.accountId]);
+
   const availableSetupOptions = useMemo(() => {
     const baseOptions = setups.map((setup) => ({
       value: setup.id,
@@ -191,10 +205,13 @@ export function TradeFormDialog({
             <Select value={form.accountId} onValueChange={(value) => setForm((current) => ({ ...current, accountId: value }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {accounts.map((account) => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}
+                {availableAccountOptions.map((account) => <SelectItem key={account.value} value={account.value}>{account.label}</SelectItem>)}
               </SelectContent>
             </Select>
             {accounts.length === 0 ? <p className="text-xs text-muted-foreground">Create an account before saving trades.</p> : null}
+            {availableAccountOptions.some((account) => account.value === form.accountId && account.isArchived)
+              ? <p className="text-xs text-muted-foreground">Archived accounts stay available here only so historical trades can still be edited safely.</p>
+              : null}
           </div>
 
           <div className="space-y-2">

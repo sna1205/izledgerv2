@@ -5,7 +5,7 @@ process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
 process.env.LOG_LEVEL = "silent";
 process.env.FRONTEND_ORIGIN ??= "http://127.0.0.1:3000";
-process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5432/izledger";
+process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
 
 const [{ buildApp }, { prisma }] = await Promise.all([
   import("../src/app.js"),
@@ -96,13 +96,8 @@ async function createTrade(app: Awaited<ReturnType<typeof buildApp>>, sessionCoo
   return createTradeResponse.json().trade.id as string;
 }
 
-test("account deletion succeeds when only soft-deleted trades remain", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("account deletion remains blocked when only soft-deleted trades remain", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -132,7 +127,10 @@ test("account deletion succeeds when only soft-deleted trades remain", async (t)
       },
     });
 
-    assert.equal(deleteAccountResponse.statusCode, 204);
+    assert.equal(deleteAccountResponse.statusCode, 409);
+    const payload = deleteAccountResponse.json();
+    assert.equal(payload.error.code, "ACCOUNT_IN_USE");
+    assert.equal(payload.error.message, "Account cannot be deleted because trades still reference it. Archive the account instead.");
 
     const stillExists = await prisma.account.findUnique({
       where: {
@@ -140,7 +138,7 @@ test("account deletion succeeds when only soft-deleted trades remain", async (t)
       },
     });
 
-    assert.equal(stillExists, null);
+    assert.ok(stillExists, "Expected account to remain when soft-deleted trades still reference it.");
   } finally {
     await app.close();
     await prisma.user.deleteMany({
@@ -152,13 +150,8 @@ test("account deletion succeeds when only soft-deleted trades remain", async (t)
   }
 });
 
-test("account deletion remains blocked when active trades exist", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("account deletion remains blocked when active trades exist", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -180,7 +173,7 @@ test("account deletion remains blocked when active trades exist", async (t) => {
     assert.equal(deleteAccountResponse.statusCode, 409);
     const payload = deleteAccountResponse.json();
     assert.equal(payload.error.code, "ACCOUNT_IN_USE");
-    assert.equal(payload.error.message, "Account cannot be deleted while trades exist.");
+    assert.equal(payload.error.message, "Account cannot be deleted because trades still reference it. Archive the account instead.");
 
     const stillExists = await prisma.account.findUnique({
       where: {
@@ -200,13 +193,8 @@ test("account deletion remains blocked when active trades exist", async (t) => {
   }
 });
 
-test("account with no trades can be deleted", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("account with no trades can be deleted", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -243,13 +231,8 @@ test("account with no trades can be deleted", async (t) => {
   }
 });
 
-test("user cannot delete another user's account", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("user cannot delete another user's account", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const usernameA = `ad${Date.now().toString(36)}a${Math.random().toString(36).slice(2, 5)}`;
@@ -293,13 +276,8 @@ test("user cannot delete another user's account", async (t) => {
   }
 });
 
-test("deleting one account does not affect other accounts", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("deleting one account does not affect other accounts", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `ad${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

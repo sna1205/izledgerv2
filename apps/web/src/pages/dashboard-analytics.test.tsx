@@ -191,6 +191,14 @@ beforeEach(() => {
       {
         id: "account-1",
         name: "Primary",
+        broker: "Manual",
+        type: "Personal",
+        balance: 1000,
+        currency: "USD",
+        createdAt: "2026-03-21T10:00:00.000Z",
+        updatedAt: "2026-03-21T10:00:00.000Z",
+        isDefault: true,
+        isArchived: false,
       },
     ],
   });

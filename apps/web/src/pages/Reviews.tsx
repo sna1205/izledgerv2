@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addMonths,
   eachDayOfInterval,
@@ -30,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
-import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
+import { createReview, listReviews, type ListReviewsParams, updateReview } from "@/lib/api/reviews";
 import { getTrade } from "@/lib/api/trades";
 import { formatNumberDisplay } from "@/lib/analytics-rendering";
 import { withMinimumDelay } from "@/lib/loading";
@@ -74,6 +74,8 @@ const emptyWeeklyForm = {
 };
 
 const EMPTY_REVIEWS: Review[] = [];
+const CALENDAR_REVIEW_PAGE_SIZE = 50;
+const WEEKLY_REVIEW_PAGE_SIZE = 12;
 
 type CalendarTone = "good" | "warn" | "bad" | "review" | "empty";
 type CalendarReviewDay = {
@@ -323,6 +325,25 @@ function isReviewForDate(review: Review, dateKey: string) {
   return candidate === dateKey;
 }
 
+async function listAllReviewPages(params: ListReviewsParams) {
+  const items: Review[] = [];
+  let page = 1;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const response = await listReviews({
+      ...params,
+      page,
+    });
+
+    items.push(...response.items);
+    hasNextPage = response.pagination.hasNextPage;
+    page += 1;
+  }
+
+  return items;
+}
+
 export default function Reviews() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -338,43 +359,60 @@ export default function Reviews() {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [selectedWeeklyIndex, setSelectedWeeklyIndex] = useState(0);
+  const calendarRangeStart = useMemo(
+    () => startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 }),
+    [currentMonth],
+  );
+  const calendarRangeEnd = useMemo(
+    () => endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 }),
+    [currentMonth],
+  );
+  const calendarDateFrom = useMemo(() => format(calendarRangeStart, "yyyy-MM-dd"), [calendarRangeStart]);
+  const calendarDateTo = useMemo(() => format(calendarRangeEnd, "yyyy-MM-dd"), [calendarRangeEnd]);
 
   const dailyReviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "daily-calendar"),
-    queryFn: async () => withMinimumDelay(() => listReviews({
+    queryKey: privateQueryKey(user.id, "reviews", "daily-calendar", calendarDateFrom, calendarDateTo),
+    queryFn: async () => withMinimumDelay(() => listAllReviewPages({
       type: "daily",
-      page: 1,
-      pageSize: 100,
-      sortBy: "updatedAt",
-      sortOrder: "desc",
+      dateFrom: calendarDateFrom,
+      dateTo: calendarDateTo,
+      pageSize: CALENDAR_REVIEW_PAGE_SIZE,
+      sortBy: "reviewDate",
+      sortOrder: "asc",
     })),
   });
 
-  const weeklyReviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "weekly-top"),
-    queryFn: async () => withMinimumDelay(() => listReviews({
+  const weeklyReviewsQuery = useInfiniteQuery({
+    queryKey: privateQueryKey(user.id, "reviews", "weekly-pages"),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => withMinimumDelay(() => listReviews({
       type: "weekly",
-      page: 1,
-      pageSize: 60,
-      sortBy: "updatedAt",
+      page: pageParam,
+      pageSize: WEEKLY_REVIEW_PAGE_SIZE,
+      sortBy: "weekEnd",
       sortOrder: "desc",
     })),
+    getNextPageParam: (lastPage) => lastPage.pagination.hasNextPage ? lastPage.pagination.page + 1 : undefined,
   });
 
   const tradeReviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "trade-panel"),
-    queryFn: async () => withMinimumDelay(() => listReviews({
+    queryKey: privateQueryKey(user.id, "reviews", "trade-calendar", calendarDateFrom, calendarDateTo),
+    queryFn: async () => withMinimumDelay(() => listAllReviewPages({
       type: "trade",
-      page: 1,
-      pageSize: 100,
-      sortBy: "updatedAt",
-      sortOrder: "desc",
+      dateFrom: calendarDateFrom,
+      dateTo: calendarDateTo,
+      pageSize: CALENDAR_REVIEW_PAGE_SIZE,
+      sortBy: "reviewDate",
+      sortOrder: "asc",
     })),
   });
 
-  const dailyReviews = dailyReviewsQuery.data?.items ?? EMPTY_REVIEWS;
-  const weeklyReviews = weeklyReviewsQuery.data?.items ?? EMPTY_REVIEWS;
-  const tradeReviews = tradeReviewsQuery.data?.items ?? EMPTY_REVIEWS;
+  const dailyReviews = dailyReviewsQuery.data ?? EMPTY_REVIEWS;
+  const weeklyReviews = useMemo(
+    () => weeklyReviewsQuery.data?.pages.flatMap((page) => page.items) ?? EMPTY_REVIEWS,
+    [weeklyReviewsQuery.data],
+  );
+  const tradeReviews = tradeReviewsQuery.data ?? EMPTY_REVIEWS;
 
   const viewingTrade = useMemo(() => {
     if (!viewingReview || getReviewScope(viewingReview) !== "trade") {
@@ -447,6 +485,20 @@ export default function Reviews() {
       setSelectedWeeklyIndex(sortedWeeklyReviews.length - 1);
     }
   }, [selectedWeeklyIndex, sortedWeeklyReviews]);
+
+  useEffect(() => {
+    if (!weeklyReviewsQuery.hasNextPage || weeklyReviewsQuery.isFetchingNextPage) {
+      return;
+    }
+
+    if (selectedWeeklyIndex >= Math.max(sortedWeeklyReviews.length - 2, 0)) {
+      void weeklyReviewsQuery.fetchNextPage();
+    }
+  }, [
+    selectedWeeklyIndex,
+    sortedWeeklyReviews.length,
+    weeklyReviewsQuery,
+  ]);
 
   const selectedDay = calendarDays.find((day) => day.key === selectedDayKey) ?? null;
   const selectedDailyReview = selectedDayKey ? dailyReviewMap.get(selectedDayKey) ?? null : null;
@@ -674,16 +726,30 @@ export default function Reviews() {
                   {activeWeeklyReview ? `${activeWeeklyReview.weeklyRating ?? 0}/10` : "No weekly review yet"}
                 </h2>
               </div>
-              <div className="flex items-center gap-2">
-                {activeWeeklyReview ? (
-                  <>
-                    <Button
+            <div className="flex items-center gap-2">
+              {activeWeeklyReview ? (
+                <>
+                  <Button
                       variant="outline"
                       size="icon"
                       aria-label="Previous week"
-                      onClick={() => setSelectedWeeklyIndex((value) => Math.min(value + 1, sortedWeeklyReviews.length - 1))}
-                      disabled={clampedWeeklyIndex >= sortedWeeklyReviews.length - 1}
-                    >
+                    onClick={() => {
+                      setSelectedWeeklyIndex((value) => {
+                        const nextValue = Math.min(value + 1, sortedWeeklyReviews.length - 1);
+
+                        if (
+                          weeklyReviewsQuery.hasNextPage
+                          && !weeklyReviewsQuery.isFetchingNextPage
+                          && nextValue >= Math.max(sortedWeeklyReviews.length - 2, 0)
+                        ) {
+                          void weeklyReviewsQuery.fetchNextPage();
+                        }
+
+                        return nextValue;
+                      });
+                    }}
+                    disabled={clampedWeeklyIndex >= sortedWeeklyReviews.length - 1}
+                  >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button
@@ -728,6 +794,17 @@ export default function Reviews() {
                   <Sparkles className="h-3.5 w-3.5" />
                   {clampedWeeklyIndex === 0 ? "Latest" : "Earlier week"}
                 </div>
+              ) : null}
+              {weeklyReviewsQuery.hasNextPage ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-3"
+                  onClick={() => void weeklyReviewsQuery.fetchNextPage()}
+                  disabled={weeklyReviewsQuery.isFetchingNextPage}
+                >
+                  {weeklyReviewsQuery.isFetchingNextPage ? "Loading older weeks..." : "Load Older Weeks"}
+                </Button>
               ) : null}
             </div>
           </div>

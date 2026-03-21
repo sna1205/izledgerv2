@@ -4,6 +4,21 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/errors.js";
 import { buildPagination } from "../../utils/http.js";
 
+function normalizeSetupName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function isUniqueSetupNameConstraint(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  return Array.isArray(target)
+    && target.some((field) => field === "name_normalized" || field === "nameNormalized");
+}
+
 function toSetupDto(setup: {
   id: string;
   name: string;
@@ -29,14 +44,12 @@ function toSetupDto(setup: {
 }
 
 async function ensureUniqueSetupName(userId: string, name: string, excludeId?: string) {
+  const normalizedName = normalizeSetupName(name);
   const existing = await prisma.setup.findFirst({
     where: {
       userId,
       id: excludeId ? { not: excludeId } : undefined,
-      name: {
-        equals: name,
-        mode: "insensitive",
-      },
+      nameNormalized: normalizedName,
     },
   });
 
@@ -185,17 +198,26 @@ export async function createSetup(userId: string, input: {
   await ensureUniqueSetupName(userId, input.name);
   const color = await resolveSetupColor(userId, input.color);
 
-  const setup = await prisma.setup.create({
-    data: {
-      userId,
-      name: input.name,
-      description: input.description,
-      color,
-      isArchived: input.isArchived ?? false,
-    },
-  });
+  try {
+    const setup = await prisma.setup.create({
+      data: {
+        userId,
+        name: input.name,
+        nameNormalized: normalizeSetupName(input.name),
+        description: input.description,
+        color,
+        isArchived: input.isArchived ?? false,
+      },
+    });
 
-  return toSetupDto(setup);
+    return toSetupDto(setup);
+  } catch (error) {
+    if (isUniqueSetupNameConstraint(error)) {
+      throw new AppError(409, "SETUP_NAME_TAKEN", "Setup names must be unique.");
+    }
+
+    throw error;
+  }
 }
 
 export async function updateSetup(userId: string, setupId: string, input: {
@@ -206,7 +228,7 @@ export async function updateSetup(userId: string, setupId: string, input: {
 }) {
   const existing = await getOwnedSetup(userId, setupId);
 
-  if (input.name && input.name.toLowerCase() !== existing.name.toLowerCase()) {
+  if (input.name && normalizeSetupName(input.name) !== existing.nameNormalized) {
     await ensureUniqueSetupName(userId, input.name, setupId);
   }
 
@@ -215,17 +237,26 @@ export async function updateSetup(userId: string, setupId: string, input: {
     currentColor: existing.color,
   });
 
-  const setup = await prisma.setup.update({
-    where: { id: setupId },
-    data: {
-      name: input.name,
-      description: input.description,
-      color,
-      isArchived: input.isArchived,
-    },
-  });
+  try {
+    const setup = await prisma.setup.update({
+      where: { id: setupId },
+      data: {
+        name: input.name,
+        nameNormalized: input.name ? normalizeSetupName(input.name) : undefined,
+        description: input.description,
+        color,
+        isArchived: input.isArchived,
+      },
+    });
 
-  return toSetupDto(setup);
+    return toSetupDto(setup);
+  } catch (error) {
+    if (isUniqueSetupNameConstraint(error)) {
+      throw new AppError(409, "SETUP_NAME_TAKEN", "Setup names must be unique.");
+    }
+
+    throw error;
+  }
 }
 
 export async function deleteSetup(userId: string, setupId: string) {

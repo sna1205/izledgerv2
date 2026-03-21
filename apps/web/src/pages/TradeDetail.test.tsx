@@ -125,6 +125,7 @@ const baseTrade = {
     type: "Personal" as const,
     currency: "USD",
     isDefault: true,
+    isArchived: false,
   },
 };
 
@@ -181,7 +182,7 @@ describe("TradeDetail", () => {
     apiMocks.toast.success.mockReset();
     apiMocks.toast.error.mockReset();
     apiMocks.listAccounts.mockResolvedValue({ items: [baseTrade.account] });
-    apiMocks.listSetups.mockResolvedValue({ items: [{ id: "setup-1", name: "Breakout", description: "", color: "#000000" }] });
+    apiMocks.listSetups.mockResolvedValue({ items: [{ id: "setup-1", name: "Breakout", description: "", color: "#000000", isArchived: false }] });
     apiMocks.listReviews.mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
   });
 

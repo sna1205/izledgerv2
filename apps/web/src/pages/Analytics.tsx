@@ -673,9 +673,9 @@ export default function Analytics() {
   const [breakdownDrawer, setBreakdownDrawer] = useState<BreakdownDrawerState | null>(null);
 
   const accountsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "accounts"),
+    queryKey: privateQueryKey(user.id, "accounts", "active"),
     queryFn: async () => {
-      const response = await listAccounts();
+      const response = await listAccounts({ status: "active" });
       return response.items;
     },
   });

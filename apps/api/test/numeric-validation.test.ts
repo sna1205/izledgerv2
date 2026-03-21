@@ -117,6 +117,19 @@ test("review numeric fields reject non-finite values and out-of-range scores", (
   assert.equal(listReviewsQuerySchema.safeParse({
     page: 10_001,
   }).success, false);
+
+  assert.equal(listReviewsQuerySchema.safeParse({
+    type: "daily",
+    dateFrom: "2026-03-01",
+    dateTo: "2026-03-31",
+    sortBy: "reviewDate",
+  }).success, true);
+
+  assert.equal(listReviewsQuerySchema.safeParse({
+    type: "weekly",
+    dateFrom: "2026-03-31",
+    dateTo: "2026-03-01",
+  }).success, false);
 });
 
 test("screenshot sort order rejects non-finite and oversized values", () => {

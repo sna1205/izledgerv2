@@ -5,7 +5,7 @@ process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
 process.env.LOG_LEVEL = "silent";
 process.env.FRONTEND_ORIGIN ??= "http://127.0.0.1:3000";
-process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5432/izledger";
+process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
 
 const [{ buildApp }, { prisma }] = await Promise.all([
   import("../src/app.js"),
@@ -18,13 +18,8 @@ function getSessionCookie(setCookieHeader: string | string[] | undefined) {
   return rawCookie.split(";", 1)[0];
 }
 
-test("trade creation rejects impossible calendar dates at the API boundary", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("trade creation rejects impossible calendar dates at the API boundary", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `td${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

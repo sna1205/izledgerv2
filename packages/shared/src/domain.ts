@@ -88,6 +88,7 @@ export interface Account {
   createdAt: string;
   updatedAt: string;
   isDefault: boolean;
+  isArchived: boolean;
 }
 
 export interface TradeScreenshotAsset {
@@ -126,6 +127,7 @@ export interface Trade {
     type: AccountType;
     currency: string;
     isDefault: boolean;
+    isArchived: boolean;
   };
 }
 
@@ -241,51 +243,6 @@ export interface AnalyticsCalendarResponse {
   };
   days: AnalyticsCalendarDay[];
   weeks: AnalyticsCalendarWeek[];
-}
-
-export interface FounderStatsResponse {
-  stats: {
-    totalUsers: number;
-    totalTrades: number;
-    totalReviews: number;
-    totalAccounts: number;
-  };
-}
-
-export interface FounderRecentUser {
-  id: string;
-  username: string;
-  createdAt: string;
-}
-
-export interface FounderRecentTrade {
-  id: string;
-  username: string;
-  pair: string;
-  result: Result;
-  tradeDate: string;
-  createdAt: string;
-}
-
-export interface FounderRecentReview {
-  id: string;
-  username: string;
-  type: ReviewType;
-  createdAt: string;
-}
-
-export interface FounderRecentResponse {
-  users: FounderRecentUser[];
-  trades: FounderRecentTrade[];
-  reviews: FounderRecentReview[];
-}
-
-export interface FounderHealthResponse {
-  apiStatus: "ok";
-  dbConnection: "ok";
-  sessionValid: boolean;
-  usersWithZeroTrades: number;
-  checkedAt: string;
 }
 
 export const SESSIONS: TradeSession[] = ["Asia", "London", "New York"];

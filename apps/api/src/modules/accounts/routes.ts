@@ -1,12 +1,15 @@
 import { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/auth.js";
 import { parseOrThrow } from "../../utils/http.js";
-import { accountParamsSchema, createAccountSchema, updateAccountSchema } from "./schemas.js";
+import { accountParamsSchema, createAccountSchema, listAccountsQuerySchema, updateAccountSchema } from "./schemas.js";
 import { createAccount, deleteAccount, listAccounts, updateAccount } from "./service.js";
 
 export async function accountRoutes(app: FastifyInstance) {
   app.get("/", { preHandler: authenticate }, async (request) => {
-    const items = await listAccounts(request.auth!.userId);
+    const query = parseOrThrow(listAccountsQuerySchema, request.query);
+    const items = await listAccounts(request.auth!.userId, {
+      status: query.status ?? "active",
+    });
     return { items };
   });
 

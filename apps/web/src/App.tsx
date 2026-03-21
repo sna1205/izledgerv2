@@ -16,7 +16,6 @@ import { AppLayout } from "@/components/AppLayout";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PublicOnlyRoute } from "@/components/PublicOnlyRoute";
-import { FounderRoute } from "@/components/FounderRoute";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { createAppQueryClient } from "@/lib/react-query";
 import Landing from "./pages/Landing";
@@ -33,7 +32,6 @@ import NotFound from "./pages/NotFound";
 import Register from "./pages/Register";
 import Settings from "./pages/Settings";
 import SharedTradePage from "./pages/SharedTradePage";
-import FounderDashboard from "./pages/FounderDashboard";
 
 const queryClient = createAppQueryClient();
 
@@ -99,8 +97,7 @@ function AppRoutes() {
     pathname.startsWith("/trades") ||
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/calculator") ||
-    pathname.startsWith("/settings") ||
-    pathname.startsWith("/founder")
+    pathname.startsWith("/settings")
   );
 
   if (!isReady && isAuthRoute) {
@@ -136,9 +133,6 @@ function AppRoutes() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/calculator" element={<LotCalculator />} />
           <Route path="/settings" element={<Settings />} />
-          <Route element={<FounderRoute />}>
-            <Route path="/founder" element={<FounderDashboard />} />
-          </Route>
         </Route>
       </Route>
       <Route path="*" element={<NotFound />} />

@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { env } from "./config/env.js";
+import { prisma } from "./lib/prisma.js";
 import { AppError, toAppError, toErrorResponse } from "./utils/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
@@ -13,7 +14,6 @@ import { screenshotRoutes } from "./modules/screenshots/routes.js";
 import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
-import { founderRoutes } from "./modules/founder/routes.js";
 
 function isAllowedCorsOrigin(origin?: string) {
   if (!origin) {
@@ -35,6 +35,7 @@ function isAllowedCorsOrigin(origin?: string) {
 
 export async function buildApp() {
   const app = Fastify({
+    trustProxy: env.NODE_ENV === "production",
     logger: env.NODE_ENV === "development"
       ? {
           level: env.LOG_LEVEL,
@@ -75,11 +76,30 @@ export async function buildApp() {
     ),
   });
 
-  app.get("/health", async () => ({
-    status: "ok",
-    service: "izledger-backend",
-    timestamp: new Date().toISOString(),
-  }));
+  app.get("/health", async (_request, reply) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+
+      return {
+        status: "ok",
+        service: "izledger-backend",
+        database: "ok",
+        storageEnabled: env.STORAGE_ENABLED,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      app.log.error(error);
+      reply.status(503);
+
+      return {
+        status: "error",
+        service: "izledger-backend",
+        database: "unavailable",
+        storageEnabled: env.STORAGE_ENABLED,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  });
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send(toErrorResponse(new AppError(404, "NOT_FOUND", "Resource not found.")));
@@ -105,7 +125,6 @@ export async function buildApp() {
   await app.register(reviewRoutes, { prefix: "/reviews" });
   await app.register(analyticsRoutes, { prefix: "/" });
   await app.register(tradeShareRoutes, { prefix: "/" });
-  await app.register(founderRoutes, { prefix: "/founder" });
 
   return app;
 }

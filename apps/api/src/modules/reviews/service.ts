@@ -6,9 +6,94 @@ import { createReviewSchema } from "./schemas.js";
 import { toNumber } from "../../utils/decimal.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { sessionFromDb } from "../../utils/domain-mappers.js";
+import { toUtcMidnightDate } from "../../utils/date-validation.js";
 
 function normalizeTradePair(value: string) {
   return value.trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function getUniqueConstraintTarget(error: Prisma.PrismaClientKnownRequestError) {
+  const target = error.meta?.target;
+  return Array.isArray(target) ? target.map((field) => String(field)) : [];
+}
+
+function toReviewConflictError(error: Prisma.PrismaClientKnownRequestError) {
+  const target = getUniqueConstraintTarget(error);
+
+  if (target.some((field) => field === "daily_scope_date" || field === "dailyScopeDate")) {
+    return new AppError(409, "DAILY_REVIEW_EXISTS", "A daily review already exists for this date.");
+  }
+
+  if (target.some((field) => field === "weekly_scope_start" || field === "weeklyScopeStart")) {
+    return new AppError(409, "WEEKLY_REVIEW_EXISTS", "A weekly review already exists for this week.");
+  }
+
+  if (target.some((field) => field === "trade_id" || field === "tradeId")) {
+    return new AppError(409, "TRADE_REVIEW_EXISTS", "This trade already has a review.");
+  }
+
+  return null;
+}
+
+function getReviewScopeData(body: {
+  type: "daily" | "weekly" | "trade";
+  reviewDate?: string | null;
+  weekStart?: string | null;
+  weekEnd?: string | null;
+}) {
+  const reviewDate = "reviewDate" in body ? toUtcMidnightDate(body.reviewDate) : null;
+  const weekStart = "weekStart" in body ? toUtcMidnightDate(body.weekStart) : null;
+  const weekEnd = "weekEnd" in body ? toUtcMidnightDate(body.weekEnd) : null;
+
+  return {
+    reviewDate,
+    weekStart,
+    weekEnd,
+    dailyScopeDate: body.type === "daily" ? reviewDate : null,
+    weeklyScopeStart: body.type === "weekly" ? weekStart : null,
+  };
+}
+
+async function ensureUniqueReviewScope(userId: string, body: {
+  type: "daily" | "weekly" | "trade";
+  reviewDate?: string | null;
+  weekStart?: string | null;
+}, excludeId?: string) {
+  if (body.type === "daily" && body.reviewDate) {
+    const existing = await prisma.review.findFirst({
+      where: {
+        userId,
+        type: ReviewType.daily,
+        id: excludeId ? { not: excludeId } : undefined,
+        dailyScopeDate: toUtcMidnightDate(body.reviewDate),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existing) {
+      throw new AppError(409, "DAILY_REVIEW_EXISTS", "A daily review already exists for this date.");
+    }
+  }
+
+  if (body.type === "weekly" && body.weekStart) {
+    const existing = await prisma.review.findFirst({
+      where: {
+        userId,
+        type: ReviewType.weekly,
+        id: excludeId ? { not: excludeId } : undefined,
+        weeklyScopeStart: toUtcMidnightDate(body.weekStart),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existing) {
+      throw new AppError(409, "WEEKLY_REVIEW_EXISTS", "A weekly review already exists for this week.");
+    }
+  }
 }
 
 async function buildTradeSnapshot(userId: string, tradeId: string) {
@@ -137,19 +222,65 @@ async function getOwnedReview(userId: string, reviewId: string) {
 export async function listReviews(userId: string, query: {
   type?: "daily" | "weekly" | "trade";
   tradeId?: string;
+  dateFrom?: string;
+  dateTo?: string;
   page: number;
   pageSize: number;
-  sortBy: "updatedAt" | "createdAt";
+  sortBy: "updatedAt" | "createdAt" | "reviewDate" | "weekEnd";
   sortOrder: "asc" | "desc";
 }) {
-  const where = {
+  const filters: Prisma.ReviewWhereInput[] = [{
     userId,
     type: query.type,
     tradeId: query.tradeId,
+  }];
+  const dateFrom = query.dateFrom ? toUtcMidnightDate(query.dateFrom) : null;
+  const dateTo = query.dateTo ? toUtcMidnightDate(query.dateTo) : null;
+
+  if (dateFrom || dateTo) {
+    const reviewDateFilter = {
+      ...(dateFrom ? { gte: dateFrom } : {}),
+      ...(dateTo ? { lte: dateTo } : {}),
+    };
+    const weeklyOverlapFilter = {
+      ...(dateFrom ? { weekEnd: { gte: dateFrom } } : {}),
+      ...(dateTo ? { weekStart: { lte: dateTo } } : {}),
+    } satisfies Prisma.ReviewWhereInput;
+
+    if (query.type === "daily" || query.type === "trade") {
+      filters.push({
+        reviewDate: reviewDateFilter,
+      });
+    } else if (query.type === "weekly") {
+      filters.push(weeklyOverlapFilter);
+    } else {
+      filters.push({
+        OR: [
+          {
+            type: {
+              in: [ReviewType.daily, ReviewType.trade],
+            },
+            reviewDate: reviewDateFilter,
+          },
+          {
+            type: ReviewType.weekly,
+            ...weeklyOverlapFilter,
+          },
+        ],
+      });
+    }
+  }
+
+  const where = {
+    AND: filters,
   } satisfies Prisma.ReviewWhereInput;
   const orderBy = query.sortBy === "createdAt"
-    ? { createdAt: query.sortOrder }
-    : { updatedAt: query.sortOrder };
+    ? [{ createdAt: query.sortOrder }]
+    : query.sortBy === "reviewDate"
+      ? [{ reviewDate: query.sortOrder }, { updatedAt: query.sortOrder }]
+      : query.sortBy === "weekEnd"
+        ? [{ weekEnd: query.sortOrder }, { updatedAt: query.sortOrder }]
+        : [{ updatedAt: query.sortOrder }];
 
   const [total, reviews] = await Promise.all([
     prisma.review.count({ where }),
@@ -174,6 +305,8 @@ export async function getReview(userId: string, reviewId: string) {
 
 export async function createReview(userId: string, input: unknown) {
   const body = parseOrThrow(createReviewSchema, input);
+  await ensureUniqueReviewScope(userId, body);
+  const scopeData = getReviewScopeData(body);
 
   const tradeSnapshot =
     body.type === "trade" && body.tradeId
@@ -187,9 +320,11 @@ export async function createReview(userId: string, input: unknown) {
         type: body.type as ReviewType,
         tradeId: body.type === "trade" ? body.tradeId : null,
         tradeSnapshot: tradeSnapshot ?? Prisma.DbNull,
-        reviewDate: "reviewDate" in body && body.reviewDate ? new Date(`${body.reviewDate}T00:00:00.000Z`) : null,
-        weekStart: "weekStart" in body && body.weekStart ? new Date(`${body.weekStart}T00:00:00.000Z`) : null,
-        weekEnd: "weekEnd" in body && body.weekEnd ? new Date(`${body.weekEnd}T00:00:00.000Z`) : null,
+        reviewDate: scopeData.reviewDate,
+        dailyScopeDate: scopeData.dailyScopeDate,
+        weekStart: scopeData.weekStart,
+        weekEnd: scopeData.weekEnd,
+        weeklyScopeStart: scopeData.weeklyScopeStart,
         wentWell: "wentWell" in body ? body.wentWell ?? null : null,
         mistakes: "mistakes" in body ? body.mistakes ?? null : null,
         followedRules: "followedRules" in body ? body.followedRules ?? null : null,
@@ -216,7 +351,7 @@ export async function createReview(userId: string, input: unknown) {
     return await toReviewDto(review);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new AppError(409, "TRADE_REVIEW_EXISTS", "This trade already has a review.");
+      throw toReviewConflictError(error) ?? error;
     }
 
     throw error;
@@ -231,6 +366,8 @@ export async function updateReview(userId: string, reviewId: string, patch: Reco
   };
 
   const normalized = parseOrThrow(createReviewSchema, merged);
+  await ensureUniqueReviewScope(userId, normalized, reviewId);
+  const scopeData = getReviewScopeData(normalized);
 
   const tradeSnapshot =
     normalized.type === "trade" && normalized.tradeId
@@ -246,9 +383,11 @@ export async function updateReview(userId: string, reviewId: string, patch: Reco
         type: normalized.type as ReviewType,
         tradeId: normalized.type === "trade" ? normalized.tradeId : null,
         tradeSnapshot: tradeSnapshot ?? Prisma.DbNull,
-        reviewDate: "reviewDate" in normalized && normalized.reviewDate ? new Date(`${normalized.reviewDate}T00:00:00.000Z`) : null,
-        weekStart: "weekStart" in normalized && normalized.weekStart ? new Date(`${normalized.weekStart}T00:00:00.000Z`) : null,
-        weekEnd: "weekEnd" in normalized && normalized.weekEnd ? new Date(`${normalized.weekEnd}T00:00:00.000Z`) : null,
+        reviewDate: scopeData.reviewDate,
+        dailyScopeDate: scopeData.dailyScopeDate,
+        weekStart: scopeData.weekStart,
+        weekEnd: scopeData.weekEnd,
+        weeklyScopeStart: scopeData.weeklyScopeStart,
         wentWell: "wentWell" in normalized ? normalized.wentWell ?? null : null,
         mistakes: "mistakes" in normalized ? normalized.mistakes ?? null : null,
         followedRules: "followedRules" in normalized ? normalized.followedRules ?? null : null,
@@ -275,7 +414,7 @@ export async function updateReview(userId: string, reviewId: string, patch: Reco
     return await toReviewDto(review);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new AppError(409, "TRADE_REVIEW_EXISTS", "This trade already has a review.");
+      throw toReviewConflictError(error) ?? error;
     }
 
     throw error;

@@ -402,7 +402,7 @@ describe("reviews hybrid layout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next month" }));
 
     expect(screen.getByRole("button", { name: "April 1, 2026" })).toBeInTheDocument();
-    expect(screen.getByText("Take the clean continuation earlier.")).toBeInTheDocument();
+    expect(await screen.findByText("Take the clean continuation earlier.")).toBeInTheDocument();
   });
 
   it("opens the weekly review dialog from the dashboard controls", async () => {

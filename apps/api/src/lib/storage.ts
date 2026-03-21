@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
@@ -119,6 +119,36 @@ export async function deleteObjectIfPresent(key: string) {
 export async function objectExists(key: string) {
   const metadata = await getObjectMetadata(key);
   return metadata.exists;
+}
+
+export async function listObjectKeys(params?: {
+  prefix?: string;
+  continuationToken?: string;
+  maxKeys?: number;
+}) {
+  if (!env.STORAGE_ENABLED) {
+    return {
+      keys: [],
+      nextContinuationToken: undefined,
+    };
+  }
+
+  const s3 = getStorageClient();
+  const response = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: env.STORAGE_BUCKET!,
+      Prefix: params?.prefix,
+      ContinuationToken: params?.continuationToken,
+      MaxKeys: params?.maxKeys,
+    }),
+  );
+
+  return {
+    keys: (response.Contents ?? [])
+      .map((item) => item.Key)
+      .filter((key): key is string => Boolean(key)),
+    nextContinuationToken: response.IsTruncated ? response.NextContinuationToken ?? undefined : undefined,
+  };
 }
 
 export function storageObjectUrl(key: string) {

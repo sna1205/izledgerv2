@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
+import { ScreenshotCleanupAction, ScreenshotCleanupReason } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { env } from "../../config/env.js";
-import { createPresignedUpload, deleteObjectIfPresent, getObjectMetadata, getReadUrl } from "../../lib/storage.js";
+import { createPresignedUpload, getObjectMetadata, getReadUrl } from "../../lib/storage.js";
 import { AppError } from "../../utils/errors.js";
 import { safeFileName } from "../../utils/strings.js";
 import { maxScreenshotFileSizeBytes } from "./constants.js";
+import { enqueueScreenshotCleanupTask, tryProcessScreenshotCleanupTaskNow } from "./reconciliation.js";
 
 const SCREENSHOT_UPLOAD_TOKEN_TTL_MS = 5 * 60 * 1000;
 
@@ -349,13 +351,24 @@ export async function deleteTradeScreenshot(userId: string, tradeId: string, scr
     throw new AppError(404, "SCREENSHOT_NOT_FOUND", "Screenshot not found.");
   }
 
-  await prisma.tradeScreenshot.delete({
-    where: { id: screenshot.id },
+  const cleanupTask = await prisma.$transaction(async (tx) => {
+    await tx.tradeScreenshot.delete({
+      where: { id: screenshot.id },
+    });
+
+    return enqueueScreenshotCleanupTask(tx, {
+      action: ScreenshotCleanupAction.deleteObject,
+      reason: ScreenshotCleanupReason.screenshotDelete,
+      storageKey: screenshot.storageKey,
+      screenshotId: screenshot.id,
+      userId,
+      tradeId,
+    });
   });
 
-  // Remove the object after the DB row is gone so a transient storage error cannot leave
-  // a broken screenshot reference visible in the product.
-  await deleteObjectIfPresent(screenshot.storageKey);
+  await tryProcessScreenshotCleanupTaskNow(cleanupTask.id).catch(() => {
+    // Keep the user-facing delete successful even if storage cleanup has to retry later.
+  });
 }
 
 export async function reorderTradeScreenshots(userId: string, tradeId: string, screenshotIds: string[]) {

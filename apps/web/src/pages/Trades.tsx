@@ -97,9 +97,9 @@ export default function Trades() {
   const [screenbookPage, setScreenbookPage] = useState(1);
 
   const accountsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "accounts"),
+    queryKey: privateQueryKey(user.id, "accounts", "active"),
     queryFn: async () => {
-      const response = await withMinimumDelay(() => listAccounts());
+      const response = await withMinimumDelay(() => listAccounts({ status: "active" }));
       return response.items;
     },
   });
@@ -462,7 +462,7 @@ export default function Trades() {
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {accountNames[trade.accountId] ?? "Unknown Account"}
+                            {trade.account?.name ?? accountNames[trade.accountId] ?? "Unknown Account"}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-2">

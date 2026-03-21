@@ -23,7 +23,47 @@ npm run prisma:generate
 npm run prisma:migrate:dev
 ```
 
-4. Start the API:
+4. Prepare the clean integration database when you want to run the API suite:
+
+```bash
+npm run test:db:prepare
+```
+
+Optional restore verification after a restore drill:
+
+```bash
+npm run restore:verify
+```
+
+Manual screenshot cleanup and reconciliation:
+
+```bash
+npm run screenshots:cleanup:run
+npm run screenshots:reconcile
+```
+
+Numeric audit and remediation planning:
+
+```bash
+npm run numeric:audit
+npm run numeric:backfill
+npm run numeric:validate
+```
+
+Persistence-critical release gate:
+
+```bash
+npm run check:persistence:release
+```
+
+Optional uniqueness audit before shipping setup/review scope constraints:
+
+```bash
+npm run uniqueness:audit
+npm run uniqueness:backfill -- --apply
+```
+
+5. Start the API:
 
 ```bash
 npm run dev
@@ -69,3 +109,32 @@ npm run dev
 - Session auth is cookie-based and intended for the companion SPA frontend.
 - Use `FRONTEND_URL` for the deployed frontend origin in production.
 - Use `STORAGE_ENABLED=false` if screenshot storage is not configured yet.
+- Render deploys should run `npm run release:migrate` in a pre-deploy step and keep runtime start on `npm run start:server`.
+- `npm test` now boots a dedicated clean Postgres test volume before running the API suite.
+- Backup and restore runbooks live in `docs/backup-and-restore.md`.
+- Screenshot cleanup/reconciliation runbook lives in `docs/screenshot-storage-reconciliation.md`.
+- Numeric constraint rollout notes live in `docs/numeric-constraint-rollout.md`.
+- Persistence release gate notes live in `docs/persistence-release-gate.md`.
+
+## Review list query params
+
+`GET /reviews` returns a stable paginated response:
+
+- `items`: review rows
+- `pagination`: `page`, `pageSize`, `total`, `totalPages`, `hasNextPage`, `hasPreviousPage`
+
+Supported query params:
+
+- `type`: `daily` | `weekly` | `trade`
+- `tradeId`: UUID for a specific trade review
+- `dateFrom`: inclusive `YYYY-MM-DD` window start
+- `dateTo`: inclusive `YYYY-MM-DD` window end
+- `page`: 1-based page number
+- `pageSize`: bounded page size
+- `sortBy`: `updatedAt` | `createdAt` | `reviewDate` | `weekEnd`
+- `sortOrder`: `asc` | `desc`
+
+Date-window behavior:
+
+- `daily` and `trade` filters apply to `reviewDate`
+- `weekly` filters use overlap logic on `weekStart` / `weekEnd`

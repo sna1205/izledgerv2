@@ -1,252 +1,131 @@
 # Deployment Guide
 
-This project deploys as:
+This project should launch with:
 
 - frontend on Vercel
 - backend API on Render
-- database on Neon Postgres
-- object storage on S3-compatible storage when enabled
+- database on Postgres
+- screenshots/files on S3-compatible object storage
 
-The app architecture stays the same in production:
+Phase 1 goal: safe real-user launch with low migration risk.
+Do not move the API to Cloudflare for the initial release.
+Cloudflare can be considered later for R2 and/or DNS/CDN after production is stable.
 
-- `apps/web` talks only to the backend API
-- `apps/api` handles auth, Prisma, and storage
-- Prisma is the only database layer
-- auth uses HTTP-only cookies
+## Release Architecture
 
-## Deploy Order
+- `apps/web` is a Vite SPA served from Vercel.
+- `apps/api` is a long-running Fastify + Prisma Node service on Render.
+- Postgres is the system of record for auth, sessions, accounts, trades, reviews, shares, and screenshot metadata.
+- Screenshot binaries live in S3-compatible storage and are uploaded from the browser with API-issued presigned URLs.
+- Prisma migrations run in a dedicated release step, not during API startup.
 
-1. Prepare the repo
-2. Create the Neon database
-3. Deploy the backend to Render
-4. Deploy the frontend to Vercel
-5. Verify the full stack
+## Safe Deploy Order
 
-## 1. Prepare The Repo
+1. Validate local parity on a clean Postgres test volume.
+2. Create staging infrastructure and env vars.
+3. Run release migrations in staging.
+4. Verify auth, CRUD, and screenshot flows in staging.
+5. Enable backups, alerts, and monitoring.
+6. Promote the same deploy flow to production.
 
-Before deploying:
+## 1. Local Parity
 
-1. Push the latest code to GitHub.
-2. Make sure Prisma migrations are committed under `apps/api/prisma/migrations`.
-3. Confirm these files are present and up to date:
-   - `render.yaml`
-   - `apps/api/.env.example`
-   - `apps/web/.env.example`
-   - `apps/web/vercel.json`
-4. Confirm local builds pass:
+Run these commands from the repo root:
 
 ```bash
-npm run build --workspace @izledger/api
-npm run build --workspace @izledger/web
-```
-
-5. If you do not want screenshot uploads yet, plan to set `STORAGE_ENABLED=false` in production.
-
-## 2. Create The Neon Database
-
-1. Create a new Neon project.
-2. Open the database connection details.
-3. Copy the pooled Postgres connection string for app runtime traffic.
-4. Copy the direct Postgres connection string for Prisma migrations.
-5. Confirm both strings include `sslmode=require`.
-
-Recommended split:
-
-- `DATABASE_URL`: pooled Neon connection string
-- `DIRECT_URL`: direct Neon connection string
-
-Example shape:
-
-```bash
-DATABASE_URL=postgresql://USER:PASSWORD@ep-xxxxxx-pooler.REGION.aws.neon.tech/DB_NAME?sslmode=require
-DIRECT_URL=postgresql://USER:PASSWORD@ep-xxxxxx.REGION.aws.neon.tech/DB_NAME?sslmode=require
+npm run build:api
+npm run build:web
+npm test --workspace @izledger/api
+npm test --workspace @izledger/web
 ```
 
 Notes:
 
-- `DATABASE_URL` is required by Prisma and the backend.
-- `DIRECT_URL` is optional, but recommended for `prisma migrate deploy`.
-- This repo's Render start command uses `DIRECT_URL` for migrations when it is set, then runs the API normally on `DATABASE_URL`.
-- For a long-running backend service, prefer the pooled Neon URL for `DATABASE_URL`.
+- `npm test --workspace @izledger/api` now provisions a dedicated clean Postgres volume from `apps/api/docker-compose.test.yml`.
+- The API integration suite no longer skips when Postgres is unavailable.
+- If you need the integration database prepared without running the tests, use:
 
-## 3. Deploy The Backend To Render
+```bash
+npm run test:db:prepare --workspace @izledger/api
+```
 
-### Render Service Settings
+## 2. Staging Domains
 
-Create a Render web service with:
+Use production-like custom domains before launch:
+
+- frontend: `https://app-staging.example.com`
+- API: `https://api-staging.example.com`
+
+Recommended production shape:
+
+- frontend: `https://app.example.com`
+- API: `https://api.example.com`
+
+Keep `FRONTEND_URL` set to the exact frontend origin that should be allowed by CORS.
+
+## 3. Backend Deploy On Render
+
+Render service settings:
 
 - Root Directory: `apps/api`
 - Runtime: `Node`
+- Region: `singapore`
 - Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
-- Start Command: `npm run start:render`
+- Pre-Deploy Command: `npm run release:migrate`
+- Start Command: `npm run start:server`
 - Health Check Path: `/health`
 
-If Render detects `render.yaml`, you can deploy from the blueprint instead.
+Why this flow is safer:
 
-### Required Backend Env Vars
+- Prisma migrations run before the new process is promoted.
+- Runtime boot stays predictable and does not mutate the database on every restart.
+- `/health` now checks both API boot and database reachability.
 
-```bash
-NODE_ENV=production
-HOST=0.0.0.0
-FRONTEND_URL=https://your-frontend.vercel.app
-DATABASE_URL=postgresql://USER:PASSWORD@ep-xxxxxx-pooler.REGION.aws.neon.tech/DB_NAME?sslmode=require
-JWT_SECRET=replace-with-a-long-random-secret
-SESSION_COOKIE_NAME=izledger_session
-SESSION_TTL_DAYS=14
-SESSION_COOKIE_SAME_SITE=none
-SESSION_COOKIE_SECURE=true
-SESSION_COOKIE_DOMAIN=
-BCRYPT_ROUNDS=12
-AUTH_RATE_LIMIT_MAX=10
-AUTH_RATE_LIMIT_WINDOW_MINUTES=1
-LOG_LEVEL=info
-```
+## 4. Frontend Deploy On Vercel
 
-### Optional Backend Env Vars
-
-```bash
-DIRECT_URL=postgresql://USER:PASSWORD@ep-xxxxxx.REGION.aws.neon.tech/DB_NAME?sslmode=require
-PORT=10000
-STORAGE_ENABLED=false
-STORAGE_BUCKET=
-STORAGE_REGION=auto
-STORAGE_ENDPOINT=
-STORAGE_ACCESS_KEY=
-STORAGE_SECRET_KEY=
-STORAGE_PUBLIC_BASE_URL=
-STORAGE_FORCE_PATH_STYLE=false
-STORAGE_SIGNED_READS=true
-STORAGE_SIGNED_READ_TTL_SECONDS=900
-```
-
-Storage notes:
-
-- Set `STORAGE_ENABLED=false` if uploads are not ready yet.
-- If storage is enabled, provide the full bucket and credential configuration.
-- Never expose storage credentials to the frontend.
-
-### First Backend Deploy
-
-1. Save env vars in Render.
-2. Trigger a deploy.
-3. Wait for build, migration, and startup to finish.
-4. Open the Render URL.
-5. Check:
-
-```bash
-GET /health
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "service": "izledger-backend"
-}
-```
-
-If migrations hang while `DATABASE_URL` is pooled, add `DIRECT_URL` with the direct Neon connection string.
-
-If Render logs show a Prisma `P1001` connection error while the app uses a direct Neon runtime URL, switch `DATABASE_URL` back to the pooled Neon URL and keep the direct string in `DIRECT_URL` only.
-
-## 4. Deploy The Frontend To Vercel
-
-### Vercel Project Settings
-
-Create a Vercel project with:
+Vercel project settings:
 
 - Root Directory: `apps/web`
 - Framework Preset: `Vite`
 - Build Command: `npm run build`
 - Output Directory: `dist`
 
-SPA rewrites are already configured in `apps/web/vercel.json`.
+`apps/web/vercel.json` already contains the SPA rewrite fallback.
 
-### Required Frontend Env Var
+## 5. Required Env Vars
+
+### Frontend
+
+Set in Vercel:
 
 ```bash
-VITE_API_BASE_URL=https://your-render-service.onrender.com
+VITE_API_BASE_URL=https://api.example.com
 ```
 
-Important:
+### Backend
 
-- Only `VITE_` variables are exposed to the browser.
-- Never put `JWT_SECRET`, database credentials, or storage secrets in Vercel.
-
-## 5. Connect Frontend And Backend
-
-After both services exist:
-
-1. Copy the real frontend production URL from Vercel.
-2. Set `FRONTEND_URL` in Render to that exact origin.
-3. Redeploy the backend so CORS and cookies use the correct frontend origin.
-
-If you later add a custom domain, update `FRONTEND_URL` again and redeploy.
-
-## 6. Verify Production
-
-Check all of the following:
-
-1. `GET /health` returns `200` from Render.
-2. The frontend loads successfully on Vercel.
-3. Login and logout still work with HTTP-only cookies.
-4. Browser requests point to `VITE_API_BASE_URL`.
-5. Render logs show `prisma migrate deploy` completed successfully.
-6. CRUD flows work against the Neon database.
-7. If frontend and backend are on different domains:
-   - `SESSION_COOKIE_SAME_SITE=none`
-   - `SESSION_COOKIE_SECURE=true`
-
-## 7. Safe Prisma Release Flow
-
-For future schema changes:
-
-1. Update `apps/api/prisma/schema.prisma`.
-2. Generate a migration locally:
+Set in Render:
 
 ```bash
-npm run prisma:migrate:dev
-```
-
-3. Commit the migration files.
-4. Push to GitHub.
-5. Let Render run:
-
-```bash
-npm run start:render
-```
-
-That start command runs `prisma migrate deploy` before the API boots.
-
-Do not use `prisma db push` in production.
-
-## 8. Local Environment Reference
-
-### `apps/api/.env`
-
-```bash
-NODE_ENV=development
-PORT=4000
+NODE_ENV=production
 HOST=0.0.0.0
-FRONTEND_URL=http://localhost:5173
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/izledger
-DIRECT_URL=
-JWT_SECRET=replace-with-a-long-random-string
+FRONTEND_URL=https://app.example.com
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
+DIRECT_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
 SESSION_COOKIE_SAME_SITE=lax
 SESSION_COOKIE_DOMAIN=
-SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_SECURE=true
 BCRYPT_ROUNDS=12
 AUTH_RATE_LIMIT_MAX=10
 AUTH_RATE_LIMIT_WINDOW_MINUTES=1
-STORAGE_ENABLED=false
-STORAGE_BUCKET=
+STORAGE_ENABLED=true
+STORAGE_BUCKET=your-bucket-name
 STORAGE_REGION=auto
-STORAGE_ENDPOINT=
-STORAGE_ACCESS_KEY=
-STORAGE_SECRET_KEY=
+STORAGE_ENDPOINT=https://your-storage-endpoint
+STORAGE_ACCESS_KEY=replace-me
+STORAGE_SECRET_KEY=replace-me
 STORAGE_PUBLIC_BASE_URL=
 STORAGE_FORCE_PATH_STYLE=true
 STORAGE_SIGNED_READS=true
@@ -254,8 +133,144 @@ STORAGE_SIGNED_READ_TTL_SECONDS=900
 LOG_LEVEL=info
 ```
 
-### `apps/web/.env.local`
+Notes:
+
+- Leave `SESSION_COOKIE_DOMAIN` blank unless you intentionally need cross-subdomain cookie scope.
+- Keep `SESSION_COOKIE_SAME_SITE=lax` for the recommended sibling-domain setup.
+- Only switch to `SESSION_COOKIE_SAME_SITE=none` if you truly need cross-site cookie delivery, and keep `SESSION_COOKIE_SECURE=true`.
+- If your Postgres provider offers pooled and direct connection strings, prefer pooled for `DATABASE_URL` and direct for `DIRECT_URL`.
+- If staging storage is not ready yet, keep `STORAGE_ENABLED=false` until the staging upload checklist passes.
+
+## 6. Migration Plan
+
+### Local development
+
+Create migrations with:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:4000
+npm run prisma:migrate:dev --workspace @izledger/api
 ```
+
+### Release validation
+
+Before merging a schema change:
+
+```bash
+npm run prisma:check:release --workspace @izledger/api
+```
+
+### Render pre-deploy
+
+Render runs:
+
+```bash
+npm run release:migrate
+```
+
+That script:
+
+- validates the target connection string
+- builds a temporary isolated Prisma workspace
+- runs `prisma migrate deploy`
+- avoids accidental `.env` leakage into the wrong database target
+
+Do not run `prisma db push` in staging or production.
+
+## 7. Staging Auth Checklist
+
+Verify all of the following against the real staging domains:
+
+1. Register succeeds and sets an HTTP-only cookie.
+2. Login succeeds and reuses the same cookie configuration.
+3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, and the expected `SameSite` value.
+4. Authenticated API calls succeed from the frontend origin only.
+5. Requests from a non-allowed origin fail CORS.
+6. Logout clears the session cookie and revokes the stored session.
+7. Reloading the frontend preserves the logged-in session until logout or expiry.
+8. Opening the app over plain HTTP is redirected or unavailable in the real environment.
+
+## 8. Staging Storage Checklist
+
+Run this before enabling screenshots for real users:
+
+1. `POST /trades/:id/screenshots/presign` returns a valid presigned upload payload.
+2. Browser upload to storage succeeds with the returned method and headers.
+3. `POST /trades/:id/screenshots/complete` succeeds only after the object exists.
+4. Shared-trade rendering hides screenshots when sharing settings disable them.
+5. `DELETE /trades/:id/screenshots/:screenshotId` removes the metadata row and the object.
+6. Completing with an invalid or reused upload token fails.
+7. Completing with a missing object fails cleanly and does not create a screenshot row.
+8. Expired pending upload rows can be cleaned with:
+
+```bash
+npm run screenshots:cleanup:expired --workspace @izledger/api
+```
+
+9. Run that cleanup command in staging after intentionally abandoning a few uploads.
+
+## 9. Production Safety
+
+Before launch, enable:
+
+- managed Postgres backups and point-in-time recovery if your provider supports it
+- screenshot bucket versioning and noncurrent-version retention
+- a separate logical-backup bucket for nightly database exports
+- Render health checks on `/health`
+- Render alerting / uptime monitoring on API downtime and elevated 5xx rates
+- Postgres storage alerts
+- retention of application logs from Render
+
+Detailed backup and restore setup now lives in [docs/backup-and-restore.md](/mnt/c/Users/PCM/Documents/IZledgerV2/IZLedgerV2/docs/backup-and-restore.md).
+
+Operational notes:
+
+- API errors are already logged through Fastify/Pino.
+- `/health` now returns `503` if the database is unavailable.
+- Keep the API and database in Singapore, or the closest SEA region your providers offer.
+- Let Vercel handle global frontend delivery.
+
+## 10. Production Launch Checklist
+
+1. Confirm `npm run build:api`, `npm run build:web`, `npm test --workspace @izledger/api`, and `npm test --workspace @izledger/web` all pass on the release commit.
+2. Confirm every Prisma migration directory contains a valid `migration.sql`.
+3. Confirm staging passed the auth and storage checklists.
+4. Confirm production Postgres backups are enabled.
+5. Confirm screenshot bucket versioning is enabled and lifecycle rules are applied.
+6. Confirm the nightly logical backup job is enabled and writing into the backup bucket.
+7. Confirm `npm run restore:verify --workspace @izledger/api` has passed against a restore drill or staging restore target.
+8. Confirm all production env vars are set exactly once and match the intended domains.
+9. Confirm Render is using `preDeployCommand: npm run release:migrate`.
+10. Confirm the API start command is `npm run start:server`.
+11. Deploy the API first and verify `GET /health`.
+12. Deploy the frontend and verify it points to the production API origin.
+13. Register a real production test user and verify login, logout, CRUD, and screenshot upload.
+14. Verify at least one revoked share link returns `410 TRADE_SHARE_REVOKED`.
+15. Capture the release SHA, migration version, and deploy timestamps in your release notes.
+
+## 11. Rollback Checklist
+
+Use the lowest-risk rollback available:
+
+1. If the frontend alone is bad, roll back the Vercel deployment first.
+2. If the API deploy is bad and no destructive migration ran, roll back the Render service to the previous healthy build.
+3. If a migration introduced an application bug but preserved data, deploy a forward fix rather than editing production data manually.
+4. If a migration must be reversed, stop traffic first, take a fresh backup, and use a reviewed SQL rollback plan instead of ad hoc schema edits.
+5. Keep object storage buckets intact during rollback; do not delete screenshot objects as part of an app rollback.
+6. After rollback, re-run `/health`, login, logout, trade CRUD, and screenshot checks.
+
+## 12. Known Launch Blockers That Were Fixed In This Repo
+
+- API integration tests no longer skip when Postgres is missing.
+- Prisma migrations no longer run from the API startup command.
+- A broken committed migration for default-account cleanup was fixed for clean-database bootstraps.
+- A stray empty migration directory was removed so fresh environments can apply the full migration chain.
+- Account deletion now blocks when any trade still references the account, and archive is the safe path for historical accounts.
+
+## 13. Phase 2 Only
+
+After production is stable, you can evaluate Cloudflare for:
+
+- R2 as the S3-compatible storage backend
+- DNS and CDN proxying
+
+Do not move the API runtime to Cloudflare as part of the initial launch.

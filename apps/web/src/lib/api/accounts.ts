@@ -8,10 +8,23 @@ export type AccountPayload = {
   balance: number;
   currency: string;
   isDefault?: boolean;
+  isArchived?: boolean;
 };
 
-export function listAccounts() {
-  return apiFetch<{ items: Account[] }>("/accounts");
+export type ListAccountsParams = {
+  status?: "all" | "active" | "archived";
+};
+
+export function listAccounts(params?: ListAccountsParams) {
+  const searchParams = new URLSearchParams();
+
+  if (params?.status) {
+    searchParams.set("status", params.status);
+  }
+
+  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : "";
+
+  return apiFetch<{ items: Account[] }>(`/accounts${suffix}`);
 }
 
 export function createAccount(payload: AccountPayload) {

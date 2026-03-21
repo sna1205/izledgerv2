@@ -95,6 +95,7 @@ const accounts: Account[] = [
     createdAt: "2026-03-21T10:00:00.000Z",
     updatedAt: "2026-03-21T10:00:00.000Z",
     isDefault: true,
+    isArchived: false,
   },
 ];
 
@@ -230,5 +231,42 @@ describe("TradeFormDialog", () => {
         result: "Loss",
       }));
     });
+  });
+
+  it("keeps an archived account available when editing a historical trade", async () => {
+    const archivedTrade: Trade = {
+      id: "trade-archived-account",
+      date: "2026-03-21",
+      pair: "XAUUSD",
+      accountId: "account-archived",
+      direction: "Buy",
+      entry: 3000,
+      stopLoss: 2990,
+      takeProfit: 3020,
+      profit: 100,
+      result: "Win",
+      setupId: null,
+      setup: "",
+      session: "London",
+      emotion: "Calm",
+      notes: "",
+      screenshots: [],
+      createdAt: "2026-03-21T10:00:00.000Z",
+      updatedAt: "2026-03-21T10:00:00.000Z",
+      account: {
+        id: "account-archived",
+        name: "Legacy Account",
+        broker: "Manual",
+        type: "Personal",
+        currency: "USD",
+        isDefault: false,
+        isArchived: true,
+      },
+    };
+
+    render(<Harness editTrade={archivedTrade} />);
+
+    expect(screen.getByText("Archived accounts stay available here only so historical trades can still be edited safely.")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Legacy Account (archived)" })).toBeInTheDocument();
   });
 });

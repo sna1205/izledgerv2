@@ -5,7 +5,7 @@ process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
 process.env.LOG_LEVEL = "silent";
 process.env.FRONTEND_ORIGIN ??= "http://127.0.0.1:3000";
-process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5432/izledger";
+process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
 process.env.AUTH_RATE_LIMIT_MAX = "1";
 process.env.AUTH_RATE_LIMIT_WINDOW_MINUTES = "1";
 
@@ -119,13 +119,8 @@ test("unauthorized and not found responses use the standard error envelope", asy
   }
 });
 
-test("invalid params and ownership failures use the standard error envelope", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("invalid params and ownership failures use the standard error envelope", async () => {
+  await prisma.$connect();
 
   const ownerApp = await buildApp();
   const attackerApp = await buildApp();
@@ -220,13 +215,8 @@ test("invalid params and ownership failures use the standard error envelope", as
   }
 });
 
-test("conflict and rate limit responses use the standard error envelope", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("conflict and rate limit responses use the standard error envelope", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `er${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

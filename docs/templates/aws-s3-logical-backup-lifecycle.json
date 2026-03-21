@@ -1,0 +1,24 @@
+{
+  "Rules": [
+    {
+      "ID": "ExpireDailyPostgresBackupsAfter35Days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "postgres/daily/"
+      },
+      "Expiration": {
+        "Days": 35
+      }
+    },
+    {
+      "ID": "ExpireWeeklyPostgresBackupsAfter180Days",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "postgres/weekly/"
+      },
+      "Expiration": {
+        "Days": 180
+      }
+    }
+  ]
+}

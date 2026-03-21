@@ -5,7 +5,7 @@ process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
 process.env.LOG_LEVEL = "silent";
 process.env.FRONTEND_ORIGIN ??= "http://127.0.0.1:3000";
-process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5432/izledger";
+process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
 
 const [{ buildApp }, { prisma }] = await Promise.all([
   import("../src/app.js"),
@@ -18,13 +18,8 @@ function getSessionCookie(setCookieHeader: string | string[] | undefined) {
   return rawCookie.split(";", 1)[0];
 }
 
-test("trade shares store snapshots, filter public fields, increment views, and revoke cleanly", async (t) => {
-  try {
-    await prisma.$connect();
-  } catch {
-    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
-    return;
-  }
+test("trade shares store snapshots, filter public fields, increment views, and revoke cleanly", async () => {
+  await prisma.$connect();
 
   const app = await buildApp();
   const username = `ts${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -106,6 +101,19 @@ test("trade shares store snapshots, filter public fields, increment views, and r
     assert.equal(createdShare.viewCount, 0);
     assert.ok(createdShare.publicUrl.endsWith(`/shared/trade/${createdShare.shareId}`));
 
+    const storedShare = await prisma.tradeShare.findUnique({
+      where: {
+        tradeId_userId: {
+          tradeId,
+          userId: account.userId,
+        },
+      },
+    });
+
+    assert.ok(storedShare, "Expected trade share to be persisted.");
+    assert.equal((storedShare.shareSettings as { version?: number }).version, 1);
+    assert.equal((storedShare.snapshot as { version?: number }).version, 1);
+
     const listSharesResponse = await app.inject({
       method: "GET",
       url: `/trades/${tradeId}/shares`,
@@ -184,8 +192,250 @@ test("trade shares store snapshots, filter public fields, increment views, and r
       url: `/shared/trade/${createdShare.shareId}`,
     });
 
-    assert.equal(revokedPublicResponse.statusCode, 404);
-    assert.equal(revokedPublicResponse.json().error.code, "TRADE_SHARE_UNAVAILABLE");
+    assert.equal(revokedPublicResponse.statusCode, 410);
+    assert.equal(revokedPublicResponse.json().error.code, "TRADE_SHARE_REVOKED");
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("legacy unversioned trade share payloads still load after versioned rollout", async () => {
+  await prisma.$connect();
+
+  const app = await buildApp();
+  const username = `tl${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const password = "Password123!";
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        username,
+        password,
+      },
+    });
+
+    assert.equal(registerResponse.statusCode, 201);
+
+    const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
+    const account = await prisma.account.findFirst({
+      where: {
+        user: {
+          username,
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    assert.ok(account, "Expected a default account for the registered user.");
+
+    const createTradeResponse = await app.inject({
+      method: "POST",
+      url: "/trades",
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        date: today,
+        accountId: account.id,
+        pair: "EURUSD",
+        direction: "Buy",
+        entry: 1.09,
+        stopLoss: 1.08,
+        takeProfit: 1.11,
+        profit: 120,
+        result: "Win",
+        session: "London",
+        emotion: "Focused",
+        notes: "Legacy share payload coverage",
+      },
+    });
+
+    assert.equal(createTradeResponse.statusCode, 201);
+    const tradeId = createTradeResponse.json().trade.id as string;
+
+    const createShareResponse = await app.inject({
+      method: "POST",
+      url: `/trades/${tradeId}/share`,
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        settings: {
+          showPnl: true,
+          showAccountName: true,
+          showNotes: true,
+          showScreenshots: false,
+          showExactPrices: true,
+        },
+      },
+    });
+
+    assert.equal(createShareResponse.statusCode, 201);
+    const createdShare = createShareResponse.json().share;
+
+    await prisma.tradeShare.update({
+      where: {
+        tradeId_userId: {
+          tradeId,
+          userId: account.userId,
+        },
+      },
+      data: {
+        shareSettings: {
+          showPnl: true,
+          showAccountName: true,
+          showNotes: true,
+        },
+        snapshot: {
+          tradeId,
+          pair: "EURUSD",
+          direction: "Buy",
+          result: "Win",
+          date: today,
+          entry: 1.09,
+          stopLoss: 1.08,
+          takeProfit: 1.11,
+          pnl: 120,
+          accountName: account.name,
+          screenshots: [],
+        },
+      },
+    });
+
+    const publicShareResponse = await app.inject({
+      method: "GET",
+      url: `/shared/trade/${createdShare.shareId}`,
+    });
+
+    assert.equal(publicShareResponse.statusCode, 200);
+    const publicPayload = publicShareResponse.json().trade;
+    assert.equal(publicPayload.pair, "EURUSD");
+    assert.equal(publicPayload.accountName, account.name);
+    assert.equal(publicPayload.pnl, 120);
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("malformed stored trade share payloads fail gracefully instead of throwing internal errors", async () => {
+  await prisma.$connect();
+
+  const app = await buildApp();
+  const username = `tm${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const password = "Password123!";
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        username,
+        password,
+      },
+    });
+
+    assert.equal(registerResponse.statusCode, 201);
+
+    const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
+    const account = await prisma.account.findFirst({
+      where: {
+        user: {
+          username,
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    assert.ok(account, "Expected a default account for the registered user.");
+
+    const createTradeResponse = await app.inject({
+      method: "POST",
+      url: "/trades",
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        date: today,
+        accountId: account.id,
+        pair: "GBPUSD",
+        direction: "Sell",
+        entry: 1.28,
+        stopLoss: 1.285,
+        takeProfit: 1.27,
+        profit: 90,
+        result: "Win",
+      },
+    });
+
+    assert.equal(createTradeResponse.statusCode, 201);
+    const tradeId = createTradeResponse.json().trade.id as string;
+
+    const createShareResponse = await app.inject({
+      method: "POST",
+      url: `/trades/${tradeId}/share`,
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        settings: {
+          showPnl: true,
+          showAccountName: true,
+          showNotes: true,
+          showScreenshots: false,
+          showExactPrices: true,
+        },
+      },
+    });
+
+    assert.equal(createShareResponse.statusCode, 201);
+    const createdShare = createShareResponse.json().share;
+
+    await prisma.tradeShare.update({
+      where: {
+        tradeId_userId: {
+          tradeId,
+          userId: account.userId,
+        },
+      },
+      data: {
+        snapshot: {
+          version: 1,
+          data: {
+            tradeId: "not-a-uuid",
+            pair: "GBPUSD",
+          },
+        },
+      },
+    });
+
+    const publicShareResponse = await app.inject({
+      method: "GET",
+      url: `/shared/trade/${createdShare.shareId}`,
+    });
+
+    assert.equal(publicShareResponse.statusCode, 410);
+    assert.equal(publicShareResponse.json().error.code, "TRADE_SHARE_UNAVAILABLE");
+    assert.equal(publicShareResponse.json().error.message, "This shared trade link is unavailable.");
   } finally {
     await app.close();
     await prisma.user.deleteMany({
