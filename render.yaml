@@ -27,3 +27,7 @@ services:
         value: false
       - key: LOG_LEVEL
         value: info
+      - key: FOUNDER_BOOTSTRAP_ENABLED
+        value: false
+      - key: FOUNDER_BOOTSTRAP_PASSWORD
+        sync: false

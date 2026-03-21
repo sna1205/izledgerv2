@@ -3,6 +3,7 @@ import { consumePasswordVerificationTime, hashPassword, verifyPassword } from ".
 import { createSession } from "../../lib/session.js";
 import { AppError } from "../../utils/errors.js";
 import { normalizeUsername } from "../../utils/strings.js";
+import { createUserWithDefaultAccount } from "./user-provisioning.js";
 
 function toAuthUser(user: { id: string; username: string; createdAt?: Date; updatedAt?: Date }) {
   return {
@@ -35,11 +36,9 @@ export async function registerUser(params: {
 
   const passwordHash = await hashPassword(params.password);
 
-  const user = await prisma.user.create({
-    data: {
-      username,
-      passwordHash,
-    },
+  const user = await createUserWithDefaultAccount({
+    username,
+    passwordHash,
   });
 
   const session = await createSession({

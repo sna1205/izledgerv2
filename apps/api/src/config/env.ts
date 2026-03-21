@@ -52,6 +52,8 @@ const envSchema = z.object({
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(1),
+  FOUNDER_BOOTSTRAP_ENABLED: booleanFromEnv.default(false),
+  FOUNDER_BOOTSTRAP_PASSWORD: optionalStringFromEnv,
   STORAGE_ENABLED: booleanFromEnv.default(false),
   STORAGE_BUCKET: optionalStringFromEnv,
   STORAGE_REGION: z.string().default("auto"),
@@ -85,6 +87,14 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["SESSION_COOKIE_SECURE"],
       message: "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAME_SITE=none",
+    });
+  }
+
+  if (data.FOUNDER_BOOTSTRAP_ENABLED && !data.FOUNDER_BOOTSTRAP_PASSWORD) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["FOUNDER_BOOTSTRAP_PASSWORD"],
+      message: "FOUNDER_BOOTSTRAP_PASSWORD is required when FOUNDER_BOOTSTRAP_ENABLED=true",
     });
   }
 

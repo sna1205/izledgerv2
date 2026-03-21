@@ -78,6 +78,7 @@ SESSION_COOKIE_SECURE=false
 BCRYPT_ROUNDS=12
 AUTH_RATE_LIMIT_MAX=10
 AUTH_RATE_LIMIT_WINDOW_MINUTES=1
+FOUNDER_BOOTSTRAP_ENABLED=false
 STORAGE_ENABLED=false
 LOG_LEVEL=info
 ```
@@ -87,6 +88,7 @@ Optional backend env vars:
 ```bash
 DIRECT_URL=
 JWT_SECRET=
+FOUNDER_BOOTSTRAP_PASSWORD=
 SESSION_COOKIE_DOMAIN=
 STORAGE_BUCKET=
 STORAGE_REGION=auto
@@ -145,8 +147,31 @@ For free-plan Render services, use `npm run start:render` as the start command s
 - This repo's Render start command temporarily uses `DIRECT_URL` for `prisma migrate deploy` when it is present, while the API still runs on `DATABASE_URL`.
 - Set `SESSION_COOKIE_SECURE=true` in production.
 - If the frontend and API are on different domains, use `SESSION_COOKIE_SAME_SITE=none` and HTTPS.
+- To guarantee the founder account exists on API boot, set `FOUNDER_BOOTSTRAP_ENABLED=true` and `FOUNDER_BOOTSTRAP_PASSWORD` on the backend only.
 - Run `npm run prisma:migrate:deploy` during backend deploys, or let `npm run start:render` do it on Render startup.
 - If screenshot storage is not ready yet, set `STORAGE_ENABLED=false`.
+
+## Founder bootstrap
+
+To guarantee the founder account exists and can be reset safely from the backend only:
+
+```bash
+FOUNDER_BOOTSTRAP_ENABLED=true
+FOUNDER_BOOTSTRAP_PASSWORD=your-secure-founder-password
+```
+
+When enabled, the API startup will:
+
+- ensure the `VEASNA` founder account exists
+- ensure it has a default account
+- sync the founder password to `FOUNDER_BOOTSTRAP_PASSWORD`
+- revoke existing founder sessions if the password had to be reset
+
+You can also run it manually from `apps/api`:
+
+```bash
+npm run founder:bootstrap
+```
 
 ## Production readiness summary
 
