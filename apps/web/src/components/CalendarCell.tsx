@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { BarChart3 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCurrencyDisplay, formatNumberDisplay, formatPercentageDisplay, type NormalizedCalendarDay } from "@/lib/analytics-rendering";
-import { cn } from "@/lib/utils";
+import { formatCurrencyDisplay, formatNumberDisplay, formatPercentageDisplay, type NormalizedCalendarDay } from "@/utils/analytics-rendering";
+import { cn } from "@/utils/class-names";
 
 function getDayTone(day: NormalizedCalendarDay) {
   if (day.totalProfit > 0) {

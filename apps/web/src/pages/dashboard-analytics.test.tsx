@@ -3,12 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/services/api/client";
 import Analytics from "@/pages/Analytics";
 import Dashboard from "@/pages/Dashboard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -25,21 +25,21 @@ const apiMocks = vi.hoisted(() => ({
   getAnalyticsCalendar: vi.fn(),
 }));
 
-vi.mock("@/lib/api/accounts", () => ({
+vi.mock("@/services/api/accounts", () => ({
   listAccounts: apiMocks.listAccounts,
 }));
 
-vi.mock("@/lib/api/analytics", () => ({
+vi.mock("@/services/api/analytics", () => ({
   getDashboardSummary: apiMocks.getDashboardSummary,
   getAnalyticsBreakdowns: apiMocks.getAnalyticsBreakdowns,
   getAnalyticsCalendar: apiMocks.getAnalyticsCalendar,
 }));
 
-vi.mock("@/lib/api/trades", () => ({
+vi.mock("@/services/api/trades", () => ({
   listTrades: apiMocks.listTrades,
 }));
 
-vi.mock("@/components/AccountFilterSelect", () => ({
+vi.mock("@/features/accounts/components/AccountFilterSelect", () => ({
   AccountFilterSelect: () => <div data-testid="account-filter">Account Filter</div>,
 }));
 
@@ -47,11 +47,11 @@ vi.mock("@/components/StatCard", () => ({
   StatCard: ({ label, value }: { label: string; value: string }) => <div>{`${label}: ${value}`}</div>,
 }));
 
-vi.mock("@/components/ProfitDisplay", () => ({
+vi.mock("@/features/trades/components/ProfitDisplay", () => ({
   ProfitDisplay: ({ value }: { value: number }) => <span>{value >= 0 ? `+$${value.toFixed(2)}` : `-$${Math.abs(value).toFixed(2)}`}</span>,
 }));
 
-vi.mock("@/components/ResultBadge", () => ({
+vi.mock("@/features/trades/components/ResultBadge", () => ({
   ResultBadge: ({ result }: { result: string }) => <span>{result}</span>,
 }));
 

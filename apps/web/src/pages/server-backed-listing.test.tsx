@@ -7,7 +7,7 @@ import Trades from "@/pages/Trades";
 import Reviews from "@/pages/Reviews";
 import Setups from "@/pages/Setups";
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -16,7 +16,7 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 
-vi.mock("@/lib/loading", () => ({
+vi.mock("@/utils/loading", () => ({
   withMinimumDelay: async <T,>(operation: Promise<T> | (() => Promise<T>)) => {
     return typeof operation === "function" ? operation() : operation;
   },
@@ -43,11 +43,11 @@ const apiMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/api/accounts", () => ({
+vi.mock("@/services/api/accounts", () => ({
   listAccounts: apiMocks.listAccounts,
 }));
 
-vi.mock("@/lib/api/trades", () => ({
+vi.mock("@/services/api/trades", () => ({
   listTrades: apiMocks.listTrades,
   createTrade: apiMocks.createTrade,
   updateTrade: apiMocks.updateTrade,
@@ -55,14 +55,14 @@ vi.mock("@/lib/api/trades", () => ({
   getTrade: apiMocks.getTrade,
 }));
 
-vi.mock("@/lib/api/reviews", () => ({
+vi.mock("@/services/api/reviews", () => ({
   listReviews: apiMocks.listReviews,
   createReview: apiMocks.createReview,
   updateReview: apiMocks.updateReview,
   deleteReview: apiMocks.deleteReview,
 }));
 
-vi.mock("@/lib/api/setups", () => ({
+vi.mock("@/services/api/setups", () => ({
   listSetups: apiMocks.listSetups,
   createSetup: apiMocks.createSetup,
   updateSetup: apiMocks.updateSetup,
@@ -157,31 +157,31 @@ vi.mock("@/components/ui/tabs", async () => {
   };
 });
 
-vi.mock("@/components/ProfitDisplay", () => ({
+vi.mock("@/features/trades/components/ProfitDisplay", () => ({
   ProfitDisplay: ({ value }: { value: number }) => <span>{value}</span>,
 }));
 
-vi.mock("@/components/ResultBadge", () => ({
+vi.mock("@/features/trades/components/ResultBadge", () => ({
   ResultBadge: ({ result }: { result: string }) => <span>{result}</span>,
 }));
 
-vi.mock("@/components/TradeReviewStatusBadge", () => ({
+vi.mock("@/features/reviews/components/TradeReviewStatusBadge", () => ({
   TradeReviewStatusBadge: ({ reviewed }: { reviewed: boolean }) => <span>{reviewed ? "Reviewed" : "Pending Review"}</span>,
 }));
 
-vi.mock("@/components/TradeFormDialog", () => ({
+vi.mock("@/features/trades/components/TradeFormDialog", () => ({
   TradeFormDialog: () => null,
 }));
 
-vi.mock("@/components/TradeReviewDialog", () => ({
+vi.mock("@/features/reviews/components/TradeReviewDialog", () => ({
   TradeReviewDialog: () => null,
 }));
 
-vi.mock("@/components/TradeReviewContent", () => ({
+vi.mock("@/features/reviews/components/TradeReviewContent", () => ({
   TradeReviewContent: () => <div>Review details</div>,
 }));
 
-vi.mock("@/components/TradeReviewSummary", () => ({
+vi.mock("@/features/reviews/components/TradeReviewSummary", () => ({
   TradeReviewSummary: ({ trade }: { trade: { pair: string } }) => <div>{trade.pair}</div>,
 }));
 

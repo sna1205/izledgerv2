@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Setups from "@/pages/Setups";
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -25,7 +25,7 @@ const apiMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/api/setups", () => ({
+vi.mock("@/services/api/setups", () => ({
   listSetups: apiMocks.listSetups,
   createSetup: apiMocks.createSetup,
   updateSetup: apiMocks.updateSetup,

@@ -2,10 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/services/api/client";
 import TradeDetail from "@/pages/TradeDetail";
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -29,23 +29,23 @@ const apiMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/api/trades", () => ({
+vi.mock("@/services/api/trades", () => ({
   getTrade: apiMocks.getTrade,
   updateTrade: apiMocks.updateTrade,
   deleteTrade: apiMocks.deleteTrade,
 }));
 
-vi.mock("@/lib/api/reviews", () => ({
+vi.mock("@/services/api/reviews", () => ({
   listReviews: apiMocks.listReviews,
   createReview: apiMocks.createReview,
   updateReview: apiMocks.updateReview,
 }));
 
-vi.mock("@/lib/api/accounts", () => ({
+vi.mock("@/services/api/accounts", () => ({
   listAccounts: apiMocks.listAccounts,
 }));
 
-vi.mock("@/lib/api/setups", () => ({
+vi.mock("@/services/api/setups", () => ({
   listSetups: apiMocks.listSetups,
 }));
 
@@ -54,11 +54,11 @@ vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
 }));
 
-vi.mock("@/components/ProfitDisplay", () => ({
+vi.mock("@/features/trades/components/ProfitDisplay", () => ({
   ProfitDisplay: ({ value, className }: { value: number; className?: string }) => <span className={className}>{value}</span>,
 }));
 
-vi.mock("@/components/ResultBadge", () => ({
+vi.mock("@/features/trades/components/ResultBadge", () => ({
   ResultBadge: ({ result }: { result: string }) => <span>{result}</span>,
 }));
 
@@ -66,25 +66,25 @@ vi.mock("@/components/SetupTag", () => ({
   SetupTag: ({ label }: { label: string }) => <span>{label}</span>,
 }));
 
-vi.mock("@/components/TradeReviewStatusBadge", () => ({
+vi.mock("@/features/reviews/components/TradeReviewStatusBadge", () => ({
   TradeReviewStatusBadge: ({ reviewed }: { reviewed: boolean }) => <span>{reviewed ? "Reviewed" : "Pending Review"}</span>,
 }));
 
-vi.mock("@/components/TradeReviewContent", () => ({
+vi.mock("@/features/reviews/components/TradeReviewContent", () => ({
   TradeReviewContent: ({ review }: { review: { lessonLearned?: string | null } }) => (
     <div>Review lesson: {review.lessonLearned || "None"}</div>
   ),
 }));
 
-vi.mock("@/components/TradeFormDialog", () => ({
+vi.mock("@/features/trades/components/TradeFormDialog", () => ({
   TradeFormDialog: () => null,
 }));
 
-vi.mock("@/components/TradeReviewDialog", () => ({
+vi.mock("@/features/reviews/components/TradeReviewDialog", () => ({
   TradeReviewDialog: () => null,
 }));
 
-vi.mock("@/components/ShareTradeModal", () => ({
+vi.mock("@/features/trade-sharing/components/ShareTradeModal", () => ({
   ShareTradeModal: ({ open }: { open: boolean }) => (
     open ? <div>Share modal open</div> : null
   ),

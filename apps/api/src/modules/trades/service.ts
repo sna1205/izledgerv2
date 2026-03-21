@@ -1,6 +1,6 @@
 import { Prisma, TradeSession } from "@prisma/client";
 import type { TradeDirectionValue, TradeResultValue } from "../../config/domain.js";
-import { toNumber } from "../../lib/decimal.js";
+import { toNumber } from "../../utils/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { buildPagination } from "../../utils/http.js";

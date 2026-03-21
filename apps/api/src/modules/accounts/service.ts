@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { toNumber } from "../../lib/decimal.js";
+import { toNumber } from "../../utils/decimal.js";
 import { AppError } from "../../utils/errors.js";
 
 function toAccountDto(account: {

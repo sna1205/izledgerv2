@@ -5,7 +5,7 @@ import { Archive, Bitcoin, FlaskConical, Landmark, Pencil, Plus, RotateCcw, Tras
 import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
 import { StatCard } from "@/components/StatCard";
 import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
@@ -24,24 +24,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
-import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api/client";
-import { createAccount, deleteAccount, listAccounts, updateAccount } from "@/lib/api/accounts";
-import { getAnalyticsBreakdowns } from "@/lib/api/analytics";
-import { setStoredAccountFilter } from "@/lib/account-filter";
+import { useAuth } from "@/features/auth/auth-context";
+import { ApiError } from "@/services/api/client";
+import { createAccount, deleteAccount, listAccounts, updateAccount } from "@/services/api/accounts";
+import { getAnalyticsBreakdowns } from "@/services/api/analytics";
+import { setStoredAccountFilter } from "@/utils/account-filter";
 import {
   ACCOUNT_CURRENCY_MAX_LENGTH,
   ACCOUNT_NAME_MAX_LENGTH,
   getAccountApiErrorMessage,
   validateAccountForm,
-} from "@/lib/account-validation";
-import { formatCurrencyDisplay, formatPercentageDisplay } from "@/lib/analytics-rendering";
-import { getPageErrorState } from "@/lib/page-errors";
-import { withMinimumDelay } from "@/lib/loading";
-import { privateQueryKey } from "@/lib/react-query";
-import type { Account, AccountType } from "@/lib/types";
-import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/lib/types";
-import { cn } from "@/lib/utils";
+} from "@/utils/account-validation";
+import { formatCurrencyDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
+import { getPageErrorState } from "@/utils/page-errors";
+import { withMinimumDelay } from "@/utils/loading";
+import { privateQueryKey } from "@/services/query-client";
+import type { Account, AccountType } from "@/types";
+import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/types";
+import { cn } from "@/utils/class-names";
 
 type AccountFormState = {
   name: string;

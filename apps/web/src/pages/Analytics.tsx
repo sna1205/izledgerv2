@@ -20,7 +20,7 @@ import {
 import type { TooltipProps } from "recharts";
 import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { useNavigate } from "react-router-dom";
-import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { AccountFilterSelect } from "@/features/accounts/components/AccountFilterSelect";
 import {
   EmotionsBreakdownChart,
   getBreakdownCategoryAccent,
@@ -28,15 +28,15 @@ import {
   PairsBreakdownChart,
   SessionsBreakdownChart,
   SetupsBreakdownChart,
-} from "@/components/analytics/BreakdownCharts";
-import { BreakdownDrawer, buildBreakdownDrawerStats } from "@/components/analytics/BreakdownDrawer";
-import { EmptyChartState } from "@/components/analytics/EmptyChartState";
+} from "@/features/analytics/components/BreakdownCharts";
+import { BreakdownDrawer, buildBreakdownDrawerStats } from "@/features/analytics/components/BreakdownDrawer";
+import { EmptyChartState } from "@/features/analytics/components/EmptyChartState";
 import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton";
 import { CalendarCell } from "@/components/CalendarCell";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
-import { TradingDayDrawer } from "@/components/TradingDayDrawer";
+import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/layouts/PageShell";
+import { TradingDayDrawer } from "@/features/trades/components/TradingDayDrawer";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -48,10 +48,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listAccounts } from "@/lib/api/accounts";
-import { getAnalyticsBreakdowns, getAnalyticsCalendar } from "@/lib/api/analytics";
-import { listTrades } from "@/lib/api/trades";
-import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import { listAccounts } from "@/services/api/accounts";
+import { getAnalyticsBreakdowns, getAnalyticsCalendar } from "@/services/api/analytics";
+import { listTrades } from "@/services/api/trades";
+import { resolveAccountFilter, useAccountFilter } from "@/utils/account-filter";
 import {
   formatCompactCurrencyDisplay,
   formatCurrencyDisplay,
@@ -64,13 +64,13 @@ import {
   shiftMonthKey,
   type NormalizedCalendarDay,
   type NormalizedBreakdownRow,
-} from "@/lib/analytics-rendering";
-import { useAuth } from "@/lib/auth";
-import { withMinimumDelay } from "@/lib/loading";
-import { getPageErrorState } from "@/lib/page-errors";
-import { privateQueryKey } from "@/lib/react-query";
-import type { Trade } from "@/lib/types";
-import { cn } from "@/lib/utils";
+} from "@/utils/analytics-rendering";
+import { useAuth } from "@/features/auth/auth-context";
+import { withMinimumDelay } from "@/utils/loading";
+import { getPageErrorState } from "@/utils/page-errors";
+import { privateQueryKey } from "@/services/query-client";
+import type { Trade } from "@/types";
+import { cn } from "@/utils/class-names";
 
 type MainTab = "overview" | "breakdowns" | "calendar";
 type BreakdownTab = "setups" | "pairs" | "sessions" | "emotions";

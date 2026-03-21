@@ -14,10 +14,10 @@ import {
 import { ArrowRight, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
-import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { ReviewContent } from "@/components/ReviewContent";
-import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
+import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
+import { ReviewContent } from "@/features/reviews/components/ReviewContent";
+import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,15 +28,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TagChip } from "@/components/ui/TagChip";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
-import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api/client";
-import { createReview, listReviews, type ListReviewsParams, updateReview } from "@/lib/api/reviews";
-import { getTrade } from "@/lib/api/trades";
-import { formatNumberDisplay } from "@/lib/analytics-rendering";
-import { withMinimumDelay } from "@/lib/loading";
-import { getPageErrorState } from "@/lib/page-errors";
-import { privateQueryKey } from "@/lib/react-query";
-import { getReviewScope, getReviewTitle } from "@/lib/reviews";
+import { useAuth } from "@/features/auth/auth-context";
+import { ApiError } from "@/services/api/client";
+import { createReview, listReviews, type ListReviewsParams, updateReview } from "@/services/api/reviews";
+import { getTrade } from "@/services/api/trades";
+import { formatNumberDisplay } from "@/utils/analytics-rendering";
+import { withMinimumDelay } from "@/utils/loading";
+import { getPageErrorState } from "@/utils/page-errors";
+import { privateQueryKey } from "@/services/query-client";
+import { getReviewScope, getReviewTitle } from "@/utils/reviews";
 import {
   REVIEW_EMOTIONS,
   REVIEW_RISK_STATUSES,
@@ -48,8 +48,8 @@ import {
   type ReviewTradeSnapshot,
   type ReviewType,
   type Trade,
-} from "@/lib/types";
-import { cn } from "@/lib/utils";
+} from "@/types";
+import { cn } from "@/utils/class-names";
 
 const emptyDailyForm = {
   reviewDate: new Date().toISOString().split("T")[0],

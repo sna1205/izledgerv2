@@ -2,18 +2,18 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/services/api/client";
 import SharedTradePage from "@/pages/SharedTradePage";
 
 const shareMocks = vi.hoisted(() => ({
   getPublicTradeShare: vi.fn(),
 }));
 
-vi.mock("@/lib/api/trade-shares", () => ({
+vi.mock("@/services/api/trade-shares", () => ({
   getPublicTradeShare: shareMocks.getPublicTradeShare,
 }));
 
-vi.mock("@/components/ShareTradeCard", () => ({
+vi.mock("@/features/trade-sharing/components/ShareTradeCard", () => ({
   ShareTradeCard: ({ trade }: { trade: { pair: string } }) => <div>Shared card for {trade.pair}</div>,
 }));
 

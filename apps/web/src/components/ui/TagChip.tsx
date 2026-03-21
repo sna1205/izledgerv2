@@ -4,8 +4,8 @@ import {
   getEmotionBadgeStyle,
   getSessionBadgeStyle,
   getSetupBadgeStyle,
-} from "@/lib/badgeColors";
-import { cn } from "@/lib/utils";
+} from "@/utils/badge-colors";
+import { cn } from "@/utils/class-names";
 
 type TagChipKind = "setup" | "session" | "emotion";
 

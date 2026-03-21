@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
-import { toNumber } from "../../lib/decimal.js";
+import { toNumber } from "../../utils/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { AppError } from "../../utils/errors.js";
