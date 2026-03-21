@@ -1,5 +1,5 @@
 import { prisma } from "../../lib/prisma.js";
-import { hashPassword, verifyPassword } from "../../lib/password.js";
+import { consumePasswordVerificationTime, hashPassword, verifyPassword } from "../../lib/password.js";
 import { createSession } from "../../lib/session.js";
 import { AppError } from "../../utils/errors.js";
 import { normalizeUsername } from "../../utils/strings.js";
@@ -70,13 +70,11 @@ export async function loginUser(params: {
     },
   });
 
-  if (!user) {
-    throw new AppError(401, "INVALID_CREDENTIALS", "Invalid username or password.");
-  }
+  const passwordMatches = user
+    ? await verifyPassword(params.password, user.passwordHash)
+    : await consumePasswordVerificationTime(params.password);
 
-  const passwordMatches = await verifyPassword(params.password, user.passwordHash);
-
-  if (!passwordMatches) {
+  if (!user || !passwordMatches) {
     throw new AppError(401, "INVALID_CREDENTIALS", "Invalid username or password.");
   }
 

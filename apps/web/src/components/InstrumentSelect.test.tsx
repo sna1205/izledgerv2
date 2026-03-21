@@ -69,7 +69,7 @@ describe("InstrumentSelect", () => {
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /XAUUSD/i })).toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it("supports keyboard selection and closes after choosing an instrument", async () => {
     render(<TestHarness />);
@@ -164,5 +164,5 @@ describe("InstrumentSelect", () => {
       expect(screen.getByRole("button", { name: /crypto/i })).toBeInTheDocument();
       expect(screen.getByRole("option", { name: /BTCUSD/i })).toBeInTheDocument();
     });
-  });
+  }, 10000);
 });

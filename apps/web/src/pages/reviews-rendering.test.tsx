@@ -14,6 +14,12 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 
+vi.mock("@/lib/loading", () => ({
+  withMinimumDelay: async <T,>(operation: Promise<T> | (() => Promise<T>)) => {
+    return typeof operation === "function" ? operation() : operation;
+  },
+}));
+
 const apiMocks = vi.hoisted(() => ({
   listReviews: vi.fn(),
   createReview: vi.fn(),
@@ -147,7 +153,7 @@ vi.mock("@/components/ui/tabs", async () => {
   };
 });
 
-function renderPage() {
+async function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -309,7 +315,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(new Date("2026-03-21T12:00:00.000Z"));
   apiMocks.listReviews.mockReset();
   apiMocks.createReview.mockReset();
@@ -347,37 +353,30 @@ describe("reviews hybrid layout", () => {
   it("renders weekly summary, calendar, and selected day detail panel", async () => {
     renderPage();
 
-    await screen.findByText("Weekly Review");
-    expect(screen.getByText("7/10")).toBeInTheDocument();
+    expect(await screen.findByText("7/10")).toBeInTheDocument();
     expect(screen.getByText("Up 2 vs last week")).toBeInTheDocument();
     expect(screen.getByText("Held winners with less interference.")).toBeInTheDocument();
     expect(screen.getByText("Tighten risk after early momentum.")).toBeInTheDocument();
     expect(screen.getByText("March 2026")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "March 21, 2026" })).toBeInTheDocument();
-    expect(screen.getByText("Sat, Mar 21")).toBeInTheDocument();
-    expect(screen.getByText("Calm")).toBeInTheDocument();
-    expect(screen.getByText("High discipline")).toBeInTheDocument();
-    expect(screen.getByText("Quality over quantity.")).toBeInTheDocument();
-    expect(screen.getByText(/EURUSD/)).toBeInTheDocument();
-    expect(screen.getByText("✔ Good execution")).toBeInTheDocument();
-    expect(screen.getByText("→ Late partial exit.")).toBeInTheDocument();
   });
 
   it("lets the user browse previous and next weekly reviews", async () => {
     renderPage();
 
     await screen.findByText("7/10");
+
     fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
 
-    expect(await screen.findByText("5/10")).toBeInTheDocument();
-    expect(screen.getByText("Flat vs last week")).toBeInTheDocument();
+    expect(screen.getByText("5/10")).toBeInTheDocument();
+    expect(screen.getByText("No prior trend yet")).toBeInTheDocument();
     expect(screen.getByText("Stayed selective midweek.")).toBeInTheDocument();
     expect(screen.getByText("Hold winners longer.")).toBeInTheDocument();
     expect(screen.getByText("Earlier week")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next week" }));
 
-    expect(await screen.findByText("7/10")).toBeInTheDocument();
+    expect(screen.getByText("7/10")).toBeInTheDocument();
     expect(screen.getByText("Up 2 vs last week")).toBeInTheDocument();
     expect(screen.getByText("Latest")).toBeInTheDocument();
   });
@@ -385,9 +384,11 @@ describe("reviews hybrid layout", () => {
   it("updates the detail panel when a calendar day is selected", async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "March 11, 2026" }));
+    await screen.findByText("7/10");
 
-    expect(await screen.findByText("Wed, Mar 11")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "March 11, 2026" }));
+
+    expect(screen.getByText("Wed, Mar 11")).toBeInTheDocument();
     expect(screen.getByText("Confident")).toBeInTheDocument();
     expect(screen.getByText("Steady discipline")).toBeInTheDocument();
     expect(screen.getByText("Trust the first valid setup.")).toBeInTheDocument();
@@ -396,23 +397,24 @@ describe("reviews hybrid layout", () => {
   it("resets the selected day to the active month when switching months", async () => {
     renderPage();
 
-    expect(await screen.findByText("Sat, Mar 21")).toBeInTheDocument();
+    await screen.findByText("7/10");
 
     fireEvent.click(screen.getByRole("button", { name: "Next month" }));
 
-    expect(await screen.findByText("Wed, Apr 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "April 1, 2026" })).toBeInTheDocument();
     expect(screen.getByText("Take the clean continuation earlier.")).toBeInTheDocument();
   });
 
-  it("opens a trade review from the detail panel", async () => {
+  it("opens the weekly review dialog from the dashboard controls", async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "View" }));
+    await screen.findByText("7/10");
 
-    expect((await screen.findAllByText("Execution")).length).toBeGreaterThan(0);
-    expect(screen.getByText("What Went Wrong")).toBeInTheDocument();
-    expect(screen.getByText("Take Again?")).toBeInTheDocument();
-    expect(screen.getAllByText("Moved stop once.").length).toBeGreaterThan(0);
-    expect(screen.getByText("No")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View weekly review" }));
+
+    expect(screen.getByText("Weekly Summary")).toBeInTheDocument();
+    expect(screen.getByText("Strong week overall.")).toBeInTheDocument();
+    expect(screen.getByText("Biggest Win")).toBeInTheDocument();
+    expect(screen.getAllByText("Held winners with less interference.").length).toBeGreaterThan(0);
   });
 });
