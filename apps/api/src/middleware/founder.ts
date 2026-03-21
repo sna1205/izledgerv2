@@ -5,7 +5,7 @@ import { authenticate } from "./auth.js";
 export const FOUNDER_USERNAME = "VEASNA";
 
 export function isFounderUsername(username: string) {
-  return username === FOUNDER_USERNAME;
+  return username.trim().toUpperCase() === FOUNDER_USERNAME;
 }
 
 export async function requireFounder(request: FastifyRequest, reply: FastifyReply) {

@@ -3,6 +3,7 @@ import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
 import { StatCard } from "@/components/StatCard";
+import { Button } from "@/components/ui/button";
 import { useFounderHealth, useFounderRecent, useFounderStats } from "@/hooks/use-founder-dashboard";
 
 function FounderRecentList({
@@ -46,6 +47,15 @@ export default function FounderDashboard() {
   const statsQuery = useFounderStats();
   const recentQuery = useFounderRecent();
   const healthQuery = useFounderHealth();
+  const isRefreshing = statsQuery.isFetching || recentQuery.isFetching || healthQuery.isFetching;
+
+  const reloadDashboard = () => {
+    void Promise.all([
+      statsQuery.refetch(),
+      recentQuery.refetch(),
+      healthQuery.refetch(),
+    ]);
+  };
 
   if (statsQuery.isLoading && recentQuery.isLoading && healthQuery.isLoading) {
     return <DashboardSkeleton />;
@@ -56,14 +66,8 @@ export default function FounderDashboard() {
       <PageErrorState
         title="Founder dashboard unavailable"
         description="The internal founder dashboard could not be loaded right now."
-        onRetry={() => {
-          void Promise.all([
-            statsQuery.refetch(),
-            recentQuery.refetch(),
-            healthQuery.refetch(),
-          ]);
-        }}
-        isRetrying={statsQuery.isFetching || recentQuery.isFetching || healthQuery.isFetching}
+        onRetry={reloadDashboard}
+        isRetrying={isRefreshing}
       />
     );
   }
@@ -91,7 +95,15 @@ export default function FounderDashboard() {
 
   return (
     <PageShell size="wide">
-      <PageHeader title="Founder Dashboard" description="Internal overview" />
+      <PageHeader
+        title="Founder Dashboard"
+        description="Internal overview"
+        actions={(
+          <Button type="button" variant="outline" onClick={reloadDashboard} disabled={isRefreshing}>
+            Refresh
+          </Button>
+        )}
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Users" value={String(stats.totalUsers)} icon={Users} />

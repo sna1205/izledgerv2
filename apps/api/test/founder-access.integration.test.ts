@@ -122,3 +122,68 @@ test("founder routes only allow the founder username", async (t) => {
     await prisma.$disconnect();
   }
 });
+
+test("founder routes allow founder access regardless of username casing", async (t) => {
+  try {
+    await prisma.$connect();
+  } catch {
+    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
+    return;
+  }
+
+  const app = await buildApp();
+  const founderUsername = "Veasna";
+  const founderPassword = "TemporaryPassword123!";
+
+  try {
+    const existingFounder = await prisma.user.findFirst({
+      where: {
+        username: {
+          equals: founderUsername,
+          mode: "insensitive",
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingFounder) {
+      t.skip("Founder case-sensitivity test skipped because a Veasna user already exists in the configured database.");
+      return;
+    }
+
+    const founderRegisterResponse = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        username: founderUsername,
+        password: founderPassword,
+      },
+    });
+
+    assert.equal(founderRegisterResponse.statusCode, 201);
+
+    const founderSessionCookie = getSessionCookie(founderRegisterResponse.headers["set-cookie"]);
+    const founderStatsResponse = await app.inject({
+      method: "GET",
+      url: "/founder/stats",
+      headers: {
+        cookie: founderSessionCookie,
+      },
+    });
+
+    assert.equal(founderStatsResponse.statusCode, 200);
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username: {
+          equals: founderUsername,
+          mode: "insensitive",
+        },
+      },
+    });
+    await prisma.$disconnect();
+  }
+});

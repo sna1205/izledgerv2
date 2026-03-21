@@ -67,6 +67,19 @@ describe("FounderRoute", () => {
     expect(await screen.findByText("Founder Page")).toBeInTheDocument();
   });
 
+  it("allows founder access even if the stored username casing differs", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createJsonResponse({
+      user: {
+        id: "user-3",
+        username: "Veasna",
+      },
+    })) as typeof fetch;
+
+    renderFounderRoute();
+
+    expect(await screen.findByText("Founder Page")).toBeInTheDocument();
+  });
+
   it("redirects non-founders to the landing page", async () => {
     global.fetch = vi.fn().mockResolvedValue(createJsonResponse({
       user: {
