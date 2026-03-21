@@ -1,6 +1,5 @@
 import { Activity, BookOpenText, Landmark, ShieldCheck, Users } from "lucide-react";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatCard } from "@/components/StatCard";
@@ -49,7 +48,6 @@ export default function FounderDashboard() {
   const recentQuery = useFounderRecent();
   const healthQuery = useFounderHealth();
   const isRefreshing = statsQuery.isFetching || recentQuery.isFetching || healthQuery.isFetching;
-  const hasAnyData = Boolean(statsQuery.data || recentQuery.data || healthQuery.data);
   const hasAnyError = statsQuery.isError || recentQuery.isError || healthQuery.isError;
 
   const reloadDashboard = () => {
@@ -62,17 +60,6 @@ export default function FounderDashboard() {
 
   if (statsQuery.isLoading && recentQuery.isLoading && healthQuery.isLoading) {
     return <DashboardSkeleton />;
-  }
-
-  if (!hasAnyData && hasAnyError) {
-    return (
-      <PageErrorState
-        title="Founder dashboard unavailable"
-        description="The internal founder dashboard could not be loaded right now."
-        onRetry={reloadDashboard}
-        isRetrying={isRefreshing}
-      />
-    );
   }
 
   const stats = statsQuery.data?.stats ?? {
