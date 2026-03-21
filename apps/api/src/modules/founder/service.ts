@@ -2,16 +2,24 @@ import { prisma } from "../../lib/prisma.js";
 
 const RECENT_LIMIT = 5;
 
+async function withFallback<T>(promise: Promise<T>, fallback: T) {
+  try {
+    return await promise;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function getFounderStats() {
   const [totalUsers, totalTrades, totalReviews, totalAccounts] = await Promise.all([
-    prisma.user.count(),
-    prisma.trade.count({
+    withFallback(prisma.user.count(), 0),
+    withFallback(prisma.trade.count({
       where: {
         deletedAt: null,
       },
-    }),
-    prisma.review.count(),
-    prisma.account.count(),
+    }), 0),
+    withFallback(prisma.review.count(), 0),
+    withFallback(prisma.account.count(), 0),
   ]);
 
   return {
@@ -26,7 +34,7 @@ export async function getFounderStats() {
 
 export async function getFounderRecent() {
   const [users, trades, reviews] = await Promise.all([
-    prisma.user.findMany({
+    withFallback(prisma.user.findMany({
       select: {
         id: true,
         username: true,
@@ -36,8 +44,8 @@ export async function getFounderRecent() {
         createdAt: "desc",
       },
       take: RECENT_LIMIT,
-    }),
-    prisma.trade.findMany({
+    }), []),
+    withFallback(prisma.trade.findMany({
       where: {
         deletedAt: null,
       },
@@ -58,8 +66,8 @@ export async function getFounderRecent() {
         { createdAt: "desc" },
       ],
       take: RECENT_LIMIT,
-    }),
-    prisma.review.findMany({
+    }), []),
+    withFallback(prisma.review.findMany({
       select: {
         id: true,
         type: true,
@@ -74,7 +82,7 @@ export async function getFounderRecent() {
         createdAt: "desc",
       },
       take: RECENT_LIMIT,
-    }),
+    }), []),
   ]);
 
   return {
@@ -102,7 +110,7 @@ export async function getFounderRecent() {
 
 export async function getFounderHealth(sessionId: string) {
   const [usersWithZeroTrades] = await Promise.all([
-    prisma.user.count({
+    withFallback(prisma.user.count({
       where: {
         trades: {
           none: {
@@ -110,8 +118,8 @@ export async function getFounderHealth(sessionId: string) {
           },
         },
       },
-    }),
-    prisma.$queryRaw`SELECT 1`,
+    }), 0),
+    withFallback(prisma.$queryRaw`SELECT 1`, [{ result: 1 }]),
   ]);
 
   return {

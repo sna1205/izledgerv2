@@ -2,6 +2,7 @@ import { Activity, BookOpenText, Landmark, ShieldCheck, Users } from "lucide-rea
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { useFounderHealth, useFounderRecent, useFounderStats } from "@/hooks/use-founder-dashboard";
@@ -48,6 +49,8 @@ export default function FounderDashboard() {
   const recentQuery = useFounderRecent();
   const healthQuery = useFounderHealth();
   const isRefreshing = statsQuery.isFetching || recentQuery.isFetching || healthQuery.isFetching;
+  const hasAnyData = Boolean(statsQuery.data || recentQuery.data || healthQuery.data);
+  const hasAnyError = statsQuery.isError || recentQuery.isError || healthQuery.isError;
 
   const reloadDashboard = () => {
     void Promise.all([
@@ -61,7 +64,7 @@ export default function FounderDashboard() {
     return <DashboardSkeleton />;
   }
 
-  if (statsQuery.isError && !statsQuery.data) {
+  if (!hasAnyData && hasAnyError) {
     return (
       <PageErrorState
         title="Founder dashboard unavailable"
@@ -104,6 +107,15 @@ export default function FounderDashboard() {
           </Button>
         )}
       />
+
+      {hasAnyError ? (
+        <Alert className="border-border/70 bg-background/70">
+          <AlertTitle>Some founder data is unavailable</AlertTitle>
+          <AlertDescription>
+            The dashboard loaded with safe fallback values. Try refresh to load the latest data.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Users" value={String(stats.totalUsers)} icon={Users} />
