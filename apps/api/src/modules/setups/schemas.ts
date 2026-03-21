@@ -8,7 +8,7 @@ export const setupParamsSchema = z.object({
 export const createSetupSchema = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(2000).default(""),
-  color: z.string().trim().regex(/^#([A-Fa-f0-9]{6})$/),
+  color: z.string().trim().max(32).optional(),
   isArchived: z.boolean().optional(),
 });
 

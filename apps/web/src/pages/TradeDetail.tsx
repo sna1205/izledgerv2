@@ -18,6 +18,7 @@ import { TradeFormDialog } from "@/components/TradeFormDialog";
 import { TradeReviewContent } from "@/components/TradeReviewContent";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
 import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { TagChip } from "@/components/ui/TagChip";
 import { listAccounts } from "@/lib/api/accounts";
 import { ApiError } from "@/lib/api/client";
 import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
@@ -373,22 +374,14 @@ export default function TradeDetail() {
                   </h1>
                   <ResultBadge result={trade.result} />
                   <TradeReviewStatusBadge trade={trade} reviewed={Boolean(review)} />
-                  {trade.session ? (
-                    <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
-                      {trade.session}
-                    </span>
-                  ) : null}
-                  {trade.emotion ? (
-                    <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-                      {trade.emotion}
-                    </span>
-                  ) : null}
+                  {trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : null}
+                  {trade.session ? <TagChip label={trade.session} kind="session" /> : null}
+                  {trade.emotion ? <TagChip label={trade.emotion} kind="emotion" /> : null}
                 </div>
 
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">
                     {formatTradeDate(trade.date)}
-                    {trade.setup ? ` • ${trade.setup}` : ""}
                   </p>
                   <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-2">
@@ -466,7 +459,7 @@ export default function TradeDetail() {
                   <p className="text-label mb-3">Performance</p>
                   <div className="mt-3 space-y-1">
                     <InsightRow label="Result" value={<ResultBadge result={trade.result} />} />
-                    <InsightRow label="Setup" value={trade.setup ? <SetupTag label={trade.setup} /> : "No setup tagged"} />
+                    <InsightRow label="Setup" value={trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : "No setup tagged"} />
                     <InsightRow label="Screenshot Count" value={`${trade.screenshotAssets?.length ?? 0} ${(trade.screenshotAssets?.length ?? 0) === 1 ? "image" : "images"}`} />
                     <InsightRow label="Review Status" value={review ? "Completed" : "Pending"} />
                   </div>

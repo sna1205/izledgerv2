@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers3, Pencil, Plus, Sparkles, SwatchBook, Trash2 } from "lucide-react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Layers3, Pencil, Plus, RefreshCw, Sparkles, SwatchBook, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import { FilterBar, FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
@@ -10,7 +10,7 @@ import { StatCard } from "@/components/StatCard";
 import { DataBadge } from "@/components/DataBadge";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,14 +33,37 @@ import { formatNumberDisplay } from "@/lib/analytics-rendering";
 import { getPageErrorState } from "@/lib/page-errors";
 import { withMinimumDelay } from "@/lib/loading";
 import { privateQueryKey } from "@/lib/react-query";
-import type { SetupDefinition } from "@/lib/types";
+import {
+  generateUniqueSetupColor,
+  normalizeSetupColor,
+  type SetupDefinition,
+} from "@/lib/types";
 
-const emptyForm = {
-  name: "",
-  description: "",
-  color: "#10B981",
-};
+function createEmptyForm(color = "") {
+  return {
+    name: "",
+    description: "",
+    color,
+  };
+}
+
+const emptyForm = createEmptyForm();
 const SETUPS_PAGE_SIZE = 12;
+const FALLBACK_SETUP_COLOR = "#10B981";
+
+function resolveDisplayColor(color: string) {
+  return normalizeSetupColor(color) ?? FALLBACK_SETUP_COLOR;
+}
+
+function buildUniqueFormColor(setups: SetupDefinition[], excludeSetupId?: string) {
+  return generateUniqueSetupColor(
+    setups
+      .filter((setup) => setup.id !== excludeSetupId)
+      .map((setup) => setup.color),
+  );
+}
+
+type SetupFormState = ReturnType<typeof createEmptyForm>;
 
 export default function Setups() {
   const { user } = useAuth();
@@ -48,7 +71,7 @@ export default function Setups() {
   const [open, setOpen] = useState(false);
   const [editingSetup, setEditingSetup] = useState<SetupDefinition | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SetupDefinition | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState<SetupFormState>(emptyForm);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("all");
   const [sortBy, setSortBy] = useState<"createdAt" | "name">("createdAt");
@@ -72,6 +95,7 @@ export default function Setups() {
       sortBy,
       sortOrder,
     })),
+    placeholderData: keepPreviousData,
   });
 
   const setups = setupsQuery.data?.items ?? [];
@@ -81,6 +105,8 @@ export default function Setups() {
   const archivedSetups = setups.filter((setup) => setup.isArchived).length;
   const totalTradesMapped = setups.reduce((sum, setup) => sum + (setup.tradeCount ?? 0), 0);
   const hasActiveFilters = Boolean(search.trim()) || statusFilter !== "all";
+  const previewColor = resolveDisplayColor(form.color);
+  const formColorLabel = normalizeSetupColor(form.color) ?? previewColor;
 
   const invalidateData = async () => {
     await Promise.all([
@@ -92,11 +118,12 @@ export default function Setups() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: typeof emptyForm) => {
+    mutationFn: async (payload: SetupFormState) => {
       const normalized = {
         name: payload.name.trim(),
         description: payload.description.trim(),
-        color: payload.color.trim() || "#10B981",
+        color: normalizeSetupColor(payload.color)
+          ?? buildUniqueFormColor(setups, editingSetup?.id),
       };
 
       if (editingSetup) {
@@ -110,7 +137,7 @@ export default function Setups() {
       toast.success(editingSetup ? "Setup updated successfully." : "Setup created successfully.");
       setOpen(false);
       setEditingSetup(null);
-      setForm(emptyForm);
+      setForm(createEmptyForm());
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not save the setup right now.";
@@ -133,7 +160,7 @@ export default function Setups() {
 
   const openCreateModal = () => {
     setEditingSetup(null);
-    setForm(emptyForm);
+    setForm(createEmptyForm(buildUniqueFormColor(setups)));
     setOpen(true);
   };
 
@@ -142,9 +169,16 @@ export default function Setups() {
     setForm({
       name: setup.name,
       description: setup.description,
-      color: setup.color,
+      color: resolveDisplayColor(setup.color),
     });
     setOpen(true);
+  };
+
+  const regenerateFormColor = () => {
+    setForm((current) => ({
+      ...current,
+      color: buildUniqueFormColor(setups, editingSetup?.id),
+    }));
   };
 
   if (setupsQuery.isLoading && !setupsQuery.data) {
@@ -187,7 +221,7 @@ export default function Setups() {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <StatCard label="Total Setups" value={String(totalSetups)} icon={Layers3} />
         <StatCard label="Active" value={String(activeSetups)} icon={Sparkles} />
-        <StatCard label="Mapped Trades" value={formatNumberDisplay(totalTradesMapped)} icon={SwatchBook} />
+        <StatCard label="Trades" value={formatNumberDisplay(totalTradesMapped)} icon={SwatchBook} />
       </div>
 
       <FilterBar meta={<><span className="font-medium text-foreground">{totalSetups}</span>&nbsp;setups in view</>}>
@@ -249,7 +283,7 @@ export default function Setups() {
           title={hasActiveFilters ? "No setups match these filters" : "Create your first setup"}
           description={hasActiveFilters
             ? "Adjust filters and try again."
-            : "Add a setup to tag trades."}
+            : "Save a setup to tag trades."}
           action={!hasActiveFilters ? (
             <Button onClick={openCreateModal}>
               <Plus className="h-4 w-4" />
@@ -280,10 +314,10 @@ export default function Setups() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" onClick={() => openEditModal(setup)}>
+                        <Button variant="outline" size="icon" aria-label={`Edit ${setup.name}`} onClick={() => openEditModal(setup)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(setup)}>
+                        <Button variant="outline" size="icon" aria-label={`Delete ${setup.name}`} className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(setup)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -295,8 +329,15 @@ export default function Setups() {
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="surface-muted px-4 py-4">
-                        <p className="text-label mb-2">Color Token</p>
-                        <p className="font-mono-price text-base font-medium text-foreground">{setup.color.toUpperCase()}</p>
+                        <p className="text-label mb-2">Color</p>
+                        <div className="flex items-center gap-3">
+                          <span
+                            aria-hidden="true"
+                            className="h-4 w-4 rounded-full border border-black/5 shadow-sm ring-1 ring-black/5 dark:border-white/10 dark:ring-white/10"
+                            style={{ backgroundColor: resolveDisplayColor(setup.color) }}
+                          />
+                          <p className="font-mono-price text-base font-medium text-foreground">{resolveDisplayColor(setup.color)}</p>
+                        </div>
                       </div>
                       <div className="surface-muted px-4 py-4">
                         <p className="text-label mb-2">Trades</p>
@@ -328,29 +369,58 @@ export default function Setups() {
 
           if (!nextOpen) {
             setEditingSetup(null);
-            setForm(emptyForm);
+            setForm(createEmptyForm());
           }
         }}
       >
         <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingSetup ? "Edit Setup" : "Create Setup"}</DialogTitle>
+            <DialogDescription>
+              Color is assigned automatically.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
             <div className="space-y-2">
-              <Label className="text-label">Setup Name</Label>
-              <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+              <Label className="text-label" htmlFor="setup-name">Setup Name</Label>
+              <Input id="setup-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-label">Description</Label>
-              <Textarea rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+              <Label className="text-label" htmlFor="setup-description">Description</Label>
+              <Textarea id="setup-description" rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-label">Color Token</Label>
-              <Input value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value.toUpperCase() }))} />
+              <Label className="text-label">Color</Label>
+              <div className="rounded-2xl border border-border/55 bg-muted/20 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="h-4 w-4 rounded-full border border-black/5 shadow-sm ring-1 ring-black/5 dark:border-white/10 dark:ring-white/10"
+                      style={{ backgroundColor: previewColor }}
+                    />
+                    <div>
+                      <p className="font-mono-price text-sm font-medium text-foreground">{formColorLabel}</p>
+                      <p className="text-xs text-muted-foreground">Auto-assigned</p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-xl px-3 text-xs"
+                    aria-label="Regenerate setup color"
+                    onClick={regenerateFormColor}
+                  >
+                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                    Regenerate
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">

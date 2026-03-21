@@ -1,8 +1,8 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Reviews from "@/pages/Reviews";
 
 vi.mock("@/lib/auth", () => ({
@@ -12,6 +12,12 @@ vi.mock("@/lib/auth", () => ({
       username: "trader",
     },
   }),
+}));
+
+vi.mock("@/lib/loading", () => ({
+  withMinimumDelay: async <T,>(operation: Promise<T> | (() => Promise<T>)) => {
+    return typeof operation === "function" ? operation() : operation;
+  },
 }));
 
 const apiMocks = vi.hoisted(() => ({
@@ -147,7 +153,7 @@ vi.mock("@/components/ui/tabs", async () => {
   };
 });
 
-function renderPage() {
+async function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -167,7 +173,7 @@ function renderPage() {
 
 const trade = {
   id: "trade-1",
-  date: "2026-03-10",
+  date: "2026-03-21",
   pair: "EURUSD",
   accountId: "account-1",
   direction: "Buy" as const,
@@ -177,50 +183,119 @@ const trade = {
   profit: 150,
   result: "Win" as const,
   setup: "Breakout",
+  session: "New York" as const,
+  emotion: "Focused" as const,
   notes: "Held the plan.",
   screenshots: [],
   createdAt: "2026-03-10T10:00:00.000Z",
   updatedAt: "2026-03-10T11:00:00.000Z",
 };
 
-const reviews = [
+const dailyReviews = [
   {
-    id: "review-daily",
+    id: "review-daily-current",
     type: "daily" as const,
-    reviewDate: "2026-03-11",
+    reviewDate: "2026-03-21",
+    reviewScope: "daily" as const,
     wentWell: "Stayed patient.",
-    mistakes: "Overtraded London.",
-    followedRules: "Partially" as const,
+    mistakes: "Nearly rushed a second entry.",
+    followedRules: "Yes" as const,
     emotion: "Calm" as const,
     lessonLearned: "Quality over quantity.",
     improvementPlan: "Reduce impulsive entries.",
     disciplineScore: 8,
-    whatWentWell: "trade-only text",
-    whatWentWrong: "trade-only mistake",
+    createdAt: "2026-03-21T10:00:00.000Z",
+    updatedAt: "2026-03-21T11:00:00.000Z",
+  },
+  {
+    id: "review-daily-older",
+    type: "daily" as const,
+    reviewDate: "2026-03-11",
+    reviewScope: "daily" as const,
+    wentWell: "Waited for the cleaner breakout.",
+    mistakes: "Hesitated after the first signal.",
+    followedRules: "Partially" as const,
+    emotion: "Confident" as const,
+    lessonLearned: "Trust the first valid setup.",
+    improvementPlan: "Commit faster once rules align.",
+    disciplineScore: 6,
     createdAt: "2026-03-11T10:00:00.000Z",
     updatedAt: "2026-03-11T11:00:00.000Z",
   },
   {
-    id: "review-weekly",
-    type: "weekly" as const,
-    weekStart: "2026-03-10",
-    weekEnd: "2026-03-16",
-    weeklySummary: "Consistent week overall.",
-    biggestWin: "Held winners longer.",
-    biggestMistake: "Ignored correlations.",
-    riskManagement: "Yes" as const,
-    nextGoal: "Skip mediocre setups.",
-    weeklyRating: 7,
-    lessonLearned: "daily-only text",
-    whatWentWell: "trade-only text",
-    createdAt: "2026-03-16T10:00:00.000Z",
-    updatedAt: "2026-03-16T11:00:00.000Z",
+    id: "review-daily-next-month",
+    type: "daily" as const,
+    reviewDate: "2026-04-01",
+    reviewScope: "daily" as const,
+    wentWell: "Protected capital after a slow open.",
+    mistakes: "Passed on the best continuation setup.",
+    followedRules: "Yes" as const,
+    emotion: "Calm" as const,
+    lessonLearned: "Take the clean continuation earlier.",
+    improvementPlan: "Trust continuation quality faster.",
+    disciplineScore: 7,
+    createdAt: "2026-04-01T10:00:00.000Z",
+    updatedAt: "2026-04-01T11:00:00.000Z",
   },
+];
+
+const weeklyReviews = [
+  {
+    id: "review-weekly-current",
+    type: "weekly" as const,
+    reviewScope: "weekly" as const,
+    weekStart: "2026-03-16",
+    weekEnd: "2026-03-22",
+    weeklySummary: "Strong week overall.",
+    biggestWin: "Held winners with less interference.",
+    biggestMistake: "Risk got loose after the best day.",
+    riskManagement: "Yes" as const,
+    nextGoal: "Tighten risk after early momentum.",
+    weeklyRating: 7,
+    createdAt: "2026-03-22T10:00:00.000Z",
+    updatedAt: "2026-03-22T11:00:00.000Z",
+  },
+  {
+    id: "review-weekly-prev",
+    type: "weekly" as const,
+    reviewScope: "weekly" as const,
+    weekStart: "2026-03-09",
+    weekEnd: "2026-03-15",
+    weeklySummary: "Mixed week.",
+    biggestWin: "Stayed selective midweek.",
+    biggestMistake: "Cut winners early.",
+    riskManagement: "Partially" as const,
+    nextGoal: "Hold winners longer.",
+    weeklyRating: 5,
+    createdAt: "2026-03-15T10:00:00.000Z",
+    updatedAt: "2026-03-15T11:00:00.000Z",
+  },
+];
+
+const tradeReviews = [
   {
     id: "review-trade",
     type: "trade" as const,
+    reviewScope: "trade" as const,
     tradeId: "trade-1",
-    reviewDate: "2026-03-10",
+    tradeSnapshot: {
+      id: "trade-1",
+      date: "2026-03-21",
+      pair: "EURUSD",
+      direction: "Buy" as const,
+      entry: 1.1,
+      stopLoss: 1.09,
+      takeProfit: 1.12,
+      profit: 150,
+      result: "Win" as const,
+      setup: "Breakout",
+      setupColor: null,
+      session: "New York" as const,
+      emotion: "Focused" as const,
+      notes: "Held the plan.",
+      screenshots: [],
+    },
+    reviewDate: "2026-03-21",
     executionRating: 5,
     disciplineScore: 4,
     emotionRating: 4,
@@ -230,12 +305,18 @@ const reviews = [
     lessonLearned: "Wait for confirmation.",
     improvementForNextTrade: "Scale out better.",
     wouldTakeAgain: false,
-    createdAt: "2026-03-10T12:00:00.000Z",
-    updatedAt: "2026-03-10T13:00:00.000Z",
+    createdAt: "2026-03-21T12:00:00.000Z",
+    updatedAt: "2026-03-21T13:00:00.000Z",
   },
 ];
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date("2026-03-21T12:00:00.000Z"));
   apiMocks.listReviews.mockReset();
   apiMocks.createReview.mockReset();
   apiMocks.updateReview.mockReset();
@@ -244,85 +325,96 @@ beforeEach(() => {
   apiMocks.toast.success.mockReset();
   apiMocks.toast.error.mockReset();
 
-  apiMocks.listReviews.mockResolvedValue({
-    items: reviews,
-    pagination: {
-      page: 1,
-      pageSize: 10,
-      total: reviews.length,
-      totalPages: 1,
-      hasNextPage: false,
-      hasPreviousPage: false,
-    },
+  apiMocks.listReviews.mockImplementation(async (params?: { type?: string }) => {
+    const items = params?.type === "daily"
+      ? dailyReviews
+      : params?.type === "weekly"
+        ? weeklyReviews
+        : params?.type === "trade"
+          ? tradeReviews
+          : [...dailyReviews, ...weeklyReviews, ...tradeReviews];
+
+    return {
+      items,
+      pagination: {
+        page: 1,
+        pageSize: 200,
+        total: items.length,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    };
   });
   apiMocks.getTrade.mockResolvedValue({ trade });
 });
 
-describe("review rendering by type", () => {
-  it("renders a mixed review list with type-specific summaries", async () => {
+describe("reviews hybrid layout", () => {
+  it("renders weekly summary, calendar, and selected day detail panel", async () => {
     renderPage();
 
-    await screen.findByText("Mar 11, 2026");
-
-    expect(screen.getByText("Mar 10 - Mar 16, 2026")).toBeInTheDocument();
-    expect(screen.getByText("EURUSD • Mar 10, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Discipline: 8/10")).toBeInTheDocument();
-    expect(screen.getByText("Risk Management: Yes")).toBeInTheDocument();
-    expect(screen.getByText("View Trade")).toBeInTheDocument();
+    expect(await screen.findByText("7/10")).toBeInTheDocument();
+    expect(screen.getByText("Up 2 vs last week")).toBeInTheDocument();
+    expect(screen.getByText("Held winners with less interference.")).toBeInTheDocument();
+    expect(screen.getByText("Tighten risk after early momentum.")).toBeInTheDocument();
+    expect(screen.getByText("March 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "March 21, 2026" })).toBeInTheDocument();
   });
 
-  it("opens daily reviews with only daily review fields", async () => {
+  it("lets the user browse previous and next weekly reviews", async () => {
     renderPage();
 
-    const dailyCard = (await screen.findByText("Mar 11, 2026")).closest("article");
-    if (!dailyCard) {
-      throw new Error("Daily review card not found.");
-    }
+    await screen.findByText("7/10");
 
-    fireEvent.click(within(dailyCard).getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
 
-    expect(await screen.findByText("Review Date")).toBeInTheDocument();
-    expect(screen.getByText("Rules Followed")).toBeInTheDocument();
-    expect(screen.getByText("Stayed patient.")).toBeInTheDocument();
-    expect(screen.getByText("Reduce impulsive entries.")).toBeInTheDocument();
-    expect(screen.queryByText("What Went Wrong")).not.toBeInTheDocument();
-    expect(screen.queryByText("Take Again?")).not.toBeInTheDocument();
+    expect(screen.getByText("5/10")).toBeInTheDocument();
+    expect(screen.getByText("No prior trend yet")).toBeInTheDocument();
+    expect(screen.getByText("Stayed selective midweek.")).toBeInTheDocument();
+    expect(screen.getByText("Hold winners longer.")).toBeInTheDocument();
+    expect(screen.getByText("Earlier week")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+
+    expect(screen.getByText("7/10")).toBeInTheDocument();
+    expect(screen.getByText("Up 2 vs last week")).toBeInTheDocument();
+    expect(screen.getByText("Latest")).toBeInTheDocument();
   });
 
-  it("opens weekly reviews with only weekly review fields", async () => {
+  it("updates the detail panel when a calendar day is selected", async () => {
     renderPage();
 
-    const weeklyCard = (await screen.findByText("Mar 10 - Mar 16, 2026")).closest("article");
-    if (!weeklyCard) {
-      throw new Error("Weekly review card not found.");
-    }
+    await screen.findByText("7/10");
 
-    fireEvent.click(within(weeklyCard).getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: "March 11, 2026" }));
 
-    expect(await screen.findByText("Weekly Summary")).toBeInTheDocument();
+    expect(screen.getByText("Wed, Mar 11")).toBeInTheDocument();
+    expect(screen.getByText("Confident")).toBeInTheDocument();
+    expect(screen.getByText("Steady discipline")).toBeInTheDocument();
+    expect(screen.getByText("Trust the first valid setup.")).toBeInTheDocument();
+  });
+
+  it("resets the selected day to the active month when switching months", async () => {
+    renderPage();
+
+    await screen.findByText("7/10");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+
+    expect(screen.getByRole("button", { name: "April 1, 2026" })).toBeInTheDocument();
+    expect(screen.getByText("Take the clean continuation earlier.")).toBeInTheDocument();
+  });
+
+  it("opens the weekly review dialog from the dashboard controls", async () => {
+    renderPage();
+
+    await screen.findByText("7/10");
+
+    fireEvent.click(screen.getByRole("button", { name: "View weekly review" }));
+
+    expect(screen.getByText("Weekly Summary")).toBeInTheDocument();
+    expect(screen.getByText("Strong week overall.")).toBeInTheDocument();
     expect(screen.getByText("Biggest Win")).toBeInTheDocument();
-    expect(screen.getByText("Skip mediocre setups.")).toBeInTheDocument();
-    expect(screen.getByText("Risk Management")).toBeInTheDocument();
-    expect(screen.queryByText("Lesson Learned")).not.toBeInTheDocument();
-    expect(screen.queryByText("What Went Well")).not.toBeInTheDocument();
-  });
-
-  it("opens trade reviews with only trade review fields", async () => {
-    renderPage();
-
-    const tradeCard = (await screen.findByText("EURUSD • Mar 10, 2026")).closest("article");
-    if (!tradeCard) {
-      throw new Error("Trade review card not found.");
-    }
-
-    fireEvent.click(within(tradeCard).getByRole("button", { name: "View" }));
-
-    expect(await screen.findByText("Execution")).toBeInTheDocument();
-    expect(screen.getByText("What Went Wrong")).toBeInTheDocument();
-    expect(screen.getByText("Take Again?")).toBeInTheDocument();
-    expect(screen.getByText("Moved stop once.")).toBeInTheDocument();
-    expect(screen.getByText("No")).toBeInTheDocument();
-    expect(screen.queryByText("Improvement Plan")).not.toBeInTheDocument();
-    expect(screen.queryByText("Weekly Summary")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Held winners with less interference.").length).toBeGreaterThan(0);
   });
 });

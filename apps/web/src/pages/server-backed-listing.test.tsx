@@ -16,6 +16,12 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 
+vi.mock("@/lib/loading", () => ({
+  withMinimumDelay: async <T,>(operation: Promise<T> | (() => Promise<T>)) => {
+    return typeof operation === "function" ? operation() : operation;
+  },
+}));
+
 const apiMocks = vi.hoisted(() => ({
   listAccounts: vi.fn(),
   listTrades: vi.fn(),
@@ -262,6 +268,9 @@ beforeEach(() => {
   apiMocks.listTrades.mockReset();
   apiMocks.listReviews.mockReset();
   apiMocks.listSetups.mockReset();
+  apiMocks.createSetup.mockReset();
+  apiMocks.updateSetup.mockReset();
+  apiMocks.deleteSetup.mockReset();
   apiMocks.getTrade.mockReset();
 
   apiMocks.listAccounts.mockResolvedValue({ items: [account] });
@@ -273,6 +282,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -342,60 +352,103 @@ describe("server-backed list pages", () => {
     });
   });
 
-  it("uses server-backed filters, sorting, paging, and totals for reviews", async () => {
-    apiMocks.listReviews.mockImplementation(async (params) => ({
-      items: [{ ...review, type: params.type ?? "daily", reviewScope: params.type ?? "daily" }],
-      pagination: {
-        page: params.page ?? 1,
-        pageSize: params.pageSize ?? 10,
-        total: 134,
-        totalPages: 14,
-        hasNextPage: (params.page ?? 1) < 14,
-        hasPreviousPage: (params.page ?? 1) > 1,
-      },
-    }));
+  it("uses the server-backed hybrid review queries and renders the returned review data", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-03-21T12:00:00.000Z"));
+
+    apiMocks.listReviews.mockImplementation(async (params) => {
+      const items = params?.type === "daily"
+        ? [{
+            ...review,
+            type: "daily" as const,
+            reviewScope: "daily" as const,
+            reviewDate: "2026-03-21",
+            emotion: "Calm" as const,
+            followedRules: "Yes" as const,
+            disciplineScore: 8,
+            lessonLearned: "Stay patient.",
+          }]
+        : params?.type === "weekly"
+          ? [{
+              ...review,
+              id: "review-weekly-1",
+              type: "weekly" as const,
+              reviewScope: "weekly" as const,
+              weekStart: "2026-03-16",
+              weekEnd: "2026-03-22",
+              biggestWin: "Held winners with less interference.",
+              biggestMistake: "Risk got loose after the best day.",
+              nextGoal: "Tighten risk after early momentum.",
+              weeklyRating: 7,
+            }]
+          : [{
+              ...review,
+              id: "review-trade-1",
+              type: "trade" as const,
+              reviewScope: "trade" as const,
+              tradeId: trade.id,
+              reviewDate: "2026-03-21",
+              disciplineScore: 4,
+              executionRating: 5,
+              whatWentWrong: "Late partial exit.",
+              tradeSnapshot: {
+                id: trade.id,
+                date: "2026-03-21",
+                pair: trade.pair,
+                direction: trade.direction,
+                entry: trade.entry,
+                stopLoss: trade.stopLoss,
+                takeProfit: trade.takeProfit,
+                profit: trade.profit,
+                result: trade.result,
+                setup: trade.setup,
+                setupColor: null,
+                session: "New York" as const,
+                emotion: "Focused" as const,
+                notes: "Held the plan.",
+                screenshots: [],
+              },
+            }];
+
+      return {
+        items,
+        pagination: {
+          page: params.page ?? 1,
+          pageSize: params.pageSize ?? 10,
+          total: items.length,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      };
+    });
 
     renderPage(<Reviews />);
 
-    await screen.findByText(hasTextContent("134 reviews"));
-    expect(screen.getByText(hasTextContent("Page 1 of 14 review pages"))).toBeInTheDocument();
+    expect(await screen.findAllByText("Weekly Review")).not.toHaveLength(0);
+    expect(screen.getByText("7/10")).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
-        page: 1,
-        pageSize: 10,
-        sortBy: "updatedAt",
-        sortOrder: "desc",
-      }));
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Trade" }));
-
-    await waitFor(() => {
-      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
-        type: "trade",
-        page: 1,
-      }));
-    });
-
-    await screen.findByText(hasTextContent("134 reviews"));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-
-    await waitFor(() => {
-      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
-        page: 2,
-      }));
-    });
-
-    await screen.findByText(hasTextContent("Page 2 of 14 review pages"));
-    fireEvent.change(screen.getByDisplayValue("Updated At"), { target: { value: "createdAt" } });
-
-    await waitFor(() => {
-      expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
-        sortBy: "createdAt",
-        page: 1,
-      }));
-    });
+    expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+      type: "daily",
+      page: 1,
+      pageSize: 100,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    }));
+    expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+      type: "weekly",
+      page: 1,
+      pageSize: 60,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    }));
+    expect(apiMocks.listReviews).toHaveBeenCalledWith(expect.objectContaining({
+      type: "trade",
+      page: 1,
+      pageSize: 100,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    }));
   });
 
   it("uses server-backed search, sorting, paging, and totals for setups", async () => {
@@ -419,8 +472,8 @@ describe("server-backed list pages", () => {
 
     renderPage(<Setups />);
 
-    await screen.findByText(hasTextContent("33 setups"));
-    expect(screen.getByText("42")).toBeInTheDocument();
+    await screen.findByText(hasTextContent("33 setups in view"));
+    expect(screen.getAllByText("42").length).toBeGreaterThan(0);
     expect(screen.getByText(hasTextContent("Page 1 of 3 setup pages"))).toBeInTheDocument();
 
     await waitFor(() => {
@@ -442,7 +495,7 @@ describe("server-backed list pages", () => {
       }));
     });
 
-    await screen.findByText(hasTextContent("33 setups"));
+    await screen.findByText(hasTextContent("33 setups in view"));
     fireEvent.change(screen.getByDisplayValue("All Setups"), { target: { value: "archived" } });
 
     await waitFor(() => {
@@ -461,4 +514,5 @@ describe("server-backed list pages", () => {
       }));
     });
   });
+
 });

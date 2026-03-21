@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./domain": "./src/domain.ts"
+    "./domain": "./src/domain.ts",
+    "./setup-colors": "./src/setup-colors.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

@@ -24,6 +24,7 @@ enum TradeDirection {
 enum TradeResult {
   Win
   Loss
+  Breakeven
 }
 
 enum TradeSession {

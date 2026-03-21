@@ -1,5 +1,5 @@
 export type Direction = "Buy" | "Sell";
-export type Result = "Win" | "Loss";
+export type Result = "Win" | "Loss" | "Breakeven";
 export type TradeSession = "Asia" | "London" | "New York";
 export type TradeEmotion = "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated";
 export type AccountType = "Personal" | "Funded" | "Challenge" | "Demo" | "Crypto";
@@ -38,6 +38,7 @@ export interface ReviewTradeSnapshot {
   profit: number;
   result: Result;
   setup: string;
+  setupColor?: string | null;
   session: TradeSession | null;
   emotion: TradeEmotion | null;
   notes: string;
@@ -110,6 +111,7 @@ export interface Trade {
   result: Result;
   setupId: string | null;
   setup: string;
+  setupColor?: string | null;
   session: TradeSession | null;
   emotion: TradeEmotion | null;
   notes: string;
@@ -150,6 +152,7 @@ export interface DashboardRecentTrade {
   session: TradeSession | null;
   emotion: TradeEmotion | null;
   setup: string;
+  setupColor?: string | null;
   accountId: string;
   accountName: string;
   createdAt: string;
@@ -239,13 +242,6 @@ export interface AnalyticsCalendarResponse {
   days: AnalyticsCalendarDay[];
   weeks: AnalyticsCalendarWeek[];
 }
-
-export const PAIRS = [
-  "XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "GBPJPY",
-  "AUDUSD", "NZDUSD", "USDCAD", "USDCHF", "EURJPY",
-  "EURGBP", "BTCUSD", "ETHUSD", "NAS100", "US30",
-  "SPX500",
-] as const;
 
 export const SESSIONS: TradeSession[] = ["Asia", "London", "New York"];
 export const EMOTIONS: TradeEmotion[] = ["Calm", "Focused", "Confident", "Anxious", "Frustrated"];

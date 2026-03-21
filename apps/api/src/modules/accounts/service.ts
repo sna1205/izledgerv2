@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { toNumber } from "../../lib/decimal.js";
 import { AppError } from "../../utils/errors.js";
+import { Prisma } from "@prisma/client";
 
 function toAccountDto(account: {
   id: string;
@@ -41,6 +42,10 @@ async function getOwnedAccount(userId: string, accountId: string) {
   return account;
 }
 
+function isDefaultAccountConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
 export async function listAccounts(userId: string) {
   const accounts = await prisma.account.findMany({
     where: {
@@ -63,34 +68,47 @@ export async function createAccount(userId: string, input: {
   currency: string;
   isDefault?: boolean;
 }) {
-  const existingCount = await prisma.account.count({
-    where: { userId },
-  });
+  let lastError: unknown;
 
-  const shouldBeDefault = input.isDefault ?? existingCount === 0;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const account = await prisma.$transaction(async (tx) => {
+        const existingCount = await tx.account.count({
+          where: { userId },
+        });
+        const shouldBeDefault = input.isDefault ?? existingCount === 0;
 
-  const account = await prisma.$transaction(async (tx) => {
-    if (shouldBeDefault) {
-      await tx.account.updateMany({
-        where: { userId },
-        data: { isDefault: false },
+        if (shouldBeDefault) {
+          await tx.account.updateMany({
+            where: { userId },
+            data: { isDefault: false },
+          });
+        }
+
+        return tx.account.create({
+          data: {
+            userId,
+            name: input.name,
+            broker: input.broker,
+            type: input.type,
+            balance: input.balance,
+            currency: input.currency.toUpperCase(),
+            isDefault: shouldBeDefault,
+          },
+        });
       });
+
+      return toAccountDto(account);
+    } catch (error) {
+      if (!isDefaultAccountConstraintError(error) || attempt === 1) {
+        throw error;
+      }
+
+      lastError = error;
     }
+  }
 
-    return tx.account.create({
-      data: {
-        userId,
-        name: input.name,
-        broker: input.broker,
-        type: input.type,
-        balance: input.balance,
-        currency: input.currency.toUpperCase(),
-        isDefault: shouldBeDefault,
-      },
-    });
-  });
-
-  return toAccountDto(account);
+  throw lastError;
 }
 
 export async function updateAccount(userId: string, accountId: string, input: {
@@ -102,42 +120,55 @@ export async function updateAccount(userId: string, accountId: string, input: {
   isDefault?: boolean;
 }) {
   const existingAccount = await getOwnedAccount(userId, accountId);
+  let lastError: unknown;
 
-  const account = await prisma.$transaction(async (tx) => {
-    if (input.isDefault) {
-      await tx.account.updateMany({
-        where: { userId },
-        data: { isDefault: false },
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const account = await prisma.$transaction(async (tx) => {
+        if (input.isDefault) {
+          await tx.account.updateMany({
+            where: { userId },
+            data: { isDefault: false },
+          });
+        }
+
+        if (input.isDefault === false && existingAccount.isDefault) {
+          const defaultAccountCount = await tx.account.count({
+            where: {
+              userId,
+              isDefault: true,
+            },
+          });
+
+          if (defaultAccountCount <= 1) {
+            throw new AppError(409, "DEFAULT_ACCOUNT_REQUIRED", "You must have at least one default account");
+          }
+        }
+
+        return tx.account.update({
+          where: { id: accountId },
+          data: {
+            name: input.name,
+            broker: input.broker,
+            type: input.type,
+            balance: input.balance,
+            currency: input.currency?.toUpperCase(),
+            isDefault: input.isDefault,
+          },
+        });
       });
-    }
 
-    if (input.isDefault === false && existingAccount.isDefault) {
-      const defaultAccountCount = await tx.account.count({
-        where: {
-          userId,
-          isDefault: true,
-        },
-      });
-
-      if (defaultAccountCount <= 1) {
-        throw new AppError(409, "DEFAULT_ACCOUNT_REQUIRED", "You must have at least one default account");
+      return toAccountDto(account);
+    } catch (error) {
+      if (!isDefaultAccountConstraintError(error) || attempt === 1) {
+        throw error;
       }
+
+      lastError = error;
     }
+  }
 
-    return tx.account.update({
-      where: { id: accountId },
-      data: {
-        name: input.name,
-        broker: input.broker,
-        type: input.type,
-        balance: input.balance,
-        currency: input.currency?.toUpperCase(),
-        isDefault: input.isDefault,
-      },
-    });
-  });
-
-  return toAccountDto(account);
+  throw lastError;
 }
 
 export async function deleteAccount(userId: string, accountId: string) {

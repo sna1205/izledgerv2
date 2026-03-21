@@ -7,6 +7,10 @@ import { toNumber } from "../../utils/decimal.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { sessionFromDb } from "../../utils/domain-mappers.js";
 
+function normalizeTradePair(value: string) {
+  return value.trim().replace(/\s+/g, "").toUpperCase();
+}
+
 async function buildTradeSnapshot(userId: string, tradeId: string) {
   const trade = await prisma.trade.findFirst({
     where: {
@@ -15,6 +19,7 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
       deletedAt: null,
     },
     include: {
+      setup: true,
       screenshots: {
         orderBy: { sortOrder: "asc" },
       },
@@ -28,7 +33,7 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
   return {
     id: trade.id,
     date: trade.tradeDate.toISOString().slice(0, 10),
-    pair: trade.pair,
+    pair: normalizeTradePair(trade.pair),
     direction: trade.direction,
     entry: toNumber(trade.entry),
     stopLoss: toNumber(trade.stopLoss),
@@ -36,6 +41,7 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
     profit: toNumber(trade.profit),
     result: trade.result,
     setup: trade.setupNameSnapshot ?? "",
+    setupColor: trade.setup?.color ?? null,
     session: sessionFromDb(trade.session),
     emotion: trade.emotion,
     notes: trade.notes,
@@ -231,41 +237,49 @@ export async function updateReview(userId: string, reviewId: string, patch: Reco
       ? await buildTradeSnapshot(userId, normalized.tradeId)
       : null;
 
-  const review = await prisma.review.update({
-    where: {
-      id: reviewId,
-    },
-    data: {
-      type: normalized.type as ReviewType,
-      tradeId: normalized.type === "trade" ? normalized.tradeId : null,
-      tradeSnapshot: tradeSnapshot ?? Prisma.DbNull,
-      reviewDate: "reviewDate" in normalized && normalized.reviewDate ? new Date(`${normalized.reviewDate}T00:00:00.000Z`) : null,
-      weekStart: "weekStart" in normalized && normalized.weekStart ? new Date(`${normalized.weekStart}T00:00:00.000Z`) : null,
-      weekEnd: "weekEnd" in normalized && normalized.weekEnd ? new Date(`${normalized.weekEnd}T00:00:00.000Z`) : null,
-      wentWell: "wentWell" in normalized ? normalized.wentWell ?? null : null,
-      mistakes: "mistakes" in normalized ? normalized.mistakes ?? null : null,
-      followedRules: "followedRules" in normalized ? normalized.followedRules ?? null : null,
-      emotion: "emotion" in normalized ? normalized.emotion ?? null : null,
-      lessonLearned: "lessonLearned" in normalized ? normalized.lessonLearned ?? null : null,
-      improvementPlan: "improvementPlan" in normalized ? normalized.improvementPlan ?? null : null,
-      disciplineScore: "disciplineScore" in normalized ? normalized.disciplineScore ?? null : null,
-      weeklySummary: "weeklySummary" in normalized ? normalized.weeklySummary ?? null : null,
-      biggestWin: "biggestWin" in normalized ? normalized.biggestWin ?? null : null,
-      biggestMistake: "biggestMistake" in normalized ? normalized.biggestMistake ?? null : null,
-      riskManagement: "riskManagement" in normalized ? normalized.riskManagement ?? null : null,
-      nextGoal: "nextGoal" in normalized ? normalized.nextGoal ?? null : null,
-      weeklyRating: "weeklyRating" in normalized ? normalized.weeklyRating ?? null : null,
-      executionRating: "executionRating" in normalized ? normalized.executionRating ?? null : null,
-      emotionRating: "emotionRating" in normalized ? normalized.emotionRating ?? null : null,
-      whatWentWell: "whatWentWell" in normalized ? normalized.whatWentWell ?? null : null,
-      whatWentWrong: "whatWentWrong" in normalized ? normalized.whatWentWrong ?? null : null,
-      mistakesMade: "mistakesMade" in normalized ? normalized.mistakesMade ?? null : null,
-      improvementForNextTrade: "improvementForNextTrade" in normalized ? normalized.improvementForNextTrade ?? null : null,
-      wouldTakeAgain: "wouldTakeAgain" in normalized ? normalized.wouldTakeAgain ?? null : null,
-    },
-  });
+  try {
+    const review = await prisma.review.update({
+      where: {
+        id: reviewId,
+      },
+      data: {
+        type: normalized.type as ReviewType,
+        tradeId: normalized.type === "trade" ? normalized.tradeId : null,
+        tradeSnapshot: tradeSnapshot ?? Prisma.DbNull,
+        reviewDate: "reviewDate" in normalized && normalized.reviewDate ? new Date(`${normalized.reviewDate}T00:00:00.000Z`) : null,
+        weekStart: "weekStart" in normalized && normalized.weekStart ? new Date(`${normalized.weekStart}T00:00:00.000Z`) : null,
+        weekEnd: "weekEnd" in normalized && normalized.weekEnd ? new Date(`${normalized.weekEnd}T00:00:00.000Z`) : null,
+        wentWell: "wentWell" in normalized ? normalized.wentWell ?? null : null,
+        mistakes: "mistakes" in normalized ? normalized.mistakes ?? null : null,
+        followedRules: "followedRules" in normalized ? normalized.followedRules ?? null : null,
+        emotion: "emotion" in normalized ? normalized.emotion ?? null : null,
+        lessonLearned: "lessonLearned" in normalized ? normalized.lessonLearned ?? null : null,
+        improvementPlan: "improvementPlan" in normalized ? normalized.improvementPlan ?? null : null,
+        disciplineScore: "disciplineScore" in normalized ? normalized.disciplineScore ?? null : null,
+        weeklySummary: "weeklySummary" in normalized ? normalized.weeklySummary ?? null : null,
+        biggestWin: "biggestWin" in normalized ? normalized.biggestWin ?? null : null,
+        biggestMistake: "biggestMistake" in normalized ? normalized.biggestMistake ?? null : null,
+        riskManagement: "riskManagement" in normalized ? normalized.riskManagement ?? null : null,
+        nextGoal: "nextGoal" in normalized ? normalized.nextGoal ?? null : null,
+        weeklyRating: "weeklyRating" in normalized ? normalized.weeklyRating ?? null : null,
+        executionRating: "executionRating" in normalized ? normalized.executionRating ?? null : null,
+        emotionRating: "emotionRating" in normalized ? normalized.emotionRating ?? null : null,
+        whatWentWell: "whatWentWell" in normalized ? normalized.whatWentWell ?? null : null,
+        whatWentWrong: "whatWentWrong" in normalized ? normalized.whatWentWrong ?? null : null,
+        mistakesMade: "mistakesMade" in normalized ? normalized.mistakesMade ?? null : null,
+        improvementForNextTrade: "improvementForNextTrade" in normalized ? normalized.improvementForNextTrade ?? null : null,
+        wouldTakeAgain: "wouldTakeAgain" in normalized ? normalized.wouldTakeAgain ?? null : null,
+      },
+    });
 
-  return await toReviewDto(review);
+    return await toReviewDto(review);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new AppError(409, "TRADE_REVIEW_EXISTS", "This trade already has a review.");
+    }
+
+    throw error;
+  }
 }
 
 export async function deleteReview(userId: string, reviewId: string) {

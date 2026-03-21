@@ -13,6 +13,7 @@ type NormalizedDashboardTrade = {
   pair: string;
   direction: Direction | null;
   setup: string | null;
+  setupColor: string | null;
   result: Result | null;
   profit: number;
 };
@@ -200,7 +201,7 @@ function normalizeDateKey(value: unknown) {
 }
 
 function isResult(value: unknown): value is Result {
-  return value === "Win" || value === "Loss";
+  return value === "Win" || value === "Loss" || value === "Breakeven";
 }
 
 function isDirection(value: unknown): value is Direction {
@@ -372,6 +373,7 @@ function normalizeDashboardTrade(payload: unknown, index: number): NormalizedDas
     pair: coerceString(value.pair, "Unknown Pair"),
     direction: isDirection(value.direction) ? value.direction : null,
     setup: coerceString(value.setup) || null,
+    setupColor: coerceString(value.setupColor) || null,
     result: isResult(value.result) ? value.result : null,
     profit: coerceNumber(value.profit),
   };

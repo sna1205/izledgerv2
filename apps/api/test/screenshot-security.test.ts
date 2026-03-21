@@ -4,11 +4,15 @@ import { completeScreenshotSchema, presignScreenshotSchema } from "../src/module
 import { maxScreenshotFileSizeBytes } from "../src/modules/screenshots/constants.js";
 
 test("presign screenshot schema only accepts safe image MIME types", () => {
-  const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+  const allowedTypes = [
+    { contentType: "image/png", fileName: "chart.png" },
+    { contentType: "image/jpeg", fileName: "chart.jpg" },
+    { contentType: "image/webp", fileName: "chart.webp" },
+  ];
 
-  for (const contentType of allowedTypes) {
+  for (const { contentType, fileName } of allowedTypes) {
     const result = presignScreenshotSchema.safeParse({
-      fileName: "chart.png",
+      fileName,
       contentType,
       fileSize: 1024,
       sortOrder: 0,

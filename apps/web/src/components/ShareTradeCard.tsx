@@ -44,7 +44,9 @@ export function ShareTradeCard({
   const resultStyles =
     trade.result === "Win"
       ? "border-emerald-300/70 bg-emerald-500/12 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200"
-      : "border-rose-300/70 bg-rose-500/12 text-rose-700 dark:border-rose-400/25 dark:bg-rose-400/10 dark:text-rose-200";
+      : trade.result === "Loss"
+        ? "border-rose-300/70 bg-rose-500/12 text-rose-700 dark:border-rose-400/25 dark:bg-rose-400/10 dark:text-rose-200"
+        : "border-slate-300/70 bg-slate-500/10 text-slate-700 dark:border-slate-400/25 dark:bg-slate-400/10 dark:text-slate-200";
 
   return (
     <article
@@ -85,7 +87,7 @@ export function ShareTradeCard({
 
         {trade.notes ? (
           <section className="rounded-[28px] border border-white/70 bg-white/78 p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.45)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Trade Notes</p>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Notes</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{trade.notes}</p>
           </section>
         ) : null}

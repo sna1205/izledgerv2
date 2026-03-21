@@ -11,6 +11,7 @@ import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
 import { ProfitDisplay } from "@/components/ProfitDisplay";
 import { ResultBadge } from "@/components/ResultBadge";
+import { SetupTag } from "@/components/SetupTag";
 import { StatCard } from "@/components/StatCard";
 import {
   Table,
@@ -183,10 +184,10 @@ export default function Dashboard() {
 
       <SectionCard>
         <SectionHeader
-          title="Performance Curve"
+          title="Equity"
           action={equityCurve.length > 0 ? (
             <div className="surface-muted px-4 py-3 text-right">
-              <p className="text-label mb-2">Current Equity</p>
+              <p className="text-label mb-2">Equity</p>
               <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
                 {formatCurrencyDisplay(currentEquity)}
               </p>
@@ -198,14 +199,14 @@ export default function Dashboard() {
           <div className="mt-6">
             <EmptyState
               icon={Activity}
-              title="Your equity curve will appear here"
-              description="Log a trade to populate the curve."
+              title="No trades yet"
+              description="Add a trade to see equity."
               action={(
                 <Link
                   to="/trades"
                   className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm"
                 >
-                  Log your first trade
+                  Add trade
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               )}
@@ -289,7 +290,7 @@ export default function Dashboard() {
           title="Recent Trades"
           action={(
             <Link to="/trades" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              View all trades
+              Open trades
             </Link>
           )}
         />
@@ -342,7 +343,7 @@ export default function Dashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {trade.setup ? <DataBadge>{trade.setup}</DataBadge> : <span className="text-sm text-muted-foreground">No setup</span>}
+                      {trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : <span className="text-sm text-muted-foreground">No setup</span>}
                     </TableCell>
                     <TableCell>
                       {trade.result ? <ResultBadge result={trade.result} /> : <span className="text-sm text-muted-foreground">Pending</span>}

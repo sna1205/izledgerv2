@@ -123,12 +123,14 @@ test("screenshot sort order rejects non-finite and oversized values", () => {
   assert.equal(presignScreenshotSchema.safeParse({
     fileName: "chart.png",
     contentType: "image/png",
+    fileSize: 1024,
     sortOrder: 1_000,
   }).success, true);
 
   assert.equal(presignScreenshotSchema.safeParse({
     fileName: "chart.png",
     contentType: "image/png",
+    fileSize: 1024,
     sortOrder: Infinity,
   }).success, false);
 

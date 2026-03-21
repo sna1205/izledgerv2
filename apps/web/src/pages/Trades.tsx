@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { CameraOff, Eye, Images, LayoutList, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -15,9 +15,11 @@ import { StatCard } from "@/components/StatCard";
 import { TradeFormDialog } from "@/components/TradeFormDialog";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
 import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { SetupTag } from "@/components/SetupTag";
 import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TagChip } from "@/components/ui/TagChip";
 import {
   Table,
   TableBody,
@@ -54,6 +56,7 @@ import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/lib/types";
 
 const LEDGER_PAGE_SIZE = 10;
 const SCREENBOOK_PAGE_SIZE = 9;
+const EMPTY_TRADES: Trade[] = [];
 
 function formatTradeDate(date: string) {
   return format(parseISO(date), "MMM d, yyyy");
@@ -144,6 +147,7 @@ export default function Trades() {
       sortBy,
       sortOrder,
     })),
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {
@@ -163,7 +167,7 @@ export default function Trades() {
   );
 
   const visibleTrades = tradesQuery.data?.items;
-  const trades = visibleTrades ?? [];
+  const trades = visibleTrades ?? EMPTY_TRADES;
   const totalTradePages = tradesQuery.data?.pagination.totalPages ?? 1;
   const totalTrades = tradesQuery.data?.pagination.total ?? 0;
   const hasActiveFilters = resolvedAccountFilter !== "all" || sessionFilter !== "all" || setupFilter !== "all" || emotionFilter !== "all";
@@ -419,7 +423,7 @@ export default function Trades() {
                 action={!hasActiveFilters ? (
                   <Button onClick={() => setFormOpen(true)}>
                     <Plus className="h-4 w-4" />
-                    Log your first trade
+                    Add trade
                   </Button>
                 ) : null}
               />
@@ -462,9 +466,9 @@ export default function Trades() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-2">
-                              {trade.setup ? <DataBadge>{trade.setup}</DataBadge> : null}
-                              {trade.session ? <DataBadge tone="primary">{trade.session}</DataBadge> : null}
-                              {trade.emotion ? <DataBadge tone="warning">{trade.emotion}</DataBadge> : null}
+                              {trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : null}
+                              {trade.session ? <TagChip label={trade.session} kind="session" /> : null}
+                              {trade.emotion ? <TagChip label={trade.emotion} kind="emotion" /> : null}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -576,7 +580,7 @@ export default function Trades() {
                           <div className="flex flex-wrap gap-2">
                             <DataBadge tone={toneForDirection(trade.direction)}>{trade.direction}</DataBadge>
                             <ResultBadge result={trade.result} />
-                            {trade.setup ? <DataBadge>{trade.setup}</DataBadge> : null}
+                            {trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : null}
                             <TradeReviewStatusBadge trade={trade} reviewed={Boolean(tradeReviewMap[trade.id])} />
                           </div>
 

@@ -4,7 +4,7 @@ import { apiFetch } from "@/lib/api/client";
 export type SetupPayload = {
   name: string;
   description: string;
-  color: string;
+  color?: string;
   isArchived?: boolean;
 };
 
