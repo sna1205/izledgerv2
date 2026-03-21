@@ -15,6 +15,7 @@ const pageTitles: Record<string, string> = {
   "/analytics": "Analytics",
   "/calculator": "Lot Calculator",
   "/settings": "Settings",
+  "/founder": "Founder Dashboard",
 };
 
 export function AppLayout() {

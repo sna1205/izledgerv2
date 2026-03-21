@@ -1,4 +1,4 @@
-import { LayoutDashboard, Table2, BarChart3, Calculator, Landmark, Tags, FileText, Settings as SettingsIcon } from "lucide-react";
+import { LayoutDashboard, Table2, BarChart3, Calculator, Landmark, Tags, FileText, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -13,8 +13,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/lib/auth";
+import { isFounderUser } from "@/lib/founder";
 
-const items = [
+const baseItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Accounts", url: "/accounts", icon: Landmark },
   { title: "Setups", url: "/setups", icon: Tags },
@@ -30,6 +31,9 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { user } = useAuth();
   const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
+  const items = isFounderUser(user)
+    ? [...baseItems, { title: "Founder", url: "/founder", icon: ShieldCheck }]
+    : baseItems;
 
   return (
     <Sidebar collapsible="icon">

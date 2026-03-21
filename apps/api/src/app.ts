@@ -13,6 +13,7 @@ import { screenshotRoutes } from "./modules/screenshots/routes.js";
 import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
+import { founderRoutes } from "./modules/founder/routes.js";
 
 function isAllowedCorsOrigin(origin?: string) {
   if (!origin) {
@@ -104,6 +105,7 @@ export async function buildApp() {
   await app.register(reviewRoutes, { prefix: "/reviews" });
   await app.register(analyticsRoutes, { prefix: "/" });
   await app.register(tradeShareRoutes, { prefix: "/" });
+  await app.register(founderRoutes, { prefix: "/founder" });
 
   return app;
 }
