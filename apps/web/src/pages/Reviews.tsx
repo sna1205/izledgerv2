@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { endOfWeek, format, startOfWeek } from "date-fns";
-import { BookOpenText, Eye, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { BookOpenText, Ellipsis, Eye, Pencil, Plus, Sparkles, Target, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { DataBadge } from "@/components/DataBadge";
 import { EmptyState } from "@/components/EmptyState";
-import { FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
 import { PaginationControls } from "@/components/PaginationControls";
 import { ReviewContent } from "@/components/ReviewContent";
 import { ReviewListSummary } from "@/components/ReviewListSummary";
-import { StatCard } from "@/components/StatCard";
 import { TradeReviewDialog } from "@/components/TradeReviewDialog";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,6 +80,7 @@ const emptyWeeklyForm = {
   weeklyRating: "7",
 };
 const REVIEWS_PAGE_SIZE = 10;
+const EMPTY_REVIEWS: Review[] = [];
 
 function invalidateReviewQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string) {
   return Promise.all([
@@ -103,6 +107,7 @@ function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null): Trade | n
     result: snapshot.result,
     setupId: null,
     setup: snapshot.setup,
+    setupColor: snapshot.setupColor ?? null,
     session: snapshot.session,
     emotion: snapshot.emotion,
     notes: snapshot.notes,
@@ -113,11 +118,36 @@ function buildTradeFromSnapshot(snapshot: ReviewTradeSnapshot | null): Trade | n
   };
 }
 
-function scopeTone(scope: ReviewType) {
-  if (scope === "daily") return "primary" as const;
-  if (scope === "weekly") return "warning" as const;
-  return "success" as const;
+function formatDailyWeeklyRatio(daily: number, weekly: number) {
+  if (daily === 0 && weekly === 0) {
+    return "0:0";
+  }
+
+  return `${daily}:${weekly}`;
 }
+
+function InsightSegment({
+  value,
+  icon: Icon,
+}: {
+  value: string;
+  icon: typeof BookOpenText;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-5 py-4 sm:px-6">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/75 text-muted-foreground dark:bg-white/[0.03]">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="text-2xl font-semibold tracking-tight text-foreground">{value}</p>
+    </div>
+  );
+}
+
+type ReviewSection = {
+  key: string;
+  title: string;
+  reviews: Review[];
+};
 
 export default function Reviews() {
   const { user } = useAuth();
@@ -152,10 +182,11 @@ export default function Reviews() {
       sortBy,
       sortOrder,
     })),
+    placeholderData: keepPreviousData,
   });
 
   const visibleReviews = reviewsQuery.data?.items;
-  const reviews = visibleReviews ?? [];
+  const reviews = visibleReviews ?? EMPTY_REVIEWS;
   const totalReviewPages = reviewsQuery.data?.pagination.totalPages ?? 1;
   const totalReviews = reviewsQuery.data?.pagination.total ?? 0;
 
@@ -368,6 +399,51 @@ export default function Reviews() {
     );
   }, [reviews]);
 
+  const reviewSections = useMemo<ReviewSection[]>(() => {
+    if (scopeFilter === "trade") {
+      return [{
+        key: "trade",
+        title: "Trade Reviews",
+        reviews,
+      }];
+    }
+
+    if (scopeFilter === "daily") {
+      return [{
+        key: "daily",
+        title: "Daily Reviews",
+        reviews,
+      }];
+    }
+
+    if (scopeFilter === "weekly") {
+      return [{
+        key: "weekly",
+        title: "Weekly Reviews",
+        reviews,
+      }];
+    }
+
+    const reflectiveReviews = reviews.filter((review) => {
+      const scope = getReviewScope(review);
+      return scope === "daily" || scope === "weekly";
+    });
+    const tradeReviews = reviews.filter((review) => getReviewScope(review) === "trade");
+
+    return [
+      reflectiveReviews.length > 0 ? {
+        key: "reflective",
+        title: "Daily & Weekly Reviews",
+        reviews: reflectiveReviews,
+      } : null,
+      tradeReviews.length > 0 ? {
+        key: "trade",
+        title: "Trade Reviews",
+        reviews: tradeReviews,
+      } : null,
+    ].filter((section): section is ReviewSection => Boolean(section));
+  }, [reviews, scopeFilter]);
+
   if (reviewsQuery.isLoading && !reviewsQuery.data) {
     return <ReviewsSkeleton />;
   }
@@ -395,65 +471,64 @@ export default function Reviews() {
 
   return (
     <PageShell size="wide">
-      <PageHeader
-        title="Reviews"
-        actions={(
-          <>
-            <Button variant="outline" onClick={() => openCreateModal("daily")}>
-              <Plus className="h-4 w-4" />
-              Daily Review
-            </Button>
-            <Button onClick={() => openCreateModal("weekly")}>
-              <Plus className="h-4 w-4" />
-              Weekly Review
-            </Button>
-          </>
-        )}
-      />
+      <PageHeader title="Reviews" />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Reviews" value={String(totalReviews)} icon={BookOpenText} />
-        <StatCard label="Daily / Weekly" value={`${reviewMix.daily}/${reviewMix.weekly}`} icon={Sparkles} />
-        <StatCard label="Trade Reviews" value={String(reviewMix.trade)} icon={Eye} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <SectionCard className="overflow-hidden p-0">
+          <div className="grid divide-y divide-border/50 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <InsightSegment value={String(totalReviews)} icon={BookOpenText} />
+            <InsightSegment value={formatDailyWeeklyRatio(reviewMix.daily, reviewMix.weekly)} icon={Sparkles} />
+            <InsightSegment value={String(reviewMix.trade)} icon={Target} />
+          </div>
+        </SectionCard>
+
+        <div className="flex flex-col gap-3 sm:flex-row xl:justify-end">
+          <Button variant="outline" className="rounded-2xl px-4" onClick={() => openCreateModal("daily")}>
+            <Plus className="h-4 w-4" />
+            Daily Review
+          </Button>
+          <Button className="rounded-2xl px-4" onClick={() => openCreateModal("weekly")}>
+            <Plus className="h-4 w-4" />
+            Weekly Review
+          </Button>
+        </div>
       </div>
 
       <Tabs value={scopeFilter} onValueChange={(value) => setScopeFilter(value as ReviewScopeFilter)}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <TabsList className="grid h-auto w-full grid-cols-4 sm:max-w-[460px]">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="daily">Daily</TabsTrigger>
-            <TabsTrigger value="weekly">Weekly</TabsTrigger>
-            <TabsTrigger value="trade">Trade</TabsTrigger>
-          </TabsList>
+        <SectionCard className="p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl bg-muted/65 p-1 sm:max-w-[420px] dark:bg-white/[0.03]">
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="daily">Daily</TabsTrigger>
+              <TabsTrigger value="weekly">Weekly</TabsTrigger>
+              <TabsTrigger value="trade">Trade</TabsTrigger>
+            </TabsList>
 
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <div className="w-full sm:w-[180px]">
-              <FilterField label="Sort By">
-                <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="updatedAt">Updated At</SelectItem>
-                    <SelectItem value="createdAt">Created At</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FilterField>
-            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                      <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="updatedAt">Updated</SelectItem>
+                        <SelectItem value="createdAt">Created</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="w-full sm:w-[180px]">
-              <FilterField label="Order">
-                <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="desc">Descending</SelectItem>
-                    <SelectItem value="asc">Ascending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FilterField>
-            </div>
+                  <div>
+                    <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as typeof sortOrder)}>
+                      <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="desc">Newest</SelectItem>
+                        <SelectItem value="asc">Oldest</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
           </div>
-        </div>
+        </SectionCard>
 
-        <TabsContent value={scopeFilter} className="space-y-5">
+        <TabsContent value={scopeFilter} className="space-y-6">
           {reviews.length === 0 ? (
             <EmptyState
               icon={BookOpenText}
@@ -461,60 +536,120 @@ export default function Reviews() {
               description="Create a review to populate this view."
             />
           ) : (
-            <div className="space-y-5">
-              <div className="grid gap-5 lg:grid-cols-2">
-                {reviews.map((review) => {
-                  const scope = getReviewScope(review);
-                  const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
-                  const snapshotTrade = buildTradeFromSnapshot(review.tradeSnapshot);
-                  const summaryTrade = linkedTrade ?? snapshotTrade;
+            <div className="space-y-6">
+              {reviewSections.map((section) => (
+                <section key={section.key} className="space-y-4">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/90">{section.title}</p>
 
-                  return (
-                    <SectionCard
-                      key={review.id}
-                      className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-28px_rgba(15,23,42,0.32)]"
-                    >
-                      <div className="flex h-full flex-col gap-5">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <DataBadge tone={scopeTone(scope)}>{scope}</DataBadge>
-                              <p className="text-sm text-muted-foreground">Updated {new Date(review.updatedAt).toLocaleDateString("en-US")}</p>
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    {section.reviews.map((review) => {
+                      const scope = getReviewScope(review);
+                      const linkedTrade = review.tradeId ? linkedTradeMap[review.tradeId] : undefined;
+                      const snapshotTrade = buildTradeFromSnapshot(review.tradeSnapshot);
+                      const summaryTrade = linkedTrade ?? snapshotTrade;
+                      const updatedLabel = new Date(review.updatedAt).toLocaleDateString("en-US");
+                      const openReview = () => setViewingReview(review);
+                      const isTradeReview = scope === "trade";
+
+                      return (
+                        <article
+                          key={review.id}
+                          role="button"
+                          tabIndex={0}
+                          className="group h-full rounded-[1.6rem] border border-border/50 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--card)/0.95))] p-4 text-left shadow-[0_14px_38px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/15 hover:shadow-[0_20px_48px_-30px_rgba(15,23,42,0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--card)/0.92))]"
+                          onClick={openReview}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openReview();
+                            }
+                          }}
+                        >
+                          <div className="flex h-full flex-col gap-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-1">
+                                {!isTradeReview ? (
+                                  <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                                    {getReviewTitle(review, summaryTrade)}
+                                  </h2>
+                                ) : null}
+                                {!isTradeReview ? <p className="text-sm text-muted-foreground">{updatedLabel}</p> : null}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-8 rounded-xl px-3.5"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    if (isTradeReview && review.tradeId) {
+                                      navigate(`/trades/${review.tradeId}`);
+                                      return;
+                                    }
+
+                                    openReview();
+                                  }}
+                                >
+                                  View
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-xl"
+                                  aria-label="Edit"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void openEditModal(review);
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 rounded-xl"
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <Ellipsis className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    {isTradeReview ? (
+                                      <DropdownMenuItem
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openReview();
+                                        }}
+                                      >
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        View Review
+                                      </DropdownMenuItem>
+                                    ) : null}
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setDeleteId(review.id);
+                                      }}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </div>
-                            <h2 className="mt-3 text-lg font-medium text-foreground">
-                              {getReviewTitle(review, summaryTrade)}
-                            </h2>
-                          </div>
 
-                          <div className="flex flex-wrap gap-2 opacity-100 transition-opacity group-hover:opacity-100">
-                            <Button variant="outline" size="sm" onClick={() => setViewingReview(review)}>
-                              <Eye className="h-4 w-4" />
-                              View
-                            </Button>
-                            {scope === "trade" && review.tradeId ? (
-                              <Button variant="outline" size="sm" onClick={() => navigate(`/trades/${review.tradeId}`)}>
-                                View Trade
-                              </Button>
-                            ) : null}
-                            <Button variant="outline" size="sm" onClick={() => openEditModal(review)}>
-                              <Pencil className="h-4 w-4" />
-                              Edit
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => setDeleteId(review.id)}>
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </Button>
+                            <ReviewListSummary review={review} linkedTrade={summaryTrade} />
                           </div>
-                        </div>
-
-                        <div className="surface-muted px-4 py-4">
-                          <ReviewListSummary review={review} linkedTrade={summaryTrade} />
-                        </div>
-                      </div>
-                    </SectionCard>
-                  );
-                })}
-              </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
 
               <div className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-card/70">
                 <PaginationControls

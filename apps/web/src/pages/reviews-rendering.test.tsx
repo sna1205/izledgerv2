@@ -265,10 +265,11 @@ describe("review rendering by type", () => {
     await screen.findByText("Mar 11, 2026");
 
     expect(screen.getByText("Mar 10 - Mar 16, 2026")).toBeInTheDocument();
-    expect(screen.getByText("EURUSD • Mar 10, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Discipline: 8/10")).toBeInTheDocument();
-    expect(screen.getByText("Risk Management: Yes")).toBeInTheDocument();
-    expect(screen.getByText("View Trade")).toBeInTheDocument();
+    expect(screen.getByText("EURUSD")).toBeInTheDocument();
+    expect(screen.getByText("8/10")).toBeInTheDocument();
+    expect(screen.getByText("7/10")).toBeInTheDocument();
+    expect(screen.getByText("✓")).toBeInTheDocument();
+    expect(screen.getAllByText("View").length).toBeGreaterThan(0);
   });
 
   it("opens daily reviews with only daily review fields", async () => {
@@ -284,7 +285,7 @@ describe("review rendering by type", () => {
     expect(await screen.findByText("Review Date")).toBeInTheDocument();
     expect(screen.getByText("Rules Followed")).toBeInTheDocument();
     expect(screen.getByText("Stayed patient.")).toBeInTheDocument();
-    expect(screen.getByText("Reduce impulsive entries.")).toBeInTheDocument();
+    expect(screen.getAllByText("Reduce impulsive entries.").length).toBeGreaterThan(0);
     expect(screen.queryByText("What Went Wrong")).not.toBeInTheDocument();
     expect(screen.queryByText("Take Again?")).not.toBeInTheDocument();
   });
@@ -301,8 +302,8 @@ describe("review rendering by type", () => {
 
     expect(await screen.findByText("Weekly Summary")).toBeInTheDocument();
     expect(screen.getByText("Biggest Win")).toBeInTheDocument();
-    expect(screen.getByText("Skip mediocre setups.")).toBeInTheDocument();
-    expect(screen.getByText("Risk Management")).toBeInTheDocument();
+    expect(screen.getAllByText("Skip mediocre setups.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Risk Management").length).toBeGreaterThan(0);
     expect(screen.queryByText("Lesson Learned")).not.toBeInTheDocument();
     expect(screen.queryByText("What Went Well")).not.toBeInTheDocument();
   });
@@ -310,17 +311,17 @@ describe("review rendering by type", () => {
   it("opens trade reviews with only trade review fields", async () => {
     renderPage();
 
-    const tradeCard = (await screen.findByText("EURUSD • Mar 10, 2026")).closest("article");
+    const tradeCard = (await screen.findByText("EURUSD")).closest("article");
     if (!tradeCard) {
       throw new Error("Trade review card not found.");
     }
 
-    fireEvent.click(within(tradeCard).getByRole("button", { name: "View" }));
+    fireEvent.click(tradeCard);
 
-    expect(await screen.findByText("Execution")).toBeInTheDocument();
+    expect((await screen.findAllByText("Execution")).length).toBeGreaterThan(0);
     expect(screen.getByText("What Went Wrong")).toBeInTheDocument();
     expect(screen.getByText("Take Again?")).toBeInTheDocument();
-    expect(screen.getByText("Moved stop once.")).toBeInTheDocument();
+    expect(screen.getAllByText("Moved stop once.").length).toBeGreaterThan(0);
     expect(screen.getByText("No")).toBeInTheDocument();
     expect(screen.queryByText("Improvement Plan")).not.toBeInTheDocument();
     expect(screen.queryByText("Weekly Summary")).not.toBeInTheDocument();

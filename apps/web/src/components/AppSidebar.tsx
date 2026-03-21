@@ -77,8 +77,8 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="surface-muted flex items-center gap-3 px-3 py-3">
-          <Avatar className="h-9 w-9 border border-sidebar-border/80">
+        <div className="surface-muted flex items-center gap-3 px-3 py-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-2 group-data-[collapsible=icon]:shadow-none">
+          <Avatar className="h-9 w-9 border border-sidebar-border/80 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
             <AvatarFallback className="bg-sidebar-accent text-xs font-medium text-sidebar-foreground">{initials}</AvatarFallback>
           </Avatar>
           {!collapsed && (

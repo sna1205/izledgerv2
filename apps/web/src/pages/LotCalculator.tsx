@@ -13,32 +13,13 @@ import {
 } from "lucide-react";
 import { PageShell, SectionCard } from "@/components/PageShell";
 import { DataBadge } from "@/components/DataBadge";
+import { InstrumentSelect } from "@/components/InstrumentSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyDisplay, formatNumberDisplay } from "@/lib/analytics-rendering";
-import { PAIRS } from "@/lib/types";
+import { INSTRUMENTS_BY_VALUE } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-const PIP_VALUES: Record<string, { pipSize: number; pipValue: number }> = {
-  EURUSD: { pipSize: 0.0001, pipValue: 10 },
-  GBPUSD: { pipSize: 0.0001, pipValue: 10 },
-  AUDUSD: { pipSize: 0.0001, pipValue: 10 },
-  NZDUSD: { pipSize: 0.0001, pipValue: 10 },
-  USDCAD: { pipSize: 0.0001, pipValue: 10 },
-  USDCHF: { pipSize: 0.0001, pipValue: 10 },
-  USDJPY: { pipSize: 0.01, pipValue: 10 },
-  GBPJPY: { pipSize: 0.01, pipValue: 10 },
-  EURJPY: { pipSize: 0.01, pipValue: 10 },
-  EURGBP: { pipSize: 0.0001, pipValue: 10 },
-  XAUUSD: { pipSize: 0.1, pipValue: 10 },
-  BTCUSD: { pipSize: 1, pipValue: 1 },
-  ETHUSD: { pipSize: 0.1, pipValue: 1 },
-  NAS100: { pipSize: 0.1, pipValue: 1 },
-  US30: { pipSize: 1, pipValue: 1 },
-  SPX500: { pipSize: 0.1, pipValue: 1 },
-};
 
 const QUICK_RISK_PRESETS = ["0.5", "1", "2"] as const;
 const RISK_MODE_STORAGE_KEY = "lotCalc:riskMode";
@@ -221,7 +202,10 @@ export default function LotCalculator() {
   const sl = parseNumericInput(stopLossPrice);
 
   const slDistance = Math.abs(entry - sl);
-  const pairInfo = PIP_VALUES[pair] || { pipSize: 0.0001, pipValue: 10 };
+  const pairInfo = {
+    pipSize: INSTRUMENTS_BY_VALUE[pair]?.pipSize ?? 0.0001,
+    pipValue: INSTRUMENTS_BY_VALUE[pair]?.pipValue ?? 10,
+  };
   const pipsAtRisk = pairInfo.pipSize > 0 ? slDistance / pairInfo.pipSize : 0;
   const rawLotSize = pipsAtRisk > 0 && pairInfo.pipValue > 0
     ? riskAmount / (pipsAtRisk * pairInfo.pipValue)
@@ -302,17 +286,7 @@ export default function LotCalculator() {
               <section className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <FieldShell label="Pair">
-                    <Select value={pair} onValueChange={setPair}>
-                      <SelectTrigger
-                        aria-label="Pair"
-                        className="h-10"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAIRS.map((currentPair) => <SelectItem key={currentPair} value={currentPair}>{currentPair}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <InstrumentSelect value={pair} onChange={setPair} ariaLabel="Pair" />
                   </FieldShell>
 
                   <FieldShell label="Balance" error={fieldErrors.accountBalance}>

@@ -1,6 +1,6 @@
 export const accountTypes = ["Personal", "Funded", "Challenge", "Demo", "Crypto"] as const;
 export const tradeDirections = ["Buy", "Sell"] as const;
-export const tradeResults = ["Win", "Loss"] as const;
+export const tradeResults = ["Win", "Loss", "Breakeven"] as const;
 export const tradeSessions = ["Asia", "London", "New York"] as const;
 export const tradeEmotions = ["Calm", "Focused", "Confident", "Anxious", "Frustrated"] as const;
 export const reviewTypes = ["daily", "weekly", "trade"] as const;

@@ -6,6 +6,10 @@ export function ProtectedRoute() {
   const { user, sessionMessage, sessionState, refreshSession } = useAuth();
   const location = useLocation();
 
+  if (sessionState === "loading") {
+    return null;
+  }
+
   if (!user && sessionState === "backend-unavailable") {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">

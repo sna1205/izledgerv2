@@ -1,1 +1,1 @@
-export * from "@izledger/shared/domain";
+export * from "@izledger/shared";

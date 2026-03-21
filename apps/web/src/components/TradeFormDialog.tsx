@@ -5,20 +5,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { InstrumentSelect } from "./InstrumentSelect";
+import { ResultBadge } from "./ResultBadge";
 import { ScreenshotUpload } from "./ScreenshotUpload";
 import type { Account, Direction, Result, SetupDefinition, Trade, TradeEmotion, TradeSession } from "@/lib/types";
-import { EMOTIONS, PAIRS, SESSIONS } from "@/lib/types";
+import { EMOTIONS, SESSIONS } from "@/lib/types";
+import {
+  deriveTradeDirectionFromPrices,
+  deriveTradeResultFromProfit,
+  getTakeProfitDirectionWarning,
+  getTradeDirectionError,
+  parseTradeNumericInput,
+  parseTradeProfitInput,
+} from "@/lib/trade-results";
 
 type TradeFormValue = {
   date: string;
   accountId: string;
   pair: string;
-  direction: Direction;
   entry: string;
   stopLoss: string;
   takeProfit: string;
   profit: string;
-  result: Result;
   setupId: string;
   session: TradeSession | "";
   emotion: TradeEmotion | "";
@@ -56,12 +64,10 @@ function buildEmptyForm(accounts: Account[]): TradeFormValue {
     date: new Date().toISOString().split("T")[0],
     accountId: accounts[0]?.id ?? "",
     pair: "XAUUSD",
-    direction: "Buy",
     entry: "",
     stopLoss: "",
     takeProfit: "",
     profit: "",
-    result: "Win",
     setupId: "__none",
     session: "London",
     emotion: "Calm",
@@ -104,12 +110,10 @@ export function TradeFormDialog({
         date: editTrade.date,
         accountId: editTrade.accountId,
         pair: editTrade.pair,
-        direction: editTrade.direction,
         entry: String(editTrade.entry),
         stopLoss: String(editTrade.stopLoss),
         takeProfit: String(editTrade.takeProfit),
         profit: String(editTrade.profit),
-        result: editTrade.result,
         setupId: editTrade.setupId ?? "__none",
         session: editTrade.session ?? "",
         emotion: editTrade.emotion ?? "",
@@ -121,8 +125,34 @@ export function TradeFormDialog({
     setForm(buildEmptyForm(accounts));
   }, [accounts, editTrade, open]);
 
+  const derivedResult = useMemo(() => deriveTradeResultFromProfit(form.profit), [form.profit]);
+  const parsedProfit = useMemo(() => parseTradeProfitInput(form.profit), [form.profit]);
+  const parsedEntry = useMemo(() => parseTradeNumericInput(form.entry), [form.entry]);
+  const parsedStopLoss = useMemo(() => parseTradeNumericInput(form.stopLoss), [form.stopLoss]);
+  const parsedTakeProfit = useMemo(() => parseTradeNumericInput(form.takeProfit), [form.takeProfit]);
+  const derivedDirection = useMemo(
+    () => deriveTradeDirectionFromPrices(form.entry, form.stopLoss),
+    [form.entry, form.stopLoss],
+  );
+  const directionError = useMemo(
+    () => getTradeDirectionError(form.entry, form.stopLoss),
+    [form.entry, form.stopLoss],
+  );
+  const takeProfitWarning = useMemo(
+    () => getTakeProfitDirectionWarning(form.entry, form.stopLoss, form.takeProfit),
+    [form.entry, form.stopLoss, form.takeProfit],
+  );
+
   const handleSave = async () => {
-    if (!form.accountId) {
+    if (
+      !form.accountId
+      || derivedResult === null
+      || parsedProfit === null
+      || derivedDirection === null
+      || parsedEntry === null
+      || parsedStopLoss === null
+      || parsedTakeProfit === null
+    ) {
       return;
     }
 
@@ -132,12 +162,12 @@ export function TradeFormDialog({
       date: form.date,
       accountId: form.accountId,
       pair: form.pair,
-      direction: form.direction,
-      entry: Number.parseFloat(form.entry) || 0,
-      stopLoss: Number.parseFloat(form.stopLoss) || 0,
-      takeProfit: Number.parseFloat(form.takeProfit) || 0,
-      profit: Number.parseFloat(form.profit) || 0,
-      result: form.result,
+      direction: derivedDirection,
+      entry: parsedEntry,
+      stopLoss: parsedStopLoss,
+      takeProfit: parsedTakeProfit,
+      profit: parsedProfit,
+      result: derivedResult,
       setupId: form.setupId === "__none" ? null : form.setupId,
       setup: selectedSetup?.name ?? null,
       session: form.session || null,
@@ -174,34 +204,38 @@ export function TradeFormDialog({
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Pair</Label>
-            <Select value={form.pair} onValueChange={(value) => setForm((current) => ({ ...current, pair: value }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {PAIRS.map((pair) => <SelectItem key={pair} value={pair}>{pair}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <InstrumentSelect value={form.pair} onChange={(value) => setForm((current) => ({ ...current, pair: value }))} />
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Direction</Label>
-            <Select value={form.direction} onValueChange={(value) => setForm((current) => ({ ...current, direction: value as Direction }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Buy">Buy</SelectItem>
-                <SelectItem value="Sell">Sell</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex min-h-10 items-center rounded-xl border border-input/65 bg-muted/35 px-3">
+              {derivedDirection ? (
+                <span
+                  className={
+                    derivedDirection === "Buy"
+                      ? "inline-flex items-center rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-medium text-success"
+                      : "inline-flex items-center rounded-full border border-danger/20 bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger"
+                  }
+                >
+                  {derivedDirection}
+                </span>
+              ) : (
+                <span className="text-sm text-muted-foreground">Auto</span>
+              )}
+            </div>
+            {directionError ? <p className="text-xs text-danger">{directionError}</p> : null}
           </div>
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Result</Label>
-            <Select value={form.result} onValueChange={(value) => setForm((current) => ({ ...current, result: value as Result }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Win">Win</SelectItem>
-                <SelectItem value="Loss">Loss</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex min-h-10 items-center rounded-xl border border-input/65 bg-muted/35 px-3">
+              {derivedResult ? (
+                <ResultBadge result={derivedResult} />
+              ) : (
+                <span className="text-sm text-muted-foreground">Auto</span>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -217,10 +251,11 @@ export function TradeFormDialog({
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Take Profit</Label>
             <Input type="number" step="any" value={form.takeProfit} onChange={(event) => setForm((current) => ({ ...current, takeProfit: event.target.value }))} />
+            {takeProfitWarning ? <p className="text-xs text-amber-600 dark:text-amber-300">{takeProfitWarning}</p> : null}
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Profit ($)</Label>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">PnL</Label>
             <Input type="number" step="any" value={form.profit} onChange={(event) => setForm((current) => ({ ...current, profit: event.target.value }))} />
           </div>
 
@@ -288,7 +323,11 @@ export function TradeFormDialog({
           <Button className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => void handleSave()} className="w-full sm:w-auto" disabled={isSaving || accounts.length === 0}>
+          <Button
+            onClick={() => void handleSave()}
+            className="w-full sm:w-auto"
+            disabled={isSaving || accounts.length === 0 || derivedResult === null || derivedDirection === null || parsedTakeProfit === null}
+          >
             {isSaving ? "Saving..." : editTrade ? "Update Trade" : "Save Trade"}
           </Button>
         </div>

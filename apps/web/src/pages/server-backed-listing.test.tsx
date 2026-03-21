@@ -262,6 +262,9 @@ beforeEach(() => {
   apiMocks.listTrades.mockReset();
   apiMocks.listReviews.mockReset();
   apiMocks.listSetups.mockReset();
+  apiMocks.createSetup.mockReset();
+  apiMocks.updateSetup.mockReset();
+  apiMocks.deleteSetup.mockReset();
   apiMocks.getTrade.mockReset();
 
   apiMocks.listAccounts.mockResolvedValue({ items: [account] });
@@ -357,7 +360,7 @@ describe("server-backed list pages", () => {
 
     renderPage(<Reviews />);
 
-    await screen.findByText(hasTextContent("134 reviews"));
+    await screen.findByText("134");
     expect(screen.getByText(hasTextContent("Page 1 of 14 review pages"))).toBeInTheDocument();
 
     await waitFor(() => {
@@ -378,7 +381,7 @@ describe("server-backed list pages", () => {
       }));
     });
 
-    await screen.findByText(hasTextContent("134 reviews"));
+    await screen.findByText("134");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     await waitFor(() => {
@@ -419,8 +422,8 @@ describe("server-backed list pages", () => {
 
     renderPage(<Setups />);
 
-    await screen.findByText(hasTextContent("33 setups"));
-    expect(screen.getByText("42")).toBeInTheDocument();
+    await screen.findByText(hasTextContent("33 setups in view"));
+    expect(screen.getAllByText("42").length).toBeGreaterThan(0);
     expect(screen.getByText(hasTextContent("Page 1 of 3 setup pages"))).toBeInTheDocument();
 
     await waitFor(() => {
@@ -442,7 +445,7 @@ describe("server-backed list pages", () => {
       }));
     });
 
-    await screen.findByText(hasTextContent("33 setups"));
+    await screen.findByText(hasTextContent("33 setups in view"));
     fireEvent.change(screen.getByDisplayValue("All Setups"), { target: { value: "archived" } });
 
     await waitFor(() => {
@@ -461,4 +464,5 @@ describe("server-backed list pages", () => {
       }));
     });
   });
+
 });

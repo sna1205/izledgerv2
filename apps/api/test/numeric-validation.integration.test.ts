@@ -299,3 +299,125 @@ test("numeric validation rejects invalid review and screenshot numeric payloads"
     await prisma.$disconnect();
   }
 });
+
+test("trade result is recomputed from profit at the API boundary", async (t) => {
+  try {
+    await prisma.$connect();
+  } catch {
+    t.skip("PostgreSQL is not reachable on DATABASE_URL. Start the local database to run this integration test.");
+    return;
+  }
+
+  const app = await buildApp();
+  const username = `nvo${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const password = "Password123!";
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        username,
+        password,
+      },
+    });
+
+    assert.equal(registerResponse.statusCode, 201);
+
+    const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
+    const createAccountResponse = await app.inject({
+      method: "POST",
+      url: "/accounts",
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        name: "Result Test Account",
+        broker: "Manual",
+        type: "Personal",
+        balance: "10000",
+        currency: "USD",
+      },
+    });
+
+    assert.equal(createAccountResponse.statusCode, 201);
+    const accountId = createAccountResponse.json().account.id as string;
+
+    const createTradeResponse = await app.inject({
+      method: "POST",
+      url: "/trades",
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        date: today,
+        accountId,
+        pair: "XAUUSD",
+        direction: "Sell",
+        entry: "3000",
+        stopLoss: "2990",
+        takeProfit: "3020",
+        profit: "0",
+        result: "Win",
+        notes: "Server-side result derivation regression",
+      },
+    });
+
+    assert.equal(createTradeResponse.statusCode, 201);
+    assert.equal(createTradeResponse.json().trade.direction, "Buy");
+    assert.equal(createTradeResponse.json().trade.result, "Breakeven");
+
+    const tradeId = createTradeResponse.json().trade.id as string;
+
+    const updateTradeResponse = await app.inject({
+      method: "PATCH",
+      url: `/trades/${tradeId}`,
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        entry: "3000",
+        stopLoss: "3015",
+        profit: "-25.5",
+        result: "Win",
+        direction: "Buy",
+      },
+    });
+
+    assert.equal(updateTradeResponse.statusCode, 200);
+    assert.equal(updateTradeResponse.json().trade.direction, "Sell");
+    assert.equal(updateTradeResponse.json().trade.result, "Loss");
+
+    const invalidDirectionResponse = await app.inject({
+      method: "POST",
+      url: "/trades",
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        date: today,
+        accountId,
+        pair: "EURUSD",
+        direction: "Buy",
+        entry: "1.1",
+        stopLoss: "1.1",
+        takeProfit: "1.12",
+        profit: "10",
+        result: "Win",
+        notes: "Equal entry and stop loss should fail",
+      },
+    });
+
+    assert.equal(invalidDirectionResponse.statusCode, 400);
+    assert.equal(invalidDirectionResponse.json().error.code, "INVALID_TRADE_DIRECTION");
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});

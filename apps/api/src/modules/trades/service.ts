@@ -1,13 +1,21 @@
 import { Prisma, TradeSession } from "@prisma/client";
+import type { TradeDirectionValue, TradeResultValue } from "../../config/domain.js";
 import { toNumber } from "../../lib/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { buildPagination } from "../../utils/http.js";
 import { AppError } from "../../utils/errors.js";
 import { sessionFromDb, sessionToDb } from "../../utils/domain-mappers.js";
+import { deriveTradeDirection } from "./direction.js";
+import { deriveTradeResultFromProfit } from "./result.js";
+
+function normalizeTradePair(value: string) {
+  return value.trim().replace(/\s+/g, "").toUpperCase();
+}
 
 const tradeInclude = Prisma.validator<Prisma.TradeInclude>()({
   account: true,
+  setup: true,
   screenshots: {
     orderBy: {
       sortOrder: "asc" as const,
@@ -90,7 +98,7 @@ async function toTradeDto(trade: Prisma.TradeGetPayload<{ include: typeof tradeI
     id: trade.id,
     date: trade.tradeDate.toISOString().slice(0, 10),
     accountId: trade.accountId,
-    pair: trade.pair,
+    pair: normalizeTradePair(trade.pair),
     direction: trade.direction,
     entry: toNumber(trade.entry),
     stopLoss: toNumber(trade.stopLoss),
@@ -99,6 +107,7 @@ async function toTradeDto(trade: Prisma.TradeGetPayload<{ include: typeof tradeI
     result: trade.result,
     setupId: trade.setupId,
     setup: trade.setupNameSnapshot ?? "",
+    setupColor: trade.setup?.color ?? null,
     session: sessionFromDb(trade.session),
     emotion: trade.emotion,
     notes: trade.notes,
@@ -124,7 +133,7 @@ function buildTradeWhere(userId: string, query: {
   dateFrom?: string;
   dateTo?: string;
   direction?: "Buy" | "Sell";
-  result?: "Win" | "Loss";
+  result?: TradeResultValue;
   session?: "Asia" | "London" | "New York";
   emotion?: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated";
   includeDeleted?: boolean;
@@ -136,7 +145,7 @@ function buildTradeWhere(userId: string, query: {
     setupId: query.setupId,
     pair: query.pair
       ? {
-          contains: query.pair,
+          contains: normalizeTradePair(query.pair),
           mode: "insensitive" as const,
         }
       : undefined,
@@ -180,7 +189,7 @@ export async function listTrades(userId: string, query: {
   dateFrom?: string;
   dateTo?: string;
   direction?: "Buy" | "Sell";
-  result?: "Win" | "Loss";
+  result?: TradeResultValue;
   session?: "Asia" | "London" | "New York";
   emotion?: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated";
   page: number;
@@ -225,12 +234,12 @@ export async function createTrade(userId: string, input: {
   date: string;
   accountId: string;
   pair: string;
-  direction: "Buy" | "Sell";
+  direction?: TradeDirectionValue;
   entry: number;
   stopLoss: number;
   takeProfit: number;
   profit: number;
-  result: "Win" | "Loss";
+  result?: TradeResultValue;
   setupId?: string | null;
   setup?: string | null;
   session?: "Asia" | "London" | "New York" | null;
@@ -242,19 +251,25 @@ export async function createTrade(userId: string, input: {
     setupId: input.setupId,
     setup: input.setup,
   });
+  const derivedDirection = deriveTradeDirection(input.entry, input.stopLoss);
+  const derivedResult = deriveTradeResultFromProfit(input.profit);
+
+  if (derivedDirection === null) {
+    throw new AppError(400, "INVALID_TRADE_DIRECTION", "Stop Loss must be above or below Entry to determine trade direction.");
+  }
 
   const trade = await prisma.trade.create({
     data: {
       userId,
       accountId: input.accountId,
       tradeDate: new Date(`${input.date}T00:00:00.000Z`),
-      pair: input.pair,
-      direction: input.direction,
+      pair: normalizeTradePair(input.pair),
+      direction: derivedDirection,
       entry: input.entry,
       stopLoss: input.stopLoss,
       takeProfit: input.takeProfit,
       profit: input.profit,
-      result: input.result,
+      result: derivedResult,
       setupId: setup.setupId,
       setupNameSnapshot: setup.setupNameSnapshot,
       session: (sessionToDb(input.session) as TradeSession | null | undefined) ?? null,
@@ -271,19 +286,19 @@ export async function updateTrade(userId: string, tradeId: string, input: {
   date?: string;
   accountId?: string;
   pair?: string;
-  direction?: "Buy" | "Sell";
+  direction?: TradeDirectionValue;
   entry?: number;
   stopLoss?: number;
   takeProfit?: number;
   profit?: number;
-  result?: "Win" | "Loss";
+  result?: TradeResultValue;
   setupId?: string | null;
   setup?: string | null;
   session?: "Asia" | "London" | "New York" | null;
   emotion?: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated" | null;
   notes?: string;
 }) {
-  await getOwnedTrade(userId, tradeId);
+  const existingTrade = await getOwnedTrade(userId, tradeId);
 
   if (input.accountId) {
     await ensureOwnedAccount(userId, input.accountId);
@@ -296,19 +311,31 @@ export async function updateTrade(userId: string, tradeId: string, input: {
           setup: input.setup,
         })
       : null;
+  const nextDirection =
+    input.entry !== undefined || input.stopLoss !== undefined || input.direction !== undefined
+      ? deriveTradeDirection(input.entry ?? toNumber(existingTrade.entry), input.stopLoss ?? toNumber(existingTrade.stopLoss))
+      : undefined;
+  const nextResult =
+    input.profit !== undefined || input.result !== undefined
+      ? deriveTradeResultFromProfit(input.profit ?? toNumber(existingTrade.profit))
+      : undefined;
+
+  if (nextDirection === null) {
+    throw new AppError(400, "INVALID_TRADE_DIRECTION", "Stop Loss must be above or below Entry to determine trade direction.");
+  }
 
   const trade = await prisma.trade.update({
     where: { id: tradeId },
     data: {
       tradeDate: input.date ? new Date(`${input.date}T00:00:00.000Z`) : undefined,
       accountId: input.accountId,
-      pair: input.pair,
-      direction: input.direction,
+      pair: input.pair === undefined ? undefined : normalizeTradePair(input.pair),
+      direction: nextDirection,
       entry: input.entry,
       stopLoss: input.stopLoss,
       takeProfit: input.takeProfit,
       profit: input.profit,
-      result: input.result,
+      result: nextResult,
       setupId: setup ? setup.setupId : undefined,
       setupNameSnapshot: setup ? setup.setupNameSnapshot : undefined,
       session:

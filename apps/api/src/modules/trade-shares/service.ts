@@ -22,7 +22,7 @@ const tradeShareSnapshotSchema = z.object({
   tradeId: z.string().uuid(),
   pair: z.string(),
   direction: z.enum(["Buy", "Sell"]),
-  result: z.enum(["Win", "Loss"]),
+  result: z.enum(["Win", "Loss", "Breakeven"]),
   date: z.string(),
   entry: z.number(),
   stopLoss: z.number(),

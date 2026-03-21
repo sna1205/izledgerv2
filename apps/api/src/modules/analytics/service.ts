@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
+import type { TradeResultValue } from "../../config/domain.js";
 import { toNumber } from "../../lib/decimal.js";
-import { sessionFromDb, sessionToDb } from "../../utils/domain-mappers.js";
+import { sessionFromDb } from "../../utils/domain-mappers.js";
 
 type PlainTrade = {
   id: string;
@@ -11,10 +12,11 @@ type PlainTrade = {
   stopLoss: number;
   takeProfit: number;
   profit: number;
-  result: "Win" | "Loss";
+  result: TradeResultValue;
   session: "Asia" | "London" | "New York" | null;
   emotion: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated" | null;
   setup: string;
+  setupColor: string | null;
   accountId: string;
   accountName: string;
   createdAt: string;
@@ -28,11 +30,16 @@ function buildAnalyticsTradeWhere(userId: string, accountId?: string) {
   };
 }
 
+function normalizeTradePair(value: string) {
+  return value.trim().replace(/\s+/g, "").toUpperCase();
+}
+
 async function getTradesForAnalytics(userId: string, accountId?: string) {
   const trades = await prisma.trade.findMany({
     where: buildAnalyticsTradeWhere(userId, accountId),
     include: {
       account: true,
+      setup: true,
     },
     orderBy: [
       { tradeDate: "asc" },
@@ -43,7 +50,7 @@ async function getTradesForAnalytics(userId: string, accountId?: string) {
   return trades.map<PlainTrade>((trade) => ({
     id: trade.id,
     date: trade.tradeDate.toISOString().slice(0, 10),
-    pair: trade.pair,
+    pair: normalizeTradePair(trade.pair),
     direction: trade.direction,
     entry: toNumber(trade.entry),
     stopLoss: toNumber(trade.stopLoss),
@@ -53,6 +60,7 @@ async function getTradesForAnalytics(userId: string, accountId?: string) {
     session: sessionFromDb(trade.session) as PlainTrade["session"],
     emotion: trade.emotion as PlainTrade["emotion"],
     setup: trade.setupNameSnapshot ?? "",
+    setupColor: trade.setup?.color ?? null,
     accountId: trade.accountId,
     accountName: trade.account.name,
     createdAt: trade.createdAt.toISOString(),
@@ -105,6 +113,7 @@ async function getRecentTrades(userId: string, accountId?: string) {
     where: buildAnalyticsTradeWhere(userId, accountId),
     include: {
       account: true,
+      setup: true,
     },
     orderBy: [
       { tradeDate: "desc" },
@@ -116,7 +125,7 @@ async function getRecentTrades(userId: string, accountId?: string) {
   return trades.map<PlainTrade>((trade) => ({
     id: trade.id,
     date: trade.tradeDate.toISOString().slice(0, 10),
-    pair: trade.pair,
+    pair: normalizeTradePair(trade.pair),
     direction: trade.direction,
     entry: toNumber(trade.entry),
     stopLoss: toNumber(trade.stopLoss),
@@ -126,6 +135,7 @@ async function getRecentTrades(userId: string, accountId?: string) {
     session: sessionFromDb(trade.session) as PlainTrade["session"],
     emotion: trade.emotion as PlainTrade["emotion"],
     setup: trade.setupNameSnapshot ?? "",
+    setupColor: trade.setup?.color ?? null,
     accountId: trade.accountId,
     accountName: trade.account.name,
     createdAt: trade.createdAt.toISOString(),
@@ -135,7 +145,8 @@ async function getRecentTrades(userId: string, accountId?: string) {
 function computeStats(trades: PlainTrade[]) {
   const totalTrades = trades.length;
   const wins = trades.filter((trade) => trade.result === "Win").length;
-  const losses = totalTrades - wins;
+  const losses = trades.filter((trade) => trade.result === "Loss").length;
+  const breakevens = trades.filter((trade) => trade.result === "Breakeven").length;
   const totalProfit = trades.reduce((sum, trade) => sum + trade.profit, 0);
   const totalGross = trades.filter((trade) => trade.profit > 0).reduce((sum, trade) => sum + trade.profit, 0);
   const totalLoss = trades.filter((trade) => trade.profit < 0).reduce((sum, trade) => sum + trade.profit, 0);
@@ -155,6 +166,7 @@ function computeStats(trades: PlainTrade[]) {
     totalTrades,
     wins,
     losses,
+    breakevens,
     totalProfit: Number(totalProfit.toFixed(2)),
     totalGross: Number(totalGross.toFixed(2)),
     totalLoss: Number(totalLoss.toFixed(2)),
@@ -247,6 +259,12 @@ export async function getAnalyticsBreakdowns(userId: string, accountId?: string)
         name: "Losses",
         value: stats.losses,
         percentage: stats.totalTrades > 0 ? Number(((stats.losses / stats.totalTrades) * 100).toFixed(2)) : 0,
+      },
+      {
+        key: "breakevens",
+        name: "Breakeven",
+        value: stats.breakevens,
+        percentage: stats.totalTrades > 0 ? Number(((stats.breakevens / stats.totalTrades) * 100).toFixed(2)) : 0,
       },
     ],
     setupPerformance: buildGroupedPerformance(trades, (trade) => trade.setup || null),

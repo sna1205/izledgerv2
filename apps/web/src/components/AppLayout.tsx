@@ -42,12 +42,13 @@ export function AppLayout() {
               <Button
                 variant="outline"
                 className="h-10 max-w-[210px] rounded-2xl px-2 sm:px-3"
+                aria-label={user?.username ? `Open settings for ${user.username}` : "Open settings"}
                 onClick={() => navigate("/settings")}
               >
                 <Avatar className="h-8 w-8 border border-border">
                   <AvatarFallback className="bg-secondary text-xs font-medium">{initials}</AvatarFallback>
                 </Avatar>
-                <span className="hidden max-w-[120px] truncate text-sm font-medium sm:inline-block">{user?.username}</span>
+                <span className="sr-only max-w-[120px] truncate text-sm font-medium sm:not-sr-only sm:inline-block">{user?.username}</span>
               </Button>
             </div>
             </div>

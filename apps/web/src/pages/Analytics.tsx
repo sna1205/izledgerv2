@@ -4,81 +4,121 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
-  Layers3,
-  Radar,
+  Plus,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import type { TooltipProps } from "recharts";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { useNavigate } from "react-router-dom";
 import { AccountFilterSelect } from "@/components/AccountFilterSelect";
-import { AnalyticsCard } from "@/components/analytics/AnalyticsCard";
+import {
+  EmotionsBreakdownChart,
+  getBreakdownCategoryAccent,
+  getBreakdownColor,
+  PairsBreakdownChart,
+  SessionsBreakdownChart,
+  SetupsBreakdownChart,
+} from "@/components/analytics/BreakdownCharts";
 import { BreakdownDrawer, buildBreakdownDrawerStats } from "@/components/analytics/BreakdownDrawer";
-import { BreakdownChartTooltip } from "@/components/analytics/ChartTooltip";
 import { EmptyChartState } from "@/components/analytics/EmptyChartState";
 import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton";
 import { CalendarCell } from "@/components/CalendarCell";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
-import { StatCard } from "@/components/StatCard";
 import { TradingDayDrawer } from "@/components/TradingDayDrawer";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DataBadge } from "@/components/DataBadge";
 import { listAccounts } from "@/lib/api/accounts";
 import { getAnalyticsBreakdowns, getAnalyticsCalendar } from "@/lib/api/analytics";
-import { type ListTradesParams, listTrades } from "@/lib/api/trades";
+import { listTrades } from "@/lib/api/trades";
 import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
 import {
   formatCompactCurrencyDisplay,
   formatCurrencyDisplay,
+  formatDateDisplay,
   formatNumberDisplay,
   formatPercentageDisplay,
   normalizeAnalyticsBreakdownsResponse,
   normalizeAnalyticsCalendarResponse,
   normalizeMonthKey,
   shiftMonthKey,
+  type NormalizedCalendarDay,
   type NormalizedBreakdownRow,
 } from "@/lib/analytics-rendering";
 import { useAuth } from "@/lib/auth";
 import { withMinimumDelay } from "@/lib/loading";
 import { getPageErrorState } from "@/lib/page-errors";
 import { privateQueryKey } from "@/lib/react-query";
-import type { Result, Trade } from "@/lib/types";
+import type { Trade } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+type MainTab = "overview" | "breakdowns" | "calendar";
+type BreakdownTab = "setups" | "pairs" | "sessions" | "emotions";
+type BreakdownKind = "setup" | "pair" | "emotion" | "session";
+
 type BreakdownDrawerState = {
-  kind: "account" | "pair" | "emotion" | "session" | "outcome" | "risk";
+  kind: BreakdownKind;
   title: string;
   description: string;
-  params?: ListTradesParams;
-  trades?: Trade[];
+  trades: Trade[];
 };
 
-const POSITIVE_BAR = "#5f9b83";
-const NEGATIVE_BAR = "#c97b83";
-const ACCENT_BAR = "#6e98c7";
-const NEUTRAL_BAR = "#8b97a7";
-const GRID_STROKE = "hsl(var(--border) / 0.4)";
+type PerformanceRow = NormalizedBreakdownRow & {
+  shortLabel: string;
+};
+
+type TrendPoint = {
+  key: string;
+  date: string;
+  shortDate: string;
+  fullDate: string;
+  cumulativeProfit: number;
+  dailyProfit: number;
+  trades: number;
+};
+
+type DailySummary = {
+  date: string;
+  fullDate: string;
+  trades: number;
+  profit: number;
+};
+
+type BreakdownDefinition = {
+  key: BreakdownTab;
+  label: string;
+  description: string;
+  rows: PerformanceRow[];
+  kind: BreakdownKind;
+};
+
+const ACCENT_LINE = "#6e98c7";
+const GRID_STROKE = "hsl(var(--border) / 0.35)";
 const AXIS_TEXT = "hsl(var(--muted-foreground))";
 const REFERENCE_LINE = "hsl(var(--border) / 0.8)";
-const CURSOR_FILL = "hsl(var(--accent) / 0.35)";
-const DONUT_STROKE = "hsl(var(--card))";
-const DONUT_VALUE_FILL = "hsl(var(--foreground))";
-const DONUT_LABEL_FILL = "hsl(var(--muted-foreground))";
+const CURSOR_FILL = "hsl(var(--accent) / 0.32)";
+const ANALYTICS_EMPTY_MESSAGE = "Add trades to unlock insights.";
+const EMPTY_TRADES: Trade[] = [];
 
 function getProfitTone(value: number) {
   if (value > 0) return "text-success";
@@ -101,33 +141,16 @@ function calculatePlannedRR(trade: Trade) {
   return Math.max(0, reward / risk);
 }
 
-function shortenLabel(label: string, maxLength = 12) {
+function shortenLabel(label: string, maxLength = 14) {
   return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
 }
 
-function sortRowsDescending<T extends { profit: number }>(rows: T[]) {
+function sortRowsByProfit<T extends { profit: number }>(rows: T[]) {
   return [...rows].sort((a, b) => b.profit - a.profit);
 }
 
-function buildGenericInsights(rows: Array<{ label: string; trades: number; profit: number }>, bestPrefix: string, worstPrefix: string) {
-  const sorted = sortRowsDescending(rows);
-  const best = sorted[0];
-  const worst = sorted[sorted.length - 1];
-  const totalTrades = rows.reduce((sum, row) => sum + row.trades, 0);
-
-  if (rows.length === 0) {
-    return [
-      "No data yet.",
-      "Start logging trades.",
-      "Total trades: 0",
-    ];
-  }
-
-  return [
-    `${bestPrefix}: ${best.label} (${formatCurrencyDisplay(best.profit)})`,
-    `${worstPrefix}: ${worst.label} (${formatCurrencyDisplay(worst.profit)})`,
-    `Total trades: ${formatNumberDisplay(totalTrades)}`,
-  ];
+function sortRowsByTrades<T extends { trades: number; profit: number }>(rows: T[]) {
+  return [...rows].sort((a, b) => b.trades - a.trades || b.profit - a.profit);
 }
 
 function createPerformanceDataset(rows: NormalizedBreakdownRow[]) {
@@ -137,45 +160,483 @@ function createPerformanceDataset(rows: NormalizedBreakdownRow[]) {
   }));
 }
 
-function buildRiskDistribution(trades: Trade[]) {
-  const buckets = [
-    { key: "under-1", label: "<1R", trades: 0 },
-    { key: "one-to-two", label: "1R-2R", trades: 0 },
-    { key: "two-to-three", label: "2R-3R", trades: 0 },
-    { key: "over-three", label: "3R+", trades: 0 },
-  ];
+function pickBestRow(rows: PerformanceRow[]) {
+  return [...rows].sort((left, right) => right.profit - left.profit || right.winRate - left.winRate || right.trades - left.trades)[0] ?? null;
+}
 
-  trades.forEach((trade) => {
-    const rr = calculatePlannedRR(trade);
+function pickWorstRow(rows: PerformanceRow[]) {
+  return [...rows].sort((left, right) => left.profit - right.profit || left.winRate - right.winRate || right.trades - left.trades)[0] ?? null;
+}
 
-    if (rr < 1) {
-      buckets[0].trades += 1;
-      return;
-    }
+function pickMostTradedRow(rows: PerformanceRow[]) {
+  return sortRowsByTrades(rows)[0] ?? null;
+}
 
-    if (rr < 2) {
-      buckets[1].trades += 1;
-      return;
-    }
+function buildTrendSeries(trades: Trade[]) {
+  const orderedTrades = [...trades].sort((left, right) => left.date.localeCompare(right.date));
+  const grouped = new Map<string, { profit: number; trades: number }>();
 
-    if (rr < 3) {
-      buckets[2].trades += 1;
-      return;
-    }
+  for (const trade of orderedTrades) {
+    const current = grouped.get(trade.date) ?? { profit: 0, trades: 0 };
+    current.profit += trade.profit;
+    current.trades += 1;
+    grouped.set(trade.date, current);
+  }
 
-    buckets[3].trades += 1;
+  let cumulativeProfit = 0;
+
+  return Array.from(grouped.entries()).map(([date, value]) => {
+    cumulativeProfit += value.profit;
+
+    return {
+      key: date,
+      date,
+      shortDate: formatDateDisplay(date, {
+        fallback: date,
+        formatter: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }),
+      }),
+      fullDate: formatDateDisplay(date),
+      cumulativeProfit,
+      dailyProfit: value.profit,
+      trades: value.trades,
+    };
   });
+}
 
-  const total = trades.length;
-
-  return buckets.map((bucket) => ({
-    ...bucket,
-    share: total > 0 ? (bucket.trades / total) * 100 : 0,
+function buildDailySummaries(trades: Trade[]): DailySummary[] {
+  return buildTrendSeries(trades).map((point) => ({
+    date: point.date,
+    fullDate: point.fullDate,
+    trades: point.trades,
+    profit: point.dailyProfit,
   }));
 }
 
-function getOutcomeResult(name: string): Result {
-  return name.toLowerCase().includes("win") ? "Win" : "Loss";
+function buildTrendSeriesFromCalendar(days: NormalizedCalendarDay[]) {
+  const activeDays = [...days]
+    .filter((day) => day.inCurrentMonth && day.tradeCount > 0)
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  let cumulativeProfit = 0;
+
+  return activeDays.map((day) => {
+    cumulativeProfit += day.totalProfit;
+
+    return {
+      key: day.key,
+      date: day.date,
+      shortDate: formatDateDisplay(day.date, {
+        fallback: day.date,
+        formatter: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }),
+      }),
+      fullDate: formatDateDisplay(day.date),
+      cumulativeProfit,
+      dailyProfit: day.totalProfit,
+      trades: day.tradeCount,
+    };
+  });
+}
+
+function buildDailySummariesFromCalendar(days: NormalizedCalendarDay[]): DailySummary[] {
+  return buildTrendSeriesFromCalendar(days).map((point) => ({
+    date: point.date,
+    fullDate: point.fullDate,
+    trades: point.trades,
+    profit: point.dailyProfit,
+  }));
+}
+
+function buildBehaviorInsight(dailySummaries: DailySummary[]) {
+  if (dailySummaries.length === 0) {
+    return "More trades needed for behavior insight.";
+  }
+
+  const averageTradesPerDay = dailySummaries.reduce((sum, day) => sum + day.trades, 0) / dailySummaries.length;
+  const busiestDay = [...dailySummaries].sort((left, right) => right.trades - left.trades || left.profit - right.profit)[0];
+
+  if (busiestDay && busiestDay.trades >= Math.max(4, Math.ceil(averageTradesPerDay * 1.75))) {
+    return busiestDay.profit < 0
+      ? `${busiestDay.fullDate} was your busiest day and closed ${formatCurrencyDisplay(busiestDay.profit)}.`
+      : `${busiestDay.fullDate} had your most trades. Watch quality when volume rises.`;
+  }
+
+  const losingDays = dailySummaries.filter((day) => day.profit < 0).length;
+
+  if (losingDays > dailySummaries.length / 2) {
+    return `${formatNumberDisplay(losingDays)} of ${formatNumberDisplay(dailySummaries.length)} active days closed red.`;
+  }
+
+  const positiveDays = dailySummaries.filter((day) => day.profit > 0).length;
+  return `${formatNumberDisplay(positiveDays)} of ${formatNumberDisplay(dailySummaries.length)} active days closed green.`;
+}
+
+function computeMaxDrawdown(points: TrendPoint[]) {
+  let peak = Number.NEGATIVE_INFINITY;
+  let maxDrawdown = 0;
+
+  for (const point of points) {
+    peak = Math.max(peak, point.cumulativeProfit);
+    maxDrawdown = Math.max(maxDrawdown, peak - point.cumulativeProfit);
+  }
+
+  return maxDrawdown;
+}
+
+function buildPerformanceScore({
+  winRate,
+  avgRR,
+  dailySummaries,
+  trend,
+  totalGross,
+}: {
+  winRate: number;
+  avgRR: number;
+  dailySummaries: DailySummary[];
+  trend: TrendPoint[];
+  totalGross: number;
+}) {
+  const consistencyScore = dailySummaries.length > 0
+    ? (dailySummaries.filter((day) => day.profit > 0).length / dailySummaries.length) * 100
+    : 0;
+  const rrScore = Math.min(100, (avgRR / 3) * 100);
+  const maxDrawdown = computeMaxDrawdown(trend);
+  const drawdownScore = totalGross > 0
+    ? Math.max(0, 100 - (maxDrawdown / totalGross) * 100)
+    : 0;
+  const score = Math.round(
+    (winRate * 0.35)
+    + (rrScore * 0.25)
+    + (consistencyScore * 0.2)
+    + (drawdownScore * 0.2),
+  );
+
+  return {
+    score,
+    factors: [
+      { label: "Win rate", value: Math.round(winRate) },
+      { label: "Risk / reward", value: Math.round(rrScore) },
+      { label: "Consistency", value: Math.round(consistencyScore) },
+      { label: "Drawdown control", value: Math.round(drawdownScore) },
+    ],
+    maxDrawdown,
+  };
+}
+
+function buildAnalyticsSummaryFromTrades(trades: Trade[]) {
+  const totalTrades = trades.length;
+  const wins = trades.filter((trade) => trade.result === "Win").length;
+  const losses = trades.filter((trade) => trade.result === "Loss").length;
+  const totalProfit = trades.reduce((sum, trade) => sum + trade.profit, 0);
+  const totalGross = trades
+    .filter((trade) => trade.profit > 0)
+    .reduce((sum, trade) => sum + trade.profit, 0);
+  const totalLoss = trades
+    .filter((trade) => trade.profit < 0)
+    .reduce((sum, trade) => sum + trade.profit, 0);
+  const rrValues = trades
+    .map((trade) => calculatePlannedRR(trade))
+    .filter((value) => value > 0);
+
+  return {
+    totalTrades,
+    wins,
+    losses,
+    totalProfit,
+    totalGross,
+    totalLoss,
+    winRate: totalTrades > 0 ? (wins / totalTrades) * 100 : 0,
+    avgRR: rrValues.length > 0
+      ? rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length
+      : 0,
+  };
+}
+
+function buildBreakdownRowsFromTrades(
+  trades: Trade[],
+  selector: (trade: Trade) => string | null | undefined,
+): NormalizedBreakdownRow[] {
+  const grouped = new Map<string, { trades: number; wins: number; profit: number }>();
+
+  for (const trade of trades) {
+    const label = selector(trade)?.trim() || "Unknown";
+    const current = grouped.get(label) ?? { trades: 0, wins: 0, profit: 0 };
+
+    current.trades += 1;
+    current.wins += trade.result === "Win" ? 1 : 0;
+    current.profit += trade.profit;
+
+    grouped.set(label, current);
+  }
+
+  return Array.from(grouped.entries()).map(([label, value]) => ({
+    key: label,
+    label,
+    trades: value.trades,
+    wins: value.wins,
+    winRate: value.trades > 0 ? (value.wins / value.trades) * 100 : 0,
+    profit: value.profit,
+    averageProfit: value.trades > 0 ? value.profit / value.trades : 0,
+  }));
+}
+
+function filterTradesForBreakdown(kind: BreakdownKind, label: string, trades: Trade[]) {
+  if (kind === "pair") {
+    return trades.filter((trade) => trade.pair === label);
+  }
+
+  if (kind === "session") {
+    return trades.filter((trade) => (trade.session ?? "Unknown") === label);
+  }
+
+  if (kind === "emotion") {
+    return trades.filter((trade) => (trade.emotion ?? "Unknown") === label);
+  }
+
+  return trades.filter((trade) => (trade.setup ?? "Unknown") === label);
+}
+
+function TrendTooltip({ active, payload }: TooltipProps<ValueType, NameType>) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const datum = payload[0]?.payload as TrendPoint | undefined;
+
+  if (!datum) {
+    return null;
+  }
+
+  return (
+    <div className="min-w-[180px] rounded-2xl border border-border/70 bg-popover/96 px-4 py-3 text-xs text-popover-foreground shadow-[0_20px_50px_-24px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:shadow-[0_20px_50px_-24px_rgba(1,8,24,0.88)]">
+      <p className="font-medium text-foreground">{datum.fullDate}</p>
+      <div className="mt-3 grid gap-1.5">
+        <p>Cumulative PnL: {formatCurrencyDisplay(datum.cumulativeProfit)}</p>
+        <p>Day PnL: {formatCurrencyDisplay(datum.dailyProfit)}</p>
+        <p>Trades: {formatNumberDisplay(datum.trades)}</p>
+      </div>
+    </div>
+  );
+}
+
+function OverviewMetric({
+  label,
+  value,
+  subtext,
+}: {
+  label: string;
+  value: string;
+  subtext?: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-background/70 px-4 py-3 dark:bg-white/[0.03]">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
+      {subtext ? <p className="mt-1 text-xs text-muted-foreground">{subtext}</p> : null}
+    </div>
+  );
+}
+
+function BreakdownInsightMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "success" | "danger";
+}) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-background/55 px-4 py-3 dark:bg-white/[0.03]">
+      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className={cn(
+        "mt-1.5 text-sm font-semibold text-foreground",
+        tone === "success" && "text-success",
+        tone === "danger" && "text-danger",
+      )}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function AnalyticsEmptyDashboard({ onAddTrade }: { onAddTrade: () => void }) {
+  return (
+    <SectionCard className="overflow-hidden border-border/60 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.12),transparent_32%),linear-gradient(180deg,hsl(var(--card)),hsl(var(--card)))] p-0">
+      <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(300px,0.58fr)] lg:p-8">
+        <div className="space-y-5">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/80 text-primary shadow-sm dark:bg-white/[0.04]">
+            <BarChart3 className="h-5 w-5" />
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">No trades yet</h2>
+            <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+              {ANALYTICS_EMPTY_MESSAGE}
+            </p>
+          </div>
+          <Button className="rounded-2xl" onClick={onAddTrade}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Trade
+          </Button>
+        </div>
+
+        <div className="grid gap-4">
+          <div className="rounded-3xl border border-border/60 bg-background/80 p-5 shadow-sm dark:bg-white/[0.03]">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Net PnL</p>
+                <div className="mt-2 h-8 w-32 rounded-full bg-border/60" />
+              </div>
+              <div className="h-8 w-20 rounded-full bg-border/45" />
+            </div>
+            <div className="h-40 rounded-3xl bg-[linear-gradient(180deg,hsl(var(--primary)/0.12),transparent_65%)]">
+              <div className="flex h-full items-end gap-3 px-4 pb-4">
+                {["h-8", "h-12", "h-10", "h-20", "h-16", "h-28"].map((height) => (
+                  <div key={height} className={cn("w-full rounded-t-2xl bg-primary/12", height)} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-border/60 bg-background/80 p-5 shadow-sm dark:bg-white/[0.03]">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm font-medium text-foreground">Quick Insights</p>
+              <Sparkles className="h-4 w-4 text-primary" />
+            </div>
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="flex items-start gap-3 rounded-2xl bg-muted/50 px-3 py-3 dark:bg-white/[0.03]">
+                  <div className="mt-1 h-2 w-2 rounded-full bg-primary/50" />
+                  <div className="h-4 w-full rounded-full bg-border/50" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function BreakdownPanel({
+  kind,
+  title,
+  description,
+  rows,
+  loading,
+  onInspect,
+}: {
+  kind: BreakdownKind;
+  title: string;
+  description?: string;
+  rows: PerformanceRow[];
+  loading: boolean;
+  onInspect: (row: PerformanceRow) => void;
+}) {
+  const bestRow = pickBestRow(rows);
+  const worstRow = pickWorstRow(rows);
+  const totalProfit = rows.reduce((sum, row) => sum + row.profit, 0);
+  const totalTrades = rows.reduce((sum, row) => sum + row.trades, 0);
+  const weightedWinRate = totalTrades > 0
+    ? rows.reduce((sum, row) => sum + ((row.winRate / 100) * row.trades), 0) / totalTrades * 100
+    : 0;
+
+  return (
+    <SectionCard className="space-y-6 border-border/60 p-0">
+      <div className="border-b border-border/50 px-5 py-5 sm:px-6">
+        <SectionHeader title={title} description={description} />
+      </div>
+
+      <div className="grid gap-3 px-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
+        <BreakdownInsightMetric
+          label="Best Performer"
+          value={bestRow ? `${bestRow.label} · ${formatCompactCurrencyDisplay(bestRow.profit)}` : "No data"}
+          tone="success"
+        />
+        <BreakdownInsightMetric
+          label="Worst Performer"
+          value={worstRow ? `${worstRow.label} · ${formatCompactCurrencyDisplay(worstRow.profit)}` : "No data"}
+          tone="danger"
+        />
+        <BreakdownInsightMetric
+          label="Total PnL"
+          value={formatCurrencyDisplay(totalProfit)}
+          tone={totalProfit > 0 ? "success" : totalProfit < 0 ? "danger" : "default"}
+        />
+        <BreakdownInsightMetric
+          label="Win Rate"
+          value={formatPercentageDisplay(weightedWinRate)}
+        />
+      </div>
+
+      <div className="px-5 sm:px-6">
+        {loading ? (
+          <div className="h-[280px] animate-pulse rounded-3xl bg-muted/50" />
+        ) : (
+          <>
+            {kind === "setup" ? <SetupsBreakdownChart rows={rows} onInspect={onInspect} /> : null}
+            {kind === "pair" ? <PairsBreakdownChart rows={rows} onInspect={onInspect} /> : null}
+            {kind === "session" ? <SessionsBreakdownChart rows={rows} onInspect={onInspect} /> : null}
+            {kind === "emotion" ? <EmotionsBreakdownChart rows={rows} onInspect={onInspect} /> : null}
+          </>
+        )}
+      </div>
+
+      <div className="border-t border-border/50 px-5 py-5 sm:px-6">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Name</TableHead>
+              <TableHead className="text-right">Trades</TableHead>
+              <TableHead className="text-right">Win Rate</TableHead>
+              <TableHead className="text-right">Net PnL</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const isBest = bestRow?.key === row.key;
+              const isWorst = worstRow?.key === row.key;
+
+              return (
+                <TableRow
+                  key={row.key}
+                  className={cn(
+                    "cursor-pointer border-border/50",
+                    isBest && "bg-success/8 hover:bg-success/12",
+                    isWorst && "bg-danger/8 hover:bg-danger/12",
+                  )}
+                  onClick={() => onInspect(row)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{
+                          backgroundColor: getBreakdownCategoryAccent({
+                            kind,
+                            label: row.label,
+                            profit: row.profit,
+                            rows,
+                          }),
+                        }}
+                      />
+                      <div>
+                        <p className="font-medium text-foreground">{row.label}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right tabular text-foreground">{formatNumberDisplay(row.trades)}</TableCell>
+                  <TableCell className="text-right tabular text-foreground">{formatPercentageDisplay(row.winRate)}</TableCell>
+                  <TableCell className={cn("text-right font-medium tabular", getProfitTone(row.profit))}>
+                    {formatCurrencyDisplay(row.profit)}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </SectionCard>
+  );
 }
 
 export default function Analytics() {
@@ -184,7 +645,8 @@ export default function Analytics() {
   const [accountFilter, setAccountFilter] = useAccountFilter();
   const [currentMonth, setCurrentMonth] = useState(() => normalizeMonthKey(null));
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "breakdowns" | "calendar">("overview");
+  const [activeTab, setActiveTab] = useState<MainTab>("overview");
+  const [activeBreakdownTab, setActiveBreakdownTab] = useState<BreakdownTab>("setups");
   const [breakdownDrawer, setBreakdownDrawer] = useState<BreakdownDrawerState | null>(null);
 
   const accountsQuery = useQuery({
@@ -231,15 +693,14 @@ export default function Analytics() {
   });
 
   const detailedTradesQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "analytics-breakdown-detailed-trades", accountId ?? "all"),
-    enabled: activeTab === "breakdowns",
+    queryKey: privateQueryKey(user.id, "analytics-detailed-trades", accountId ?? "all"),
     queryFn: async () => {
       const response = await withMinimumDelay(() => listTrades({
         accountId,
         page: 1,
         pageSize: 500,
         sortBy: "date",
-        sortOrder: "desc",
+        sortOrder: "asc",
       }));
 
       return response.items;
@@ -279,28 +740,8 @@ export default function Analytics() {
     },
   });
 
-  const breakdownDrawerQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "analytics-breakdown-drawer", breakdownDrawer?.kind ?? "none", breakdownDrawer?.title ?? "none", JSON.stringify(breakdownDrawer?.params ?? {})),
-    enabled: Boolean(breakdownDrawer && !breakdownDrawer.trades),
-    queryFn: async () => {
-      if (!breakdownDrawer?.params) {
-        return [];
-      }
-
-      const response = await withMinimumDelay(() => listTrades({
-        page: 1,
-        pageSize: 100,
-        sortBy: "date",
-        sortOrder: "desc",
-        ...breakdownDrawer.params,
-      }));
-
-      return response.items;
-    },
-  });
-
-  const dayTrades = dayTradesQuery.data ?? [];
-  const allDetailedTrades = detailedTradesQuery.data ?? [];
+  const dayTrades = dayTradesQuery.data ?? EMPTY_TRADES;
+  const allDetailedTrades = detailedTradesQuery.data ?? EMPTY_TRADES;
 
   const dayStats = useMemo(() => {
     const bestTrade = dayTrades.reduce<Trade | null>((best, trade) => (best === null || trade.profit > best.profit ? trade : best), null);
@@ -349,50 +790,124 @@ export default function Analytics() {
         title={pageError.title}
         description={pageError.description}
         onRetry={pageError.allowRetry ? () => {
-          void Promise.all([breakdownsQuery.refetch(), calendarQuery.refetch()]);
+          void Promise.all([breakdownsQuery.refetch(), calendarQuery.refetch(), detailedTradesQuery.refetch()]);
         } : undefined}
-        isRetrying={breakdownsQuery.isFetching || calendarQuery.isFetching}
+        isRetrying={breakdownsQuery.isFetching || calendarQuery.isFetching || detailedTradesQuery.isFetching}
       />
     );
   }
 
   const breakdowns = breakdownsQuery.data ?? normalizeAnalyticsBreakdownsResponse(null);
-
-  const accountRows = createPerformanceDataset(sortRowsDescending(breakdowns.accountPerformance));
-  const pairRows = createPerformanceDataset(sortRowsDescending(breakdowns.pairPerformance));
-  const emotionRows = createPerformanceDataset(sortRowsDescending(breakdowns.emotionPerformance));
-  const sessionRows = createPerformanceDataset(sortRowsDescending(breakdowns.sessionPerformance));
-  const outcomeRows = breakdowns.winLoss.map((entry, index) => ({
-    ...entry,
-    fill: index === 0 ? POSITIVE_BAR : NEGATIVE_BAR,
-  }));
-  const riskDistribution = buildRiskDistribution(allDetailedTrades);
-  const bestSession = sessionRows[0]?.label;
-  const dominantOutcome = outcomeRows.reduce<(typeof outcomeRows)[number] | null>((winner, entry) => {
-    if (winner === null || entry.value > winner.value) {
-      return entry;
-    }
-
-    return winner;
-  }, null);
+  const fallbackSummary = buildAnalyticsSummaryFromTrades(allDetailedTrades);
+  const effectiveSummary = breakdowns.summary.totalTrades > 0 || allDetailedTrades.length === 0
+    ? breakdowns.summary
+    : fallbackSummary;
+  const setupRows = createPerformanceDataset(sortRowsByProfit(
+    breakdowns.setupPerformance.length > 0
+      ? breakdowns.setupPerformance
+      : buildBreakdownRowsFromTrades(allDetailedTrades, (trade) => trade.setup),
+  ));
+  const pairRows = createPerformanceDataset(sortRowsByProfit(
+    breakdowns.pairPerformance.length > 0
+      ? breakdowns.pairPerformance
+      : buildBreakdownRowsFromTrades(allDetailedTrades, (trade) => trade.pair),
+  ));
+  const emotionRows = createPerformanceDataset(sortRowsByProfit(
+    breakdowns.emotionPerformance.length > 0
+      ? breakdowns.emotionPerformance
+      : buildBreakdownRowsFromTrades(allDetailedTrades, (trade) => trade.emotion),
+  ));
+  const sessionRows = createPerformanceDataset(sortRowsByProfit(
+    breakdowns.sessionPerformance.length > 0
+      ? breakdowns.sessionPerformance
+      : buildBreakdownRowsFromTrades(allDetailedTrades, (trade) => trade.session),
+  ));
+  const tradeTrendPoints = buildTrendSeries(allDetailedTrades);
+  const calendarTrendPoints = buildTrendSeriesFromCalendar(calendar.days);
+  const trendPoints = tradeTrendPoints.length > 0 ? tradeTrendPoints : calendarTrendPoints;
+  const tradeDailySummaries = buildDailySummaries(allDetailedTrades);
+  const calendarDailySummaries = buildDailySummariesFromCalendar(calendar.days);
+  const dailySummaries = tradeDailySummaries.length > 0 ? tradeDailySummaries : calendarDailySummaries;
+  const bestSetup = pickBestRow(setupRows);
+  const worstSession = pickWorstRow(sessionRows);
+  const mostTradedPair = pickMostTradedRow(pairRows);
   const averageRR = allDetailedTrades.length > 0
     ? allDetailedTrades.reduce((sum, trade) => sum + calculatePlannedRR(trade), 0) / allDetailedTrades.length
-    : breakdowns.summary.avgRR;
-  const mostCommonRiskBucket = riskDistribution.reduce<(typeof riskDistribution)[number] | null>((winner, bucket) => {
-    if (winner === null || bucket.trades > winner.trades) {
-      return bucket;
-    }
+    : effectiveSummary.avgRR;
+  const performanceScore = buildPerformanceScore({
+    winRate: effectiveSummary.winRate,
+    avgRR: averageRR,
+    dailySummaries,
+    trend: trendPoints,
+    totalGross: effectiveSummary.totalGross,
+  });
+  const quickInsights = [
+    bestSetup
+      ? `Best setup: ${bestSetup.label} ${formatCurrencyDisplay(bestSetup.profit)}`
+      : "Best setup: No data",
+    worstSession
+      ? `Weakest session: ${worstSession.label} ${formatCurrencyDisplay(worstSession.profit)}`
+      : "Weakest session: No data",
+    mostTradedPair
+      ? `Most traded pair: ${mostTradedPair.label} · ${formatNumberDisplay(mostTradedPair.trades)}`
+      : "Most traded pair: No data",
+    buildBehaviorInsight(dailySummaries),
+  ];
 
-    return winner;
-  }, null);
+  const breakdownDefinitions: BreakdownDefinition[] = [
+    {
+      key: "setups",
+      label: "Setups",
+      description: undefined,
+      rows: setupRows,
+      kind: "setup",
+    },
+    {
+      key: "pairs",
+      label: "Pairs",
+      description: undefined,
+      rows: pairRows,
+      kind: "pair",
+    },
+    {
+      key: "sessions",
+      label: "Sessions",
+      description: undefined,
+      rows: sessionRows,
+      kind: "session",
+    },
+    {
+      key: "emotions",
+      label: "Emotions",
+      description: undefined,
+      rows: emotionRows,
+      kind: "emotion",
+    },
+  ];
 
-  const drawerTrades = breakdownDrawer?.trades ?? breakdownDrawerQuery.data ?? [];
-  const drawerStats = buildBreakdownDrawerStats(drawerTrades);
+  const drawerStats = buildBreakdownDrawerStats(breakdownDrawer?.trades ?? []);
+  const hasAnalyticsData = effectiveSummary.totalTrades > 0
+    || calendar.summary.totalTrades > 0
+    || allDetailedTrades.length > 0;
+  const trendEmptyMessage = effectiveSummary.totalTrades > 0 || calendar.summary.totalTrades > 0
+    ? "Trend data is still syncing."
+    : ANALYTICS_EMPTY_MESSAGE;
+
+  function openBreakdownSlice(definition: BreakdownDefinition, row: PerformanceRow) {
+    const trades = filterTradesForBreakdown(definition.kind, row.label, allDetailedTrades);
+
+    setBreakdownDrawer({
+      kind: definition.kind,
+      title: row.label,
+      description: `${formatNumberDisplay(trades.length)} trades`,
+      trades,
+    });
+  }
 
   return (
     <>
       <PageShell size="wide">
-      <PageHeader
+        <PageHeader
           title="Analytics"
           actions={(
             <AccountFilterSelect
@@ -404,473 +919,235 @@ export default function Analytics() {
           )}
         />
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "overview" | "breakdowns" | "calendar")} className="w-full">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <TabsList className="grid h-auto w-full grid-cols-3 sm:max-w-[360px]">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="breakdowns">Breakdown</TabsTrigger>
-              <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            </TabsList>
+        {!hasAnalyticsData ? (
+          <AnalyticsEmptyDashboard onAddTrade={() => navigate("/trades")} />
+        ) : (
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as MainTab)} className="w-full">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <TabsList className="grid h-auto w-full grid-cols-3 sm:max-w-[360px]">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="breakdowns">Breakdown</TabsTrigger>
+                <TabsTrigger value="calendar">Calendar</TabsTrigger>
+              </TabsList>
 
-            <div className="surface-muted flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-muted-foreground">
-              <span>{formatNumberDisplay(breakdowns.summary.totalTrades)} trades tracked</span>
-              <span className="hidden h-4 w-px bg-border/80 sm:block" />
-              <span>{formatCurrencyDisplay(breakdowns.summary.totalProfit)} net</span>
-            </div>
-          </div>
-
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="Total Trades" value={String(breakdowns.summary.totalTrades)} icon={Layers3} />
-              <StatCard label="Win Rate" value={formatPercentageDisplay(breakdowns.summary.winRate)} icon={TrendingUp} />
-              <StatCard label="Avg RR" value={`1:${formatNumberDisplay(breakdowns.summary.avgRR, { minimumFractionDigits: 2 })}`} icon={Radar} />
-              <StatCard
-                label="Net PnL"
-                value={formatCurrencyDisplay(breakdowns.summary.totalProfit)}
-                tone={breakdowns.summary.totalProfit > 0 ? "positive" : breakdowns.summary.totalProfit < 0 ? "negative" : "default"}
-                icon={Sparkles}
-              />
-            </div>
-
-            <div className="grid gap-6 xl:grid-cols-3">
-              <SectionCard className="h-full">
-                <SectionHeader title="Setup Performance" />
-                <div className="mt-4 space-y-3">
-                  {breakdowns.setupPerformance.slice(0, 6).map((row) => (
-                    <div key={row.key} className="surface-muted flex items-start justify-between gap-4 px-4 py-4">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
-                        </p>
-                      </div>
-                      <p className={cn("text-sm font-semibold", getProfitTone(row.profit))}>
-                        {formatCurrencyDisplay(row.profit)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
-
-              <SectionCard className="h-full">
-                <SectionHeader title="Session Performance" />
-                <div className="mt-4 space-y-3">
-                  {breakdowns.sessionPerformance.slice(0, 6).map((row) => (
-                    <div key={row.key} className="surface-muted flex items-start justify-between gap-4 px-4 py-4">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
-                        </p>
-                      </div>
-                      <p className={cn("text-sm font-semibold", getProfitTone(row.profit))}>
-                        {formatCurrencyDisplay(row.profit)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
-
-              <SectionCard className="h-full">
-                <SectionHeader title="Emotion Performance" />
-                <div className="mt-4 space-y-3">
-                  {breakdowns.emotionPerformance.slice(0, 6).map((row) => (
-                    <div key={row.key} className="surface-muted flex items-start justify-between gap-4 px-4 py-4">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{row.label}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatNumberDisplay(row.trades)} trades • {formatPercentageDisplay(row.winRate)} win rate
-                        </p>
-                      </div>
-                      <p className={cn("text-sm font-semibold", getProfitTone(row.profit))}>
-                        {formatCurrencyDisplay(row.profit)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="breakdowns" className="space-y-6">
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AnalyticsCard
-                title="Account Performance"
-                delay={0}
-                insights={buildGenericInsights(accountRows, "Best account", "Weakest account")}
-              >
-                {accountRows.length === 0 ? (
-                  <EmptyChartState />
-                ) : (
-                  <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={accountRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <defs>
-                          <filter id="account-glow" x="-30%" y="-30%" width="160%" height="160%">
-                            <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor={ACCENT_BAR} floodOpacity="0.45" />
-                          </filter>
-                        </defs>
-                        <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-                        <XAxis dataKey="shortLabel" tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCompactCurrencyDisplay(value)} />
-                        <ReferenceLine y={0} stroke={REFERENCE_LINE} />
-                        <Tooltip content={<BreakdownChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
-                        <Bar dataKey="profit" radius={[12, 12, 0, 0]} onClick={(data) => {
-                          setBreakdownDrawer({
-                            kind: "account",
-                            title: data.label,
-                            description: `Inspect the trades contributing to ${data.label}'s account performance.`,
-                            params: {
-                              accountId: data.accountId,
-                            },
-                          });
-                        }}>
-                          {accountRows.map((row, index) => (
-                            <Cell
-                              key={row.key}
-                              fill={row.profit >= 0 ? POSITIVE_BAR : NEGATIVE_BAR}
-                              filter={index === 0 && row.profit > 0 ? "url(#account-glow)" : undefined}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </AnalyticsCard>
-
-              <AnalyticsCard
-                title="Pair Performance"
-                delay={0.05}
-                insights={buildGenericInsights(pairRows, "Best pair", "Worst pair")}
-              >
-                {pairRows.length === 0 ? (
-                  <EmptyChartState />
-                ) : (
-                  <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={pairRows} layout="vertical" margin={{ top: 8, right: 12, left: 12, bottom: 0 }}>
-                        <CartesianGrid horizontal={false} stroke={GRID_STROKE} />
-                        <XAxis type="number" tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCompactCurrencyDisplay(value)} />
-                        <YAxis type="category" dataKey="label" tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} width={76} />
-                        <ReferenceLine x={0} stroke={REFERENCE_LINE} />
-                        <Tooltip content={<BreakdownChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
-                        <Bar dataKey="profit" radius={[0, 12, 12, 0]} onClick={(data) => {
-                          setBreakdownDrawer({
-                            kind: "pair",
-                            title: data.label,
-                            description: `Every ${data.label} trade included in your current analytics filter.`,
-                            params: {
-                              accountId,
-                              pair: data.label,
-                            },
-                          });
-                        }}>
-                          {pairRows.map((row) => (
-                            <Cell key={row.key} fill={row.profit >= 0 ? POSITIVE_BAR : NEGATIVE_BAR} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </AnalyticsCard>
-
-              <AnalyticsCard
-                title="Emotion Performance"
-                delay={0.1}
-                insights={[
-                  ...buildGenericInsights(emotionRows, "Best emotion", "Worst emotion").slice(0, 2),
-                  emotionRows.length > 0
-                    ? `${emotionRows[0].label} trades show ${formatPercentageDisplay(emotionRows[0].winRate)} win rate`
-                    : "Total trades: 0",
-                ]}
-              >
-                {emotionRows.length === 0 ? (
-                  <EmptyChartState />
-                ) : (
-                  <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={emotionRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-                        <XAxis dataKey="shortLabel" tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCompactCurrencyDisplay(value)} />
-                        <ReferenceLine y={0} stroke={REFERENCE_LINE} />
-                        <Tooltip content={<BreakdownChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
-                        <Bar dataKey="profit" radius={[12, 12, 0, 0]} onClick={(data) => {
-                          setBreakdownDrawer({
-                            kind: "emotion",
-                            title: data.label,
-                            description: `Trades tagged with ${data.label} so you can see whether this emotional state is helping or hurting.`,
-                            params: {
-                              accountId,
-                              emotion: data.label,
-                            },
-                          });
-                        }}>
-                          {emotionRows.map((row) => (
-                            <Cell key={row.key} fill={row.profit >= 0 ? POSITIVE_BAR : NEGATIVE_BAR} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </AnalyticsCard>
-
-              <AnalyticsCard
-                title="Session Performance"
-                delay={0.15}
-                insights={[
-                  sessionRows.length > 0
-                    ? `Best session: ${sessionRows[0].label} (${formatCurrencyDisplay(sessionRows[0].profit)})`
-                    : "No data yet. Start logging trades to unlock insights.",
-                  sessionRows.length > 0
-                    ? `${sessionRows[0].label} carries ${formatPercentageDisplay(sessionRows[0].winRate)} win rate`
-                    : "The chart structure is ready for your next sample size.",
-                  `Total trades: ${formatNumberDisplay(sessionRows.reduce((sum, row) => sum + row.trades, 0))}`,
-                ]}
-              >
-                {sessionRows.length === 0 ? (
-                  <EmptyChartState />
-                ) : (
-                  <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={sessionRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <defs>
-                          <filter id="session-glow" x="-40%" y="-40%" width="180%" height="180%">
-                            <feDropShadow dx="0" dy="0" stdDeviation="7" floodColor={ACCENT_BAR} floodOpacity="0.55" />
-                          </filter>
-                        </defs>
-                        <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-                        <XAxis dataKey="shortLabel" tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCompactCurrencyDisplay(value)} />
-                        <ReferenceLine y={0} stroke={REFERENCE_LINE} />
-                        <Tooltip content={<BreakdownChartTooltip />} cursor={{ fill: CURSOR_FILL }} />
-                        <Bar dataKey="profit" radius={[12, 12, 0, 0]} onClick={(data) => {
-                          setBreakdownDrawer({
-                            kind: "session",
-                            title: data.label,
-                            description: `Trades taken during the ${data.label} session for deeper pattern review.`,
-                            params: {
-                              accountId,
-                              session: data.label,
-                            },
-                          });
-                        }}>
-                          {sessionRows.map((row) => (
-                            <Cell
-                              key={row.key}
-                              fill={row.label === bestSession ? ACCENT_BAR : row.profit >= 0 ? POSITIVE_BAR : NEGATIVE_BAR}
-                              filter={row.label === bestSession ? "url(#session-glow)" : undefined}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </AnalyticsCard>
-
-              <AnalyticsCard
-                title="Outcome Split"
-                delay={0.2}
-                insights={[
-                  dominantOutcome
-                    ? `Dominant outcome: ${dominantOutcome.name} (${formatPercentageDisplay(dominantOutcome.percentage)})`
-                    : "No data yet. Start logging trades to unlock insights.",
-                  `Win rate: ${formatPercentageDisplay(breakdowns.summary.winRate)}`,
-                  `Total trades: ${formatNumberDisplay(breakdowns.summary.totalTrades)}`,
-                ]}
-              >
-                {outcomeRows.length === 0 ? (
-                  <EmptyChartState variant="donut" />
-                ) : (
-                  <div className="flex h-[280px] flex-col items-center justify-center">
-                    <div className="h-[220px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Tooltip content={<BreakdownChartTooltip mode="outcome" />} />
-                          <Pie
-                            data={outcomeRows}
-                            dataKey="value"
-                            nameKey="name"
-                            innerRadius={68}
-                            outerRadius={94}
-                            paddingAngle={4}
-                            stroke={DONUT_STROKE}
-                            strokeWidth={6}
-                            onClick={(data) => {
-                              setBreakdownDrawer({
-                                kind: "outcome",
-                                title: data.name,
-                                description: `Trades ending as ${data.name.toLowerCase()} under the current analytics filter.`,
-                                params: {
-                                  accountId,
-                                  result: getOutcomeResult(data.name),
-                                },
-                              });
-                            }}
-                          >
-                            {outcomeRows.map((entry) => (
-                              <Cell key={entry.key} fill={entry.fill} />
-                            ))}
-                          </Pie>
-                          <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" fill={DONUT_VALUE_FILL} fontSize="28" fontWeight="600">
-                            {formatPercentageDisplay(breakdowns.summary.winRate)}
-                          </text>
-                          <text x="50%" y="59%" textAnchor="middle" dominantBaseline="middle" fill={DONUT_LABEL_FILL} fontSize="12">
-                            Win rate
-                          </text>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-400">
-                      Total trades: {formatNumberDisplay(breakdowns.summary.totalTrades)}
-                    </p>
-                  </div>
-                )}
-              </AnalyticsCard>
-
-              <AnalyticsCard
-                title="Risk / Reward Distribution"
-                delay={0.25}
-                insights={[
-                  mostCommonRiskBucket
-                    ? `Most common bucket: ${mostCommonRiskBucket.label} (${formatNumberDisplay(mostCommonRiskBucket.trades)} trades)`
-                    : "No data yet.",
-                  `Average planned RR: 1:${formatNumberDisplay(averageRR, { minimumFractionDigits: 2 })}`,
-                  `Sample size: ${formatNumberDisplay(allDetailedTrades.length)} trades`,
-                ]}
-              >
-                {riskDistribution.every((bucket) => bucket.trades === 0) ? (
-                  <EmptyChartState />
-                ) : (
-                  <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={riskDistribution} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-                        <XAxis dataKey="label" tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: AXIS_TEXT, fontSize: 12 }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<BreakdownChartTooltip mode="distribution" />} cursor={{ fill: CURSOR_FILL }} />
-                        <Bar dataKey="trades" radius={[12, 12, 0, 0]} fill={ACCENT_BAR} onClick={(data) => {
-                          const filteredTrades = allDetailedTrades.filter((trade) => {
-                            const rr = calculatePlannedRR(trade);
-
-                            if (data.key === "under-1") return rr < 1;
-                            if (data.key === "one-to-two") return rr >= 1 && rr < 2;
-                            if (data.key === "two-to-three") return rr >= 2 && rr < 3;
-                            return rr >= 3;
-                          });
-
-                          setBreakdownDrawer({
-                            kind: "risk",
-                            title: data.label,
-                            description: `Trades whose planned reward-to-risk falls into the ${data.label} bucket.`,
-                            trades: filteredTrades,
-                          });
-                        }}>
-                          {riskDistribution.map((bucket, index) => (
-                            <Cell key={bucket.key} fill={index === 0 ? NEUTRAL_BAR : ACCENT_BAR} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </AnalyticsCard>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="calendar" className="space-y-6">
-            <SectionCard>
-              <SectionHeader
-                title={calendar.monthLabel}
-                action={(
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => setCurrentMonth(shiftMonthKey(normalizedCurrentMonth, -1))}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => setCurrentMonth(shiftMonthKey(normalizedCurrentMonth, 1))}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              />
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                  <div className="surface-muted px-4 py-4">
-                    <p className="text-label mb-2">Month PnL</p>
-                  <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", getProfitTone(calendar.summary.totalProfit))}>
-                      {formatCurrencyDisplay(calendar.summary.totalProfit)}
-                    </p>
-                  </div>
-                  <div className="surface-muted px-4 py-4">
-                    <p className="text-label mb-2">Trades</p>
-                  <p className="text-2xl font-semibold text-foreground">{formatNumberDisplay(calendar.summary.totalTrades)}</p>
-                </div>
-                <div className="surface-muted px-4 py-4">
-                  <p className="text-label mb-2">Win Rate</p>
-                  <p className="text-2xl font-semibold text-foreground">{formatPercentageDisplay(calendar.summary.winRate)}</p>
-                </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span>{formatNumberDisplay(effectiveSummary.totalTrades)} trades tracked</span>
+                <span className="hidden h-4 w-px bg-border/80 sm:block" />
+                <span>{formatCurrencyDisplay(effectiveSummary.totalProfit)} net</span>
               </div>
-            </SectionCard>
+            </div>
 
-            <SectionCard className="overflow-hidden">
-              <div className="mb-4 grid grid-cols-7 gap-2 pr-0 text-center text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground lg:pr-[220px]">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                  <div key={day}>{day}</div>
-                ))}
-              </div>
+            <TabsContent value="overview" className="space-y-6">
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.38fr)_minmax(320px,0.62fr)]">
+                <SectionCard className="overflow-hidden border-border/60 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.12),transparent_34%),linear-gradient(180deg,hsl(var(--card)),hsl(var(--card)))] p-0">
+                  <div className="border-b border-border/50 px-5 py-5 sm:px-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Net PnL</p>
+                        <p className={cn("mt-3 font-mono-price text-4xl font-semibold sm:text-5xl", getProfitTone(effectiveSummary.totalProfit))}>
+                          {formatCurrencyDisplay(effectiveSummary.totalProfit)}
+                        </p>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground dark:bg-white/[0.03]">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        {effectiveSummary.totalProfit > 0 ? "Positive expectancy" : effectiveSummary.totalProfit < 0 ? "Needs recovery" : "Flat performance"}
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="space-y-3">
-                {calendar.weeks.map((week, index) => (
-                  <div key={week.key ?? index} className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-stretch">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-                      {week.days.map((day) => (
-                        <CalendarCell
-                          key={day.key}
-                          day={day}
-                          selected={selectedDayKey === day.key}
-                          onClick={() => setSelectedDayKey(day.key)}
-                        />
+                  <div className="grid gap-3 border-b border-border/50 px-5 py-5 sm:grid-cols-3 sm:px-6">
+                    <OverviewMetric label="Win Rate" value={formatPercentageDisplay(effectiveSummary.winRate)} />
+                    <OverviewMetric label="Avg RR" value={`1:${formatNumberDisplay(averageRR, { minimumFractionDigits: 2 })}`} />
+                    <OverviewMetric label="Trades" value={formatNumberDisplay(effectiveSummary.totalTrades)} />
+                  </div>
+
+                  <div className="px-2 pb-3 pt-4 sm:px-4">
+                    {detailedTradesQuery.isLoading && trendPoints.length === 0 ? (
+                      <div className="h-[320px] animate-pulse rounded-3xl bg-muted/45" />
+                    ) : trendPoints.length === 0 ? (
+                      <EmptyChartState message={trendEmptyMessage} />
+                    ) : (
+                      <div className="h-[320px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={trendPoints} margin={{ top: 16, right: 8, left: 8, bottom: 8 }}>
+                            <defs>
+                              <linearGradient id="analytics-pnl-area" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={ACCENT_LINE} stopOpacity={0.28} />
+                                <stop offset="95%" stopColor={ACCENT_LINE} stopOpacity={0.02} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} stroke={GRID_STROKE} />
+                            <XAxis
+                              dataKey="shortDate"
+                              tick={{ fill: AXIS_TEXT, fontSize: 12 }}
+                              axisLine={false}
+                              tickLine={false}
+                              minTickGap={28}
+                            />
+                            <YAxis
+                              tick={{ fill: AXIS_TEXT, fontSize: 12 }}
+                              axisLine={false}
+                              tickLine={false}
+                              tickFormatter={(value) => formatCompactCurrencyDisplay(value)}
+                            />
+                            <ReferenceLine y={0} stroke={REFERENCE_LINE} />
+                            <Tooltip content={<TrendTooltip />} cursor={{ fill: CURSOR_FILL }} />
+                            <Area
+                              type="monotone"
+                              dataKey="cumulativeProfit"
+                              stroke={ACCENT_LINE}
+                              strokeWidth={3}
+                              fill="url(#analytics-pnl-area)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                </SectionCard>
+
+                <div className="space-y-6">
+                  <SectionCard className="border-border/60">
+                    <SectionHeader title="Performance Score" />
+
+                    <div className="mt-5 space-y-5">
+                      <div className="flex items-end justify-between gap-4">
+                        <div>
+                          <p className="text-4xl font-semibold text-foreground">{formatNumberDisplay(performanceScore.score)}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">out of 100</p>
+                        </div>
+                        <div className="text-right text-sm text-muted-foreground">
+                          <p>Max drawdown</p>
+                          <p className="mt-1 font-medium text-foreground">{formatCurrencyDisplay(performanceScore.maxDrawdown, { showPlus: false })}</p>
+                        </div>
+                      </div>
+
+                      <Progress value={performanceScore.score} className="h-2.5 bg-muted" />
+
+                      <div className="grid gap-3">
+                        {performanceScore.factors.map((factor) => (
+                          <div key={factor.label} className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">{factor.label}</span>
+                            <span className="font-medium text-foreground">{formatNumberDisplay(factor.value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard className="border-border/60">
+                    <SectionHeader title="Quick Insights" />
+
+                    <ul className="mt-5 grid gap-3">
+                      {quickInsights.map((insight) => (
+                        <li key={insight} className="flex items-start gap-3 rounded-2xl bg-muted/45 px-4 py-3 text-sm leading-6 text-foreground dark:bg-white/[0.03]">
+                          <span className="mt-2 h-2 w-2 rounded-full bg-primary/70" />
+                          <span>{insight}</span>
+                        </li>
                       ))}
-                    </div>
-
-                    <div className="surface-muted flex flex-col justify-between px-4 py-4">
-                      <div>
-                        <p className="text-label mb-2">Weekly Summary</p>
-                        <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", getProfitTone(week.summary.totalProfit))}>
-                          {formatCurrencyDisplay(week.summary.totalProfit)}
-                        </p>
-                      </div>
-                      <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-                        <p>{formatPercentageDisplay(week.summary.winRate)} win rate</p>
-                        <p>{formatNumberDisplay(week.summary.tradeCount)} trades</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    </ul>
+                  </SectionCard>
+                </div>
               </div>
+            </TabsContent>
 
-              {calendar.weeks.length === 0 ? (
-                <div className="mt-6">
+            <TabsContent value="breakdowns" className="space-y-6">
+              <Tabs value={activeBreakdownTab} onValueChange={(value) => setActiveBreakdownTab(value as BreakdownTab)} className="space-y-6">
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-2 sm:max-w-[520px] sm:grid-cols-4">
+                  {breakdownDefinitions.map((definition) => (
+                    <TabsTrigger key={definition.key} value={definition.key}>
+                      {definition.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {breakdownDefinitions.map((definition) => (
+                  <TabsContent key={definition.key} value={definition.key} className="space-y-6">
+                    <BreakdownPanel
+                      kind={definition.kind}
+                      title={definition.label}
+                      description={definition.description}
+                      rows={definition.rows}
+                      loading={detailedTradesQuery.isLoading}
+                      onInspect={(row) => openBreakdownSlice(definition, row)}
+                    />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </TabsContent>
+
+            <TabsContent value="calendar" className="space-y-6">
+              <SectionCard className="border-border/50">
+                <SectionHeader
+                  title={calendar.monthLabel}
+                  action={(
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="icon" onClick={() => setCurrentMonth(shiftMonthKey(normalizedCurrentMonth, -1))}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="icon" onClick={() => setCurrentMonth(shiftMonthKey(normalizedCurrentMonth, 1))}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                />
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                  <OverviewMetric label="PnL" value={formatCurrencyDisplay(calendar.summary.totalProfit)} />
+                  <OverviewMetric label="Trades" value={formatNumberDisplay(calendar.summary.totalTrades)} />
+                  <OverviewMetric label="Win Rate" value={formatPercentageDisplay(calendar.summary.winRate)} />
+                </div>
+              </SectionCard>
+
+              <SectionCard className="overflow-hidden border-border/50">
+                <div className="mb-4 grid grid-cols-7 gap-2 pr-0 text-center text-[11px] font-medium text-muted-foreground lg:pr-[180px]">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                    <div key={day}>{day}</div>
+                  ))}
+                </div>
+
+                {calendar.weeks.length === 0 ? (
                   <EmptyState
                     icon={BarChart3}
-                    title="No data yet"
-                    description="Log trades to populate the calendar."
+                    title="No trades"
+                    description="Try another month."
                   />
-                </div>
-              ) : null}
+                ) : (
+                  <div className="space-y-3">
+                    {calendar.weeks.map((week, index) => (
+                      <div key={week.key ?? index} className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-start">
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+                          {week.days.map((day) => (
+                            <CalendarCell
+                              key={day.key}
+                              day={day}
+                              selected={selectedDayKey === day.key}
+                              onClick={() => setSelectedDayKey(day.key)}
+                            />
+                          ))}
+                        </div>
 
-              <div className="mt-6 flex flex-wrap gap-2">
-                <DataBadge tone="success">Green = profitable day</DataBadge>
-                <DataBadge tone="danger">Red = losing day</DataBadge>
-                <DataBadge>Neutral = no trades</DataBadge>
-              </div>
-            </SectionCard>
-          </TabsContent>
-        </Tabs>
+                        <div className="rounded-2xl border border-border/40 bg-background/60 px-4 py-3 dark:border-white/8 dark:bg-white/[0.03]">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[11px] font-medium text-muted-foreground">Week</p>
+                            <p className="text-[11px] text-muted-foreground">{formatNumberDisplay(week.summary.tradeCount)} trades</p>
+                          </div>
+                          <p className={cn("mt-3 font-mono-price numeric-safe max-w-full text-lg font-semibold", getProfitTone(week.summary.totalProfit))}>
+                            {formatCurrencyDisplay(week.summary.totalProfit)}
+                          </p>
+                          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                            <span>Win</span>
+                            <span>{formatPercentageDisplay(week.summary.winRate)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </SectionCard>
+            </TabsContent>
+          </Tabs>
+        )}
       </PageShell>
 
       <TradingDayDrawer
@@ -891,8 +1168,8 @@ export default function Analytics() {
         title={breakdownDrawer?.title ?? ""}
         description={breakdownDrawer?.description ?? ""}
         stats={drawerStats}
-        trades={drawerTrades}
-        loading={breakdownDrawerQuery.isLoading}
+        trades={breakdownDrawer?.trades ?? []}
+        loading={false}
         onClose={() => setBreakdownDrawer(null)}
         onTradeClick={(tradeId) => navigate(`/trades/${tradeId}`)}
         onViewAllTrades={() => navigate("/trades")}
