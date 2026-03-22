@@ -166,13 +166,13 @@ npm install --include=dev && npm run prisma:generate && npm run build
 This ensures build-time packages like TypeScript and `@types/node` are available even when `NODE_ENV=production`.
 ## Production notes
 
-- Set `VITE_API_BASE_URL` to the public API origin used by the frontend, for example `https://api.example.com`.
+- Set `VITE_API_BASE_URL` to the public API origin used by the frontend, for example `https://api.izledger.xyz`.
 - Set `NODE_ENV=production` on the API.
-- Set `FRONTEND_URL` to the deployed frontend origin, for example `https://app.example.com`.
+- Set `FRONTEND_URL` to the deployed frontend origin, for example `https://izledger.xyz`.
 - On Render, keep runtime boot clean with `npm run start:server` and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
 - If your Postgres provider offers pooled and direct URLs, use the pooled URL in `DATABASE_URL` and the direct URL in `DIRECT_URL`.
 - Set `SESSION_COOKIE_SECURE=true` in production.
-- For sibling subdomains like `app.example.com` and `api.example.com`, start with `SESSION_COOKIE_SAME_SITE=lax` and leave `SESSION_COOKIE_DOMAIN` blank unless you intentionally need a wider cookie scope.
+- For the current production layout of `https://izledger.xyz` talking to `https://api.izledger.xyz`, set `SESSION_COOKIE_SAME_SITE=none`, keep `SESSION_COOKIE_SECURE=true`, and leave `SESSION_COOKIE_DOMAIN` blank unless you intentionally need a wider cookie scope such as `.izledger.xyz`.
 - If screenshot storage is not ready yet, keep `STORAGE_ENABLED=false`.
 - Cloudflare can be added later for R2 or DNS/CDN, but the API should stay on Render for phase 1.
 

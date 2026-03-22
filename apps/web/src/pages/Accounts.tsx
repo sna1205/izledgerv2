@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { ApiError } from "@/services/api/client";
 import { createAccount, deleteAccount, listAccounts, updateAccount } from "@/services/api/accounts";
 import { getAnalyticsBreakdowns } from "@/services/api/analytics";
@@ -205,6 +206,8 @@ export default function Accounts() {
   const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
   const totalPnl = breakdownsQuery.data?.summary.totalProfit ?? 0;
 
+  useUnauthorizedSessionGuard(accountsQuery.error, breakdownsQuery.error);
+
   const openCreateModal = () => {
     setEditingAccount(null);
     setForm(emptyForm);
@@ -239,7 +242,7 @@ export default function Accounts() {
     const errorState = getPageErrorState(accountsQuery.error, {
       unavailableTitle: "Accounts unavailable",
       unavailableDescription: "The accounts service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view accounts right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Accounts request invalid",
       validationDescription: "The accounts request could not be processed.",
       timeoutTitle: "Accounts request timed out",

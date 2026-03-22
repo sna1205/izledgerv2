@@ -15,19 +15,35 @@ import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
 
+function normalizeOrigin(origin: string) {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return null;
+  }
+}
+
 function isAllowedCorsOrigin(origin?: string) {
   if (!origin) {
     return true;
   }
 
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  if (!normalizedOrigin) {
+    return false;
+  }
+
   try {
-    const requestOrigin = new URL(origin);
+    const requestOrigin = new URL(normalizedOrigin);
 
     if (env.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(requestOrigin.hostname)) {
       return true;
     }
 
-    return Boolean(env.FRONTEND_URL && origin === env.FRONTEND_URL);
+    const allowedOrigin = env.FRONTEND_URL ? normalizeOrigin(env.FRONTEND_URL) : null;
+
+    return Boolean(allowedOrigin && normalizedOrigin === allowedOrigin);
   } catch {
     return false;
   }
@@ -56,7 +72,13 @@ export async function buildApp() {
 
   await app.register(cors, {
     origin: (origin, callback) => {
-      callback(null, isAllowedCorsOrigin(origin));
+      const allowed = isAllowedCorsOrigin(origin);
+
+      if (!allowed && origin) {
+        app.log.warn({ origin }, "Blocked request from disallowed CORS origin.");
+      }
+
+      callback(null, allowed);
     },
     credentials: true,
   });

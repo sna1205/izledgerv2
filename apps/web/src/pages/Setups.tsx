@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { ApiError } from "@/services/api/client";
 import { createSetup, deleteSetup, listSetups, updateSetup } from "@/services/api/setups";
 import { formatNumberDisplay } from "@/utils/analytics-rendering";
@@ -158,6 +159,8 @@ export default function Setups() {
     },
   });
 
+  useUnauthorizedSessionGuard(setupsQuery.error);
+
   const openCreateModal = () => {
     setEditingSetup(null);
     setForm(createEmptyForm(buildUniqueFormColor(setups)));
@@ -189,7 +192,7 @@ export default function Setups() {
     const errorState = getPageErrorState(setupsQuery.error, {
       unavailableTitle: "Setups unavailable",
       unavailableDescription: "The setups service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view setups right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Setups request invalid",
       validationDescription: "The setup filters in this request are invalid.",
       timeoutTitle: "Setups request timed out",

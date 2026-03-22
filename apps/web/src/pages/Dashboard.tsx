@@ -33,6 +33,7 @@ import {
   normalizeDashboardSummaryResponse,
 } from "@/utils/analytics-rendering";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { withMinimumDelay } from "@/utils/loading";
 import { getPageErrorState } from "@/utils/page-errors";
 import { privateQueryKey } from "@/services/query-client";
@@ -86,6 +87,8 @@ export default function Dashboard() {
     ),
   });
 
+  useUnauthorizedSessionGuard(accountsQuery.error, summaryQuery.error);
+
   const equityCurve = useMemo(() => summaryQuery.data?.equityCurve ?? [], [summaryQuery.data?.equityCurve]);
   const equityRange = useMemo(() => {
     if (equityCurve.length === 0) {
@@ -115,7 +118,7 @@ export default function Dashboard() {
     const errorState = getPageErrorState(summaryQuery.error, {
       unavailableTitle: "Dashboard unavailable",
       unavailableDescription: "The dashboard service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to load the dashboard right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Dashboard request invalid",
       validationDescription: "The dashboard request could not be processed.",
       timeoutTitle: "Dashboard request timed out",

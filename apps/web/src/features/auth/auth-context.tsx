@@ -24,6 +24,8 @@ type SessionState = "loading" | "authenticated" | "anonymous" | "session-expired
 
 const LEGACY_AUTH_STORAGE_KEY = "izledger-auth-user";
 const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
+const SESSION_CHECK_MAX_ATTEMPTS = 2;
+const SESSION_CHECK_RETRY_DELAY_MS = 400;
 const INVALID_CREDENTIALS_MESSAGE = "Incorrect username or password.";
 type ApiValidationDetail = {
   field?: unknown;
@@ -175,6 +177,34 @@ function clearLegacyStoredUser() {
   return hadStoredUser;
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
+
+async function getSessionUserWithRetry() {
+  for (let attempt = 1; attempt <= SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await withMinimumDelay(() => getSessionUser());
+    } catch (error) {
+      const isLastAttempt = attempt >= SESSION_CHECK_MAX_ATTEMPTS;
+
+      if (error instanceof ApiError && error.status === 401) {
+        throw error;
+      }
+
+      if (!isTemporarySessionFailure(error) || isLastAttempt) {
+        throw error;
+      }
+
+      await delay(SESSION_CHECK_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  throw new Error("Session bootstrap exhausted all retry attempts.");
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -219,7 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const hadKnownUser = Boolean(userRef.current) || hadLegacyStoredUser;
 
     try {
-      const response = await withMinimumDelay(() => getSessionUser());
+      const response = await getSessionUserWithRetry();
       await syncAuthenticatedUser(response.user);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {

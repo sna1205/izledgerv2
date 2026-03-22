@@ -235,7 +235,7 @@ describe("TradeDetail", () => {
     renderTradeDetail("private-trade");
 
     await screen.findByText("Trade access denied");
-    expect(screen.getByText("You are not allowed to view this trade right now.")).toBeInTheDocument();
+    expect(screen.getByText("Your session expired or could not be verified. Redirecting to login.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /back to trades/i })).toBeInTheDocument();
   });
 

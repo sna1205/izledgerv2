@@ -1,7 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { env } from "../../config/env.js";
 import { authenticate } from "../../middleware/auth.js";
-import { clearSessionCookie, invalidateSessionByToken, setSessionCookie } from "../../lib/session.js";
+import {
+  clearSessionCookie,
+  getSessionCookieLogContext,
+  invalidateSessionByToken,
+  setSessionCookie,
+} from "../../lib/session.js";
 import { parseOrThrow } from "../../utils/http.js";
 import { changePasswordSchema, credentialsSchema } from "./schemas.js";
 import { changePassword, loginUser, registerUser } from "./service.js";
@@ -25,6 +30,11 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       setSessionCookie(reply, result.session.rawToken);
+      request.log.info({
+        userId: result.user.id,
+        sessionId: result.session.session.id,
+        cookie: getSessionCookieLogContext(),
+      }, "Issued session cookie after user registration.");
       reply.status(201).send({
         user: result.user,
       });
@@ -44,6 +54,11 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       setSessionCookie(reply, result.session.rawToken);
+      request.log.info({
+        userId: result.user.id,
+        sessionId: result.session.session.id,
+        cookie: getSessionCookieLogContext(),
+      }, "Issued session cookie after user login.");
       reply.send({
         user: result.user,
       });
@@ -58,6 +73,10 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     clearSessionCookie(reply);
+    request.log.info({
+      hadSessionCookie: Boolean(rawToken),
+      cookieName: env.SESSION_COOKIE_NAME,
+    }, "Cleared session cookie during logout.");
     reply.status(204).send();
   });
 
@@ -84,6 +103,11 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       setSessionCookie(reply, result.session.rawToken);
+      request.log.info({
+        userId: result.user.id,
+        sessionId: result.session.session.id,
+        cookie: getSessionCookieLogContext(),
+      }, "Rotated session cookie after password change.");
       reply.send({
         user: result.user,
       });

@@ -49,6 +49,7 @@ import { createTrade, deleteTrade, listTrades, updateTrade } from "@/services/ap
 import { resolveAccountFilter, useAccountFilter } from "@/utils/account-filter";
 import { formatCurrencyDisplay, formatNumberDisplay } from "@/utils/analytics-rendering";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { withMinimumDelay } from "@/utils/loading";
 import { getPageErrorState } from "@/utils/page-errors";
 import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/services/query-client";
@@ -270,6 +271,8 @@ export default function Trades() {
   const hasError = [accountsQuery, setupsQuery, tradesQuery].some((query) => query.isError);
   const journalError = [accountsQuery, setupsQuery, tradesQuery].find((query) => query.isError)?.error;
 
+  useUnauthorizedSessionGuard(accountsQuery.error, setupsQuery.error, tradesQuery.error);
+
   if (isLoading) {
     return <TradesSkeleton />;
   }
@@ -278,7 +281,7 @@ export default function Trades() {
     const errorState = getPageErrorState(journalError, {
       unavailableTitle: "Trades unavailable",
       unavailableDescription: "The trading journal is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view this trading journal right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Trade request invalid",
       validationDescription: "The trade filters in this request are invalid.",
       timeoutTitle: "Trades request timed out",

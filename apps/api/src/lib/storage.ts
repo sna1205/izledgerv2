@@ -7,6 +7,23 @@ export function isStorageEnabled() {
   return env.STORAGE_ENABLED;
 }
 
+export function normalizeStorageEndpoint(endpoint: string | undefined, bucket = env.STORAGE_BUCKET) {
+  if (!endpoint) {
+    return endpoint;
+  }
+
+  const normalizedEndpoint = new URL(endpoint);
+  const trimmedPath = normalizedEndpoint.pathname.replace(/\/+$/, "");
+
+  // Some S3-compatible dashboards show endpoints with the bucket appended.
+  // The S3 client adds the bucket itself, so strip that duplicate segment.
+  if (bucket && trimmedPath === `/${bucket}`) {
+    normalizedEndpoint.pathname = "/";
+  }
+
+  return normalizedEndpoint.toString().replace(/\/$/, "");
+}
+
 function getStorageClient() {
   if (!env.STORAGE_ENABLED) {
     throw new AppError(503, "STORAGE_DISABLED", "Screenshot storage is disabled.");
@@ -14,7 +31,7 @@ function getStorageClient() {
 
   return new S3Client({
     region: env.STORAGE_REGION,
-    endpoint: env.STORAGE_ENDPOINT,
+    endpoint: normalizeStorageEndpoint(env.STORAGE_ENDPOINT),
     forcePathStyle: env.STORAGE_FORCE_PATH_STYLE,
     credentials: {
       accessKeyId: env.STORAGE_ACCESS_KEY!,
@@ -160,5 +177,5 @@ export function storageObjectUrl(key: string) {
     return `${env.STORAGE_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`;
   }
 
-  return `${env.STORAGE_ENDPOINT!.replace(/\/$/, "")}/${env.STORAGE_BUCKET}/${key}`;
+  return `${normalizeStorageEndpoint(env.STORAGE_ENDPOINT)!}/${env.STORAGE_BUCKET}/${key}`;
 }

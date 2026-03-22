@@ -25,6 +25,7 @@ import { createReview, listReviews, updateReview } from "@/services/api/reviews"
 import { listSetups } from "@/services/api/setups";
 import { deleteTrade, getTrade, updateTrade } from "@/services/api/trades";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { withMinimumDelay } from "@/utils/loading";
 import { getPageErrorState } from "@/utils/page-errors";
 import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/services/query-client";
@@ -318,6 +319,8 @@ export default function TradeDetail() {
   const isTradeLoading = tradeQuery.isLoading && !trade;
   const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
 
+  useUnauthorizedSessionGuard(tradeQuery.error, reviewQuery.error, accountsQuery.error, setupsQuery.error);
+
   if (isTradeLoading) {
     return <TradeDetailSkeleton />;
   }
@@ -327,7 +330,7 @@ export default function TradeDetail() {
       unavailableTitle: "Trade unavailable",
       unavailableDescription: "This trade could not be loaded right now. Please try again in a moment.",
       unauthorizedTitle: "Trade access denied",
-      unauthorizedDescription: "You are not allowed to view this trade right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       notFoundTitle: "Trade not found",
       notFoundDescription: "This trade does not exist or may have been deleted.",
       validationTitle: "Invalid trade link",

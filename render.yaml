@@ -20,7 +20,7 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: SESSION_COOKIE_SAME_SITE
-        value: lax
+        value: none
       - key: SESSION_COOKIE_SECURE
         value: true
       - key: SESSION_COOKIE_DOMAIN

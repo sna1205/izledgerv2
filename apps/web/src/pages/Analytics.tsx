@@ -66,6 +66,7 @@ import {
   type NormalizedBreakdownRow,
 } from "@/utils/analytics-rendering";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { withMinimumDelay } from "@/utils/loading";
 import { getPageErrorState } from "@/utils/page-errors";
 import { privateQueryKey } from "@/services/query-client";
@@ -756,6 +757,14 @@ export default function Analytics() {
   const dayTrades = dayTradesQuery.data ?? EMPTY_TRADES;
   const allDetailedTrades = detailedTradesQuery.data ?? EMPTY_TRADES;
 
+  useUnauthorizedSessionGuard(
+    accountsQuery.error,
+    breakdownsQuery.error,
+    calendarQuery.error,
+    detailedTradesQuery.error,
+    dayTradesQuery.error,
+  );
+
   const dayStats = useMemo(() => {
     const bestTrade = dayTrades.reduce<Trade | null>((best, trade) => (best === null || trade.profit > best.profit ? trade : best), null);
     const worstTrade = dayTrades.reduce<Trade | null>((worst, trade) => (worst === null || trade.profit < worst.profit ? trade : worst), null);
@@ -791,7 +800,7 @@ export default function Analytics() {
     const pageError = getPageErrorState(breakdownsQuery.error ?? calendarQuery.error, {
       unavailableTitle: "Analytics unavailable",
       unavailableDescription: "The analytics service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view analytics right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Analytics request invalid",
       validationDescription: "The analytics filters or month selection are invalid.",
       timeoutTitle: "Analytics request timed out",

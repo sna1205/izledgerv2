@@ -107,7 +107,8 @@ npm run dev
 - New users no longer receive seeded starter data.
 - Screenshots are stored in S3-compatible object storage when enabled.
 - Session auth is cookie-based and intended for the companion SPA frontend.
-- Use `FRONTEND_URL` for the deployed frontend origin in production.
+- Use `FRONTEND_URL` for the deployed frontend origin in production, such as `https://izledger.xyz`.
+- For `https://izledger.xyz` calling `https://api.izledger.xyz`, use `SESSION_COOKIE_SAME_SITE=none` with `SESSION_COOKIE_SECURE=true`.
 - Use `STORAGE_ENABLED=false` if screenshot storage is not configured yet.
 - Render deploys should run `npm run release:migrate` in a pre-deploy step and keep runtime start on `npm run start:server`.
 - `npm test` now boots a dedicated clean Postgres test volume before running the API suite.

@@ -36,6 +36,7 @@ describe("apiFetch", () => {
 
     expect(headers.get("Authorization")).toBe("Bearer token");
     expect(headers.has("Content-Type")).toBe(false);
+    expect(init.credentials).toBe("include");
   });
 
   it("attaches a JSON content type when a JSON body exists", async () => {
@@ -119,5 +120,22 @@ describe("apiFetch", () => {
     ) as typeof fetch;
 
     await expect(apiFetch<void>("/reviews/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
+
+  it("always includes cookies on API requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }),
+    );
+    global.fetch = fetchMock as typeof fetch;
+
+    await apiFetch<{ ok: boolean }>("/auth/me");
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe("include");
   });
 });

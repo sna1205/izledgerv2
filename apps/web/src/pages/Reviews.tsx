@@ -29,6 +29,7 @@ import { TagChip } from "@/components/ui/TagChip";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { ApiError } from "@/services/api/client";
 import { createReview, listReviews, type ListReviewsParams, updateReview } from "@/services/api/reviews";
 import { getTrade } from "@/services/api/trades";
@@ -665,6 +666,8 @@ export default function Reviews() {
   const isInitialLoading = !dailyReviewsQuery.data && !weeklyReviewsQuery.data && !tradeReviewsQuery.data
     && (dailyReviewsQuery.isLoading || weeklyReviewsQuery.isLoading || tradeReviewsQuery.isLoading);
 
+  useUnauthorizedSessionGuard(dailyReviewsQuery.error, weeklyReviewsQuery.error, tradeReviewsQuery.error);
+
   if (isInitialLoading) {
     return <ReviewsSkeleton />;
   }
@@ -673,7 +676,7 @@ export default function Reviews() {
     const errorState = getPageErrorState(dailyReviewsQuery.error ?? weeklyReviewsQuery.error ?? tradeReviewsQuery.error, {
       unavailableTitle: "Reviews unavailable",
       unavailableDescription: "The reviews service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view reviews right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Reviews request invalid",
       validationDescription: "The review filters in this request are invalid.",
       timeoutTitle: "Reviews request timed out",

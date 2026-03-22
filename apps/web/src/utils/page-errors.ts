@@ -99,7 +99,7 @@ export function getPageErrorState(error: unknown, config: PageErrorConfig): Page
       title: config.unauthorizedTitle ?? config.unavailableTitle,
       description:
         config.unauthorizedDescription ??
-        "You are not authorized to view this page right now.",
+        "Your session expired or could not be verified. Please log in again.",
       allowRetry: false,
     };
   }

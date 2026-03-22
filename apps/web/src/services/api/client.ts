@@ -6,6 +6,7 @@ const REQUEST_TIMEOUT_CODE = "REQUEST_TIMEOUT";
 const REQUEST_ABORTED_CODE = "REQUEST_ABORTED";
 const HTTP_ERROR_CODE = "HTTP_ERROR";
 const INVALID_RESPONSE_CODE = "INVALID_RESPONSE";
+const API_REQUEST_CREDENTIALS: RequestCredentials = "include";
 
 export class ApiError extends Error {
   status: number;
@@ -158,7 +159,7 @@ export async function apiFetch<T>(input: string, init?: ApiRequestInit): Promise
   try {
     response = await fetch(buildUrl(input), {
       ...requestInit,
-      credentials: "include",
+      credentials: API_REQUEST_CREDENTIALS,
       headers: buildHeaders(init),
       signal: requestAbort.signal,
     });
