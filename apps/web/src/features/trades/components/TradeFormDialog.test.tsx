@@ -24,13 +24,16 @@ vi.mock("./InstrumentSelect", () => ({
 vi.mock("@/features/screenshots/components/ScreenshotUpload", () => ({
   ScreenshotUpload: ({
     tradeId,
+    draftFiles,
     onDraftFilesChange,
   }: {
     tradeId?: string;
+    draftFiles?: File[];
     onDraftFilesChange?: (files: File[]) => void;
   }) => (
     <div>
       <span>{tradeId ? "saved-screenshots" : "draft-screenshots"}</span>
+      <span>{`draft-count:${draftFiles?.length ?? 0}`}</span>
       {onDraftFilesChange ? (
         <button
           type="button"
@@ -351,6 +354,51 @@ describe("TradeFormDialog", () => {
         file: expect.any(File),
         sortOrder: 0,
       });
+    });
+  });
+
+  it("keeps queued screenshots visible when upload fails after saving", async () => {
+    const createdTrade: Trade = {
+      id: "trade-1",
+      date: "2026-03-21",
+      pair: "XAUUSD",
+      accountId: "account-1",
+      direction: "Buy",
+      entry: 100,
+      stopLoss: 99,
+      takeProfit: 105,
+      profit: 25,
+      result: "Win",
+      setupId: null,
+      setup: "",
+      session: "London",
+      emotion: "Calm",
+      notes: "",
+      screenshots: [],
+      screenshotAssets: [],
+      createdAt: "2026-03-21T10:00:00.000Z",
+      updatedAt: "2026-03-21T10:00:00.000Z",
+    };
+
+    const saveImpl = vi.fn().mockResolvedValue(createdTrade);
+    screenshotServiceMocks.uploadTradeScreenshot.mockRejectedValue(new Error("The screenshot file could not be uploaded. Please try again."));
+
+    render(<Harness saveImpl={saveImpl} />);
+
+    fireEvent.change(getInputByLabel("Entry"), { target: { value: "100" } });
+    fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "99" } });
+    fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "105" } });
+    fireEvent.change(getProfitInput(), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Queue Screenshot" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Trade" }));
+
+    await waitFor(() => {
+      expect(screenshotServiceMocks.uploadTradeScreenshot).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("saved-screenshots")).toBeInTheDocument();
+      expect(screen.getByText("draft-count:1")).toBeInTheDocument();
     });
   });
 });

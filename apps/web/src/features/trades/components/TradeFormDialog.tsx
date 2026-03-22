@@ -221,6 +221,7 @@ export function TradeFormDialog({
 
       try {
         let nextTrade = persistedTrade;
+        const pendingFiles = [...draftScreenshots];
 
         for (const file of draftScreenshots) {
           const screenshot = await uploadTradeScreenshot({
@@ -239,12 +240,13 @@ export function TradeFormDialog({
 
           setCreatedTrade(nextTrade);
           onScreenshotsChange?.(nextTrade);
+          pendingFiles.shift();
+          setDraftScreenshots([...pendingFiles]);
         }
 
         setDraftScreenshots([]);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Trade saved, but screenshot upload failed.";
-        setDraftScreenshots([]);
         toast.error(message);
         return;
       } finally {
@@ -400,8 +402,8 @@ export function TradeFormDialog({
             <ScreenshotUpload
               tradeId={activeTrade?.id}
               screenshots={activeTrade?.screenshotAssets ?? []}
-              draftFiles={activeTrade ? [] : draftScreenshots}
-              onDraftFilesChange={activeTrade ? undefined : setDraftScreenshots}
+              draftFiles={draftScreenshots}
+              onDraftFilesChange={setDraftScreenshots}
               onChange={handleScreenshotsChange}
             />
           </div>

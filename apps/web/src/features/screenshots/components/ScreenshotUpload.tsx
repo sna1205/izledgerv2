@@ -205,6 +205,10 @@ export function ScreenshotUpload({
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
           Screenshots added here will upload right after the trade is saved.
         </div>
+      ) : draftFiles.length > 0 ? (
+        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          Queued screenshots are waiting to retry. Update the trade again after fixing the upload issue.
+        </div>
       ) : null}
 
       {totalCount < maxFiles ? (
@@ -293,7 +297,7 @@ export function ScreenshotUpload({
             <div key={`${draft.file.name}-${draft.file.lastModified}-${index}`} className="group relative overflow-hidden rounded-lg border border-dashed">
               <img src={draft.previewUrl} alt={`Queued screenshot ${screenshots.length + index + 1}`} className="h-32 w-full object-cover opacity-90" />
               <div className="absolute inset-x-0 bottom-0 bg-background/85 px-2 py-1 text-[11px] text-muted-foreground">
-                Queued until save
+                {tradeId ? "Retry on update" : "Queued until save"}
               </div>
               <button
                 type="button"
