@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, Camera, CameraOff, CheckCircle2, Clock3, ImagePlus, Pencil, Share2, Sparkles, Trash2 } from "lucide-react";
@@ -23,6 +23,7 @@ import { listAccounts } from "@/services/api/accounts";
 import { ApiError } from "@/services/api/client";
 import { createReview, listReviews, updateReview } from "@/services/api/reviews";
 import { listSetups } from "@/services/api/setups";
+import { uploadTradeScreenshot } from "@/services/api/screenshots";
 import { deleteTrade, getTrade, updateTrade } from "@/services/api/trades";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -98,22 +99,54 @@ function InsightRow({
 function ScreenshotGalleryCard({
   trade,
   onAddScreenshot,
+  onPasteScreenshots,
+  pasteEnabled,
+  isUploading,
 }: {
   trade: Trade;
   onAddScreenshot: () => void;
+  onPasteScreenshots: (files: File[]) => Promise<void>;
+  pasteEnabled: boolean;
+  isUploading: boolean;
 }) {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const screenshots = trade.screenshotAssets ?? [];
+
+  useEffect(() => {
+    if (!pasteEnabled) {
+      return;
+    }
+
+    const handleWindowPaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.items ?? [])
+        .filter((item) => item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
+
+      if (files.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      void onPasteScreenshots(files);
+    };
+
+    window.addEventListener("paste", handleWindowPaste);
+
+    return () => {
+      window.removeEventListener("paste", handleWindowPaste);
+    };
+  }, [onPasteScreenshots, pasteEnabled]);
 
   return (
     <>
       <SectionCard
         title="Screenshot Gallery"
-        description="Execution charts, post-trade markup, and context images for future review."
+        description={isUploading ? "Uploading screenshot from clipboard..." : "Execution charts, post-trade markup, and context images for future review. Press Ctrl+V to paste a screenshot here."}
         action={
-          <Button variant="outline" size="sm" onClick={onAddScreenshot}>
+          <Button variant="outline" size="sm" onClick={onAddScreenshot} disabled={isUploading}>
             <ImagePlus className="mr-1 h-4 w-4" />
-            Manage Screenshots
+            {isUploading ? "Uploading..." : "Manage Screenshots"}
           </Button>
         }
       >
@@ -210,6 +243,7 @@ export default function TradeDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
 
   const tradeQuery = useQuery({
     queryKey: privateQueryKey(user.id, "trades", "detail", id),
@@ -318,6 +352,43 @@ export default function TradeDetail() {
   }, [trade, review]);
   const isTradeLoading = tradeQuery.isLoading && !trade;
   const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
+
+  const handlePasteScreenshots = async (files: File[]) => {
+    if (!trade || isUploadingScreenshot) {
+      return;
+    }
+
+    setIsUploadingScreenshot(true);
+
+    try {
+      let nextTrade = trade;
+
+      for (const file of files) {
+        const screenshot = await uploadTradeScreenshot({
+          tradeId: nextTrade.id,
+          file,
+          sortOrder: nextTrade.screenshotAssets?.length ?? 0,
+        });
+
+        const nextScreenshots = [...(nextTrade.screenshotAssets ?? []), screenshot];
+        nextTrade = {
+          ...nextTrade,
+          screenshotAssets: nextScreenshots,
+          screenshots: nextScreenshots.map((item) => item.url),
+        };
+
+        updateTradeQueryData(queryClient, user.id, nextTrade);
+      }
+
+      await syncTradeScreenshotQueryData(queryClient, user.id, nextTrade);
+      toast.success(files.length === 1 ? "Screenshot uploaded." : "Screenshots uploaded.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Screenshot upload failed.";
+      toast.error(message);
+    } finally {
+      setIsUploadingScreenshot(false);
+    }
+  };
 
   useUnauthorizedSessionGuard(tradeQuery.error, reviewQuery.error, accountsQuery.error, setupsQuery.error);
 
@@ -504,7 +575,13 @@ export default function TradeDetail() {
           </div>
 
           <div className="space-y-6">
-            <ScreenshotGalleryCard trade={trade} onAddScreenshot={() => setEditOpen(true)} />
+            <ScreenshotGalleryCard
+              trade={trade}
+              onAddScreenshot={() => setEditOpen(true)}
+              onPasteScreenshots={handlePasteScreenshots}
+              pasteEnabled={!editOpen}
+              isUploading={isUploadingScreenshot}
+            />
 
             <SectionCard title="Journal Notes" description="Execution context, planning notes, or post-trade comments.">
               {trade.notes ? (

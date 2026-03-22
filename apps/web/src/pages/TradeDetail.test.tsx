@@ -19,6 +19,7 @@ const apiMocks = vi.hoisted(() => ({
   listReviews: vi.fn(),
   listAccounts: vi.fn(),
   listSetups: vi.fn(),
+  uploadTradeScreenshot: vi.fn(),
   updateTrade: vi.fn(),
   deleteTrade: vi.fn(),
   createReview: vi.fn(),
@@ -47,6 +48,10 @@ vi.mock("@/services/api/accounts", () => ({
 
 vi.mock("@/services/api/setups", () => ({
   listSetups: apiMocks.listSetups,
+}));
+
+vi.mock("@/services/api/screenshots", () => ({
+  uploadTradeScreenshot: apiMocks.uploadTradeScreenshot,
 }));
 
 vi.mock("@/components/ui/sonner", () => ({
@@ -99,6 +104,21 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve, reject };
+}
+
+function createImageFile(name: string, type = "image/png", size = 1024) {
+  const file = new File(["image"], name, { type });
+  Object.defineProperty(file, "size", { value: size });
+  return file;
+}
+
+function createClipboardData(files: File[]) {
+  return {
+    items: files.map((file) => ({
+      type: file.type,
+      getAsFile: () => file,
+    })),
+  };
 }
 
 const baseTrade = {
@@ -175,6 +195,7 @@ describe("TradeDetail", () => {
     apiMocks.listReviews.mockReset();
     apiMocks.listAccounts.mockReset();
     apiMocks.listSetups.mockReset();
+    apiMocks.uploadTradeScreenshot.mockReset();
     apiMocks.updateTrade.mockReset();
     apiMocks.deleteTrade.mockReset();
     apiMocks.createReview.mockReset();
@@ -290,6 +311,40 @@ describe("TradeDetail", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Share modal open")).toBeInTheDocument();
+    });
+  });
+
+  it("uploads a pasted screenshot directly from the detail page", async () => {
+    apiMocks.getTrade.mockResolvedValue({ trade: baseTrade });
+    apiMocks.uploadTradeScreenshot.mockResolvedValue({
+      id: "shot-1",
+      url: "https://example.com/shot-1.png",
+      storageKey: "users/user-1/trades/trade-1/chart.png",
+      sortOrder: 0,
+      createdAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    const file = createImageFile("chart.png");
+
+    renderTradeDetail();
+
+    await screen.findByText("Screenshot Gallery");
+
+    fireEvent.paste(window, {
+      clipboardData: createClipboardData([file]),
+    });
+
+    await waitFor(() => {
+      expect(apiMocks.uploadTradeScreenshot).toHaveBeenCalledWith({
+        tradeId: "trade-1",
+        file,
+        sortOrder: 0,
+      });
+    });
+
+    expect(await screen.findByText("1 image")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiMocks.toast.success).toHaveBeenCalledWith("Screenshot uploaded.");
     });
   });
 });
