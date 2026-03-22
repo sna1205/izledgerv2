@@ -135,6 +135,7 @@ LOG_LEVEL=info
 
 Notes:
 
+- `FRONTEND_URL` is required in production. If it is missing or malformed, `node dist/server.js` exits during startup before the API can listen.
 - Leave `SESSION_COOKIE_DOMAIN` blank unless you intentionally need cross-subdomain cookie scope.
 - For `https://izledger.xyz` calling `https://api.izledger.xyz`, keep `SESSION_COOKIE_SAME_SITE=none` and `SESSION_COOKIE_SECURE=true` so Safari and iOS can receive the auth cookie reliably.
 - Only set `SESSION_COOKIE_DOMAIN=.izledger.xyz` if you explicitly need that wider scope. A host-only cookie on `api.izledger.xyz` is preferred by default.

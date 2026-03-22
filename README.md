@@ -169,6 +169,7 @@ This ensures build-time packages like TypeScript and `@types/node` are available
 - Set `VITE_API_BASE_URL` to the public API origin used by the frontend, for example `https://api.izledger.xyz`.
 - Set `NODE_ENV=production` on the API.
 - Set `FRONTEND_URL` to the deployed frontend origin, for example `https://izledger.xyz`.
+- The API will fail during startup in production if `FRONTEND_URL` is missing or invalid.
 - On Render, keep runtime boot clean with `npm run start:server` and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
 - If your Postgres provider offers pooled and direct URLs, use the pooled URL in `DATABASE_URL` and the direct URL in `DIRECT_URL`.
 - Set `SESSION_COOKIE_SECURE=true` in production.

@@ -18,7 +18,7 @@ services:
       - key: DIRECT_URL
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://izledger.xyz
       - key: SESSION_COOKIE_SAME_SITE
         value: none
       - key: SESSION_COOKIE_SECURE
