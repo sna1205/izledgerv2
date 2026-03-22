@@ -54,6 +54,7 @@ export async function createPresignedUpload(params: {
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
 
   return {
+    url: uploadUrl,
     uploadUrl,
     method: "PUT" as const,
     headers: {

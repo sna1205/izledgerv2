@@ -34,6 +34,15 @@ function createImageFile(name: string, type = "image/png", size = 1024) {
   return file;
 }
 
+function createClipboardData(files: File[]) {
+  return {
+    items: files.map((file) => ({
+      type: file.type,
+      getAsFile: () => file,
+    })),
+  };
+}
+
 describe("ScreenshotUpload", () => {
   beforeEach(() => {
     screenshotMocks.uploadTradeScreenshot.mockReset();
@@ -88,6 +97,39 @@ describe("ScreenshotUpload", () => {
     expect(onChange).toHaveBeenCalledWith([screenshot]);
     expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot uploaded.");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("uploads a pasted screenshot from a window paste event", async () => {
+    const onChange = vi.fn();
+    const file = createImageFile("chart.png");
+    const screenshot = {
+      id: "shot-1",
+      url: "https://example.com/shot-1.png",
+      storageKey: "screenshots/shot-1.png",
+      sortOrder: 0,
+      createdAt: "2026-03-17T10:00:00.000Z",
+    };
+
+    screenshotMocks.uploadTradeScreenshot.mockResolvedValue(screenshot);
+
+    render(
+      <ScreenshotUpload tradeId="trade-1" screenshots={[]} onChange={onChange} />,
+    );
+
+    fireEvent.paste(window, {
+      clipboardData: createClipboardData([file]),
+    });
+
+    await waitFor(() => {
+      expect(screenshotMocks.uploadTradeScreenshot).toHaveBeenCalledWith({
+        tradeId: "trade-1",
+        file,
+        sortOrder: 0,
+      });
+    });
+
+    expect(onChange).toHaveBeenCalledWith([screenshot]);
+    expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot uploaded.");
   });
 
   it("rejects unsupported file types before requesting a presign", async () => {
@@ -228,6 +270,33 @@ describe("ScreenshotUpload", () => {
       target: {
         files: [createImageFile("chart.png")],
       },
+    });
+
+    expect(screenshotMocks.uploadTradeScreenshot).not.toHaveBeenCalled();
+    expect(await screen.findByText("Queued until save")).toBeInTheDocument();
+    expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot queued for upload.");
+  });
+
+  it("queues a pasted screenshot before the trade is saved", async () => {
+    function Harness() {
+      const [draftFiles, setDraftFiles] = React.useState<File[]>([]);
+
+      return (
+        <ScreenshotUpload
+          screenshots={[]}
+          draftFiles={draftFiles}
+          onDraftFilesChange={setDraftFiles}
+          onChange={vi.fn()}
+        />
+      );
+    }
+
+    const file = createImageFile("chart.png");
+
+    render(<Harness />);
+
+    fireEvent.paste(window, {
+      clipboardData: createClipboardData([file]),
     });
 
     expect(screenshotMocks.uploadTradeScreenshot).not.toHaveBeenCalled();

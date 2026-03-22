@@ -26,6 +26,7 @@ test("storage endpoint normalization removes a duplicate bucket suffix", async (
     contentType: "image/png",
   });
 
+  assert.equal(upload.url, upload.uploadUrl);
   const uploadUrl = new URL(upload.uploadUrl);
 
   assert.equal(uploadUrl.origin, "https://example.r2.cloudflarestorage.com");

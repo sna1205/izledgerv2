@@ -45,13 +45,14 @@ export function ScreenshotUpload({
     draftPreviews.forEach((draft) => URL.revokeObjectURL(draft.previewUrl));
   }, [draftPreviews]);
 
-  const handleFiles = useCallback(async (files: FileList | null) => {
+  const handleFiles = useCallback(async (files: FileList | File[] | null) => {
     if (!files || !uploadsEnabled) {
       return;
     }
 
+    const incomingFiles = Array.from(files);
     const remaining = Math.max(maxFiles - totalCount, 0);
-    const toProcess = Array.from(files).slice(0, remaining);
+    const toProcess = incomingFiles.slice(0, remaining);
 
     if (toProcess.length === 0) {
       setFeedback("Screenshot limit reached.");
@@ -120,23 +121,30 @@ export function ScreenshotUpload({
     }
   }, [draftFiles, maxFiles, onChange, onDraftFilesChange, screenshots, totalCount, tradeId, uploadsEnabled]);
 
-  const handlePaste = useCallback(async (event: React.ClipboardEvent) => {
+  useEffect(() => {
     if (!uploadsEnabled) {
       return;
     }
 
-    const files = Array.from(event.clipboardData.items)
-      .filter((item) => item.type.startsWith("image/"))
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => Boolean(file));
+    const handleWindowPaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.items ?? [])
+        .filter((item) => item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
 
-    if (files.length === 0) {
-      return;
-    }
+      if (files.length === 0) {
+        return;
+      }
 
-    const transfer = new DataTransfer();
-    files.forEach((file) => transfer.items.add(file));
-    await handleFiles(transfer.files);
+      event.preventDefault();
+      void handleFiles(files);
+    };
+
+    window.addEventListener("paste", handleWindowPaste);
+
+    return () => {
+      window.removeEventListener("paste", handleWindowPaste);
+    };
   }, [handleFiles, uploadsEnabled]);
 
   const removeScreenshot = useCallback(async (screenshot: TradeScreenshotAsset) => {
@@ -170,7 +178,7 @@ export function ScreenshotUpload({
   }, [draftFiles, onDraftFilesChange]);
 
   return (
-    <div className="space-y-3" onPaste={(event) => void handlePaste(event)}>
+    <div className="space-y-3">
       {!tradeId ? (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
           Screenshots added here will upload right after the trade is saved.
