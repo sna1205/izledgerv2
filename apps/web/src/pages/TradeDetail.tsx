@@ -144,7 +144,7 @@ function ScreenshotGalleryCard({
     <>
       <SectionCard
         title="Screenshot Gallery"
-        description={isUploading ? "Uploading screenshot from clipboard..." : "Execution charts, post-trade markup, and context images for future review. Press Ctrl+V to paste a screenshot here."}
+        description={isUploading ? "Uploading screenshot..." : undefined}
         action={
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => void onPasteButtonClick()} disabled={isUploading}>
@@ -179,9 +179,6 @@ function ScreenshotGalleryCard({
               <CameraOff className="h-5 w-5" />
             </div>
             <h3 className="mt-4 text-base font-medium text-foreground">No screenshots added</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Add charts or execution images to improve future review.
-            </p>
             <Button className="mt-4" variant="outline" size="sm" onClick={onAddScreenshot}>
               <Camera className="mr-1 h-4 w-4" />
               Add Screenshot
@@ -538,7 +535,7 @@ export default function TradeDetail() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
           <div className="space-y-6">
-            <SectionCard title="Trade Overview" description="Core context for this execution, account, and trader state.">
+            <SectionCard title="Trade Overview">
               <div className="grid gap-4 md:grid-cols-2">
                 <MetricTile label="Account" value={accountName} />
                 <MetricTile label="Direction" value={trade.direction} />
@@ -547,7 +544,7 @@ export default function TradeDetail() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Execution Metrics" description="Price levels, structure, and trade quality inputs.">
+            <SectionCard title="Execution Metrics">
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <MetricTile label="Entry" value={<span className="font-mono-price">{trade.entry}</span>} />
@@ -570,7 +567,6 @@ export default function TradeDetail() {
 
             <SectionCard
               title="Trade Review"
-              description="Capture execution quality, discipline, and the lesson while it is still fresh."
               action={<Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>{review ? "Edit Review" : "Write Review"}</Button>}
             >
               {review ? (
@@ -590,9 +586,6 @@ export default function TradeDetail() {
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <h3 className="mt-4 text-base font-medium text-foreground">No review yet</h3>
-                  <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-                    Capture mistakes, discipline, and lessons while the trade is still fresh.
-                  </p>
                   <Button className="mt-4" onClick={() => setReviewOpen(true)}>
                     Write Review
                   </Button>
@@ -611,19 +604,19 @@ export default function TradeDetail() {
               isUploading={isProcessingScreenshotClipboard}
             />
 
-            <SectionCard title="Journal Notes" description="Execution context, planning notes, or post-trade comments.">
+            <SectionCard title="Journal Notes">
               {trade.notes ? (
                 <div className="surface-muted p-4">
                   <p className="whitespace-pre-wrap text-sm text-foreground">{trade.notes}</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">
-                  No notes added yet. Add pre-trade context or post-trade observations to deepen the review.
+                  No notes added yet.
                 </div>
               )}
             </SectionCard>
 
-            <SectionCard title="Quick Insights" description="A lightweight summary of what stands out in this trade journal entry.">
+            <SectionCard title="Quick Insights">
               <div className="space-y-3">
                 {insights.map((insight, index) => (
                   <div
