@@ -17,14 +17,16 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
-      - key: FRONTEND_URL
-        value: https://izledger.xyz
+      - key: APP_URL
+        value: https://app.izledger.xyz
+      - key: API_URL
+        value: https://api.izledger.xyz
       - key: SESSION_COOKIE_SAME_SITE
-        value: none
+        value: lax
       - key: SESSION_COOKIE_SECURE
         value: true
-      - key: SESSION_COOKIE_DOMAIN
-        value: ""
+      - key: COOKIE_DOMAIN
+        value: .izledger.xyz
       - key: STORAGE_ENABLED
         value: false
       - key: STORAGE_BUCKET

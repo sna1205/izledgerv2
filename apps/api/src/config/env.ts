@@ -41,12 +41,13 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   HOST: z.string().default("0.0.0.0"),
-  FRONTEND_URL: optionalUrlFromEnv,
+  APP_URL: optionalUrlFromEnv,
+  API_URL: optionalUrlFromEnv,
   DATABASE_URL: z.string().min(1),
   SESSION_COOKIE_NAME: z.string().default("izledger_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   SESSION_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
-  SESSION_COOKIE_DOMAIN: z.string().optional().transform((value) => value || undefined),
+  COOKIE_DOMAIN: z.string().optional().transform((value) => value || undefined),
   SESSION_COOKIE_SECURE: booleanFromEnv.default(false),
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
@@ -63,11 +64,19 @@ const envSchema = z.object({
   STORAGE_SIGNED_READ_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 }).superRefine((data, ctx) => {
-  if (data.NODE_ENV === "production" && !data.FRONTEND_URL) {
+  if (data.NODE_ENV === "production" && !data.APP_URL) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["FRONTEND_URL"],
-      message: "FRONTEND_URL is required when NODE_ENV=production",
+      path: ["APP_URL"],
+      message: "APP_URL is required when NODE_ENV=production",
+    });
+  }
+
+  if (data.NODE_ENV === "production" && !data.API_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["API_URL"],
+      message: "API_URL is required when NODE_ENV=production",
     });
   }
 
@@ -84,6 +93,14 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["SESSION_COOKIE_SECURE"],
       message: "SESSION_COOKIE_SECURE must be true when SESSION_COOKIE_SAME_SITE=none",
+    });
+  }
+
+  if (data.NODE_ENV === "production" && !data.COOKIE_DOMAIN) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["COOKIE_DOMAIN"],
+      message: "COOKIE_DOMAIN is required when NODE_ENV=production",
     });
   }
 
@@ -118,7 +135,9 @@ const envSchema = z.object({
 
 const parsed = envSchema.safeParse({
   ...process.env,
-  FRONTEND_URL: process.env.FRONTEND_URL ?? process.env.FRONTEND_ORIGIN,
+  APP_URL: process.env.APP_URL ?? process.env.FRONTEND_URL ?? process.env.FRONTEND_ORIGIN,
+  API_URL: process.env.API_URL,
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN ?? process.env.SESSION_COOKIE_DOMAIN,
 });
 
 if (!parsed.success) {
@@ -126,4 +145,8 @@ if (!parsed.success) {
   throw new Error("Invalid backend environment variables");
 }
 
-export const env = parsed.data;
+export const env = {
+  ...parsed.data,
+  FRONTEND_URL: parsed.data.APP_URL,
+  SESSION_COOKIE_DOMAIN: parsed.data.COOKIE_DOMAIN,
+} as const;

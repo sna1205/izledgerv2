@@ -66,6 +66,7 @@ Default local app URLs:
 Frontend in `apps/web/.env.local`:
 
 ```bash
+API_URL=http://localhost:4000
 VITE_API_BASE_URL=http://localhost:4000
 ```
 
@@ -75,13 +76,14 @@ Backend in `apps/api/.env`:
 NODE_ENV=development
 PORT=4000
 HOST=0.0.0.0
-FRONTEND_URL=http://localhost:5173
+APP_URL=http://localhost:5173
+API_URL=http://localhost:4000
 DATABASE_URL=postgresql://...
 DIRECT_URL=
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
 SESSION_COOKIE_SAME_SITE=lax
-SESSION_COOKIE_DOMAIN=
+COOKIE_DOMAIN=
 SESSION_COOKIE_SECURE=false
 BCRYPT_ROUNDS=12
 AUTH_RATE_LIMIT_MAX=10
@@ -166,14 +168,15 @@ npm install --include=dev && npm run prisma:generate && npm run build
 This ensures build-time packages like TypeScript and `@types/node` are available even when `NODE_ENV=production`.
 ## Production notes
 
-- Set `VITE_API_BASE_URL` to the public API origin used by the frontend, for example `https://api.izledger.xyz`.
+- Set `APP_URL=https://app.izledger.xyz` on the API and use the same origin for production CORS.
+- Set `API_URL=https://api.izledger.xyz` in both deployments, and mirror that value into `VITE_API_BASE_URL` for the Vite frontend build.
 - Set `NODE_ENV=production` on the API.
-- Set `FRONTEND_URL` to the deployed frontend origin, for example `https://izledger.xyz`.
-- The API will fail during startup in production if `FRONTEND_URL` is missing or invalid.
+- The API will fail during startup in production if `APP_URL`, `API_URL`, or `COOKIE_DOMAIN` is missing or invalid.
 - On Render, keep runtime boot clean with `npm run start:server` and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
 - If your Postgres provider offers pooled and direct URLs, use the pooled URL in `DATABASE_URL` and the direct URL in `DIRECT_URL`.
-- Set `SESSION_COOKIE_SECURE=true` in production.
-- For the current production layout of `https://izledger.xyz` talking to `https://api.izledger.xyz`, set `SESSION_COOKIE_SAME_SITE=none`, keep `SESSION_COOKIE_SECURE=true`, and leave `SESSION_COOKIE_DOMAIN` blank unless you intentionally need a wider cookie scope such as `.izledger.xyz`.
+- Local development should keep `COOKIE_DOMAIN` blank and `SESSION_COOKIE_SECURE=false` so `http://localhost` works without special handling.
+- Production should use `SESSION_COOKIE_SAME_SITE=lax`, `SESSION_COOKIE_SECURE=true`, and `COOKIE_DOMAIN=.izledger.xyz` for `https://app.izledger.xyz` and `https://api.izledger.xyz`.
+- The session token stays in an HTTP-only cookie. It should not be copied to `localStorage` or exposed to client-side JavaScript.
 - If screenshot storage is not ready yet, keep `STORAGE_ENABLED=false`.
 - Cloudflare can be added later for R2 or DNS/CDN, but the API should stay on Render for phase 1.
 

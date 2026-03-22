@@ -315,7 +315,7 @@ describe("auth session behavior", () => {
     expect(await screen.findByText("Incorrect username or password.")).toBeInTheDocument();
   });
 
-  it("shows a cookie persistence error instead of booting into an expired session after login", async () => {
+  it("shows a session verification error instead of booting into an expired session after login", async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(createJsonResponse({
         error: {
@@ -350,7 +350,7 @@ describe("auth session behavior", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Log in" }));
 
-    expect(await screen.findByText("We couldn't keep you signed in on this device. Please allow cookies and try again.")).toBeInTheDocument();
+    expect(await screen.findByText("We signed you in, but the session could not be verified. Please try again.")).toBeInTheDocument();
     expect(screen.queryByText("Your session expired. Please log in again.")).not.toBeInTheDocument();
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
   });

@@ -24,8 +24,8 @@ type SessionState = "loading" | "authenticated" | "anonymous" | "session-expired
 
 const LEGACY_AUTH_STORAGE_KEY = "izledger-auth-user";
 const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
-const SESSION_PERSISTENCE_MESSAGE = "We couldn't keep you signed in on this device. Please allow cookies and try again.";
-const PASSWORD_CHANGE_SESSION_PERSISTENCE_MESSAGE = "Password updated, but we couldn't keep you signed in on this device. Please log in again.";
+const SESSION_PERSISTENCE_MESSAGE = "We signed you in, but the session could not be verified. Please try again.";
+const PASSWORD_CHANGE_SESSION_PERSISTENCE_MESSAGE = "Password updated, but the refreshed session could not be verified. Please log in again.";
 const SESSION_CHECK_MAX_ATTEMPTS = 2;
 const SESSION_CHECK_RETRY_DELAY_MS = 400;
 const INVALID_CREDENTIALS_MESSAGE = "Incorrect username or password.";

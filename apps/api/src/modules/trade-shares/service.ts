@@ -29,7 +29,7 @@ function generateTradeShareId() {
 }
 
 function buildTradeShareUrl(shareId: string) {
-  return `${env.FRONTEND_URL!.replace(/\/$/, "")}/shared/trade/${shareId}`;
+  return `${env.APP_URL!.replace(/\/$/, "")}/shared/trade/${shareId}`;
 }
 
 function getRiskReward(entry: number, stopLoss: number, takeProfit: number) {

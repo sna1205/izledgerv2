@@ -41,7 +41,7 @@ function isAllowedCorsOrigin(origin?: string) {
       return true;
     }
 
-    const allowedOrigin = env.FRONTEND_URL ? normalizeOrigin(env.FRONTEND_URL) : null;
+    const allowedOrigin = env.APP_URL ? normalizeOrigin(env.APP_URL) : null;
 
     return Boolean(allowedOrigin && normalizedOrigin === allowedOrigin);
   } catch {

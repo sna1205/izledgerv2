@@ -58,10 +58,10 @@ Use production-like custom domains before launch:
 
 Recommended production shape:
 
-- frontend: `https://izledger.xyz`
+- frontend: `https://app.izledger.xyz`
 - API: `https://api.izledger.xyz`
 
-Keep `FRONTEND_URL` set to the exact frontend origin that should be allowed by CORS.
+Keep `APP_URL` set to the exact frontend origin that should be allowed by CORS.
 
 ## 3. Backend Deploy On Render
 
@@ -99,6 +99,7 @@ Vercel project settings:
 Set in Vercel:
 
 ```bash
+API_URL=https://api.izledger.xyz
 VITE_API_BASE_URL=https://api.izledger.xyz
 ```
 
@@ -109,13 +110,14 @@ Set in Render:
 ```bash
 NODE_ENV=production
 HOST=0.0.0.0
-FRONTEND_URL=https://izledger.xyz
+APP_URL=https://app.izledger.xyz
+API_URL=https://api.izledger.xyz
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 DIRECT_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
-SESSION_COOKIE_SAME_SITE=none
-SESSION_COOKIE_DOMAIN=
+SESSION_COOKIE_SAME_SITE=lax
+COOKIE_DOMAIN=.izledger.xyz
 SESSION_COOKIE_SECURE=true
 BCRYPT_ROUNDS=12
 AUTH_RATE_LIMIT_MAX=10
@@ -135,10 +137,10 @@ LOG_LEVEL=info
 
 Notes:
 
-- `FRONTEND_URL` is required in production. If it is missing or malformed, `node dist/server.js` exits during startup before the API can listen.
-- Leave `SESSION_COOKIE_DOMAIN` blank unless you intentionally need cross-subdomain cookie scope.
-- For `https://izledger.xyz` calling `https://api.izledger.xyz`, keep `SESSION_COOKIE_SAME_SITE=none` and `SESSION_COOKIE_SECURE=true` so Safari and iOS can receive the auth cookie reliably.
-- Only set `SESSION_COOKIE_DOMAIN=.izledger.xyz` if you explicitly need that wider scope. A host-only cookie on `api.izledger.xyz` is preferred by default.
+- `APP_URL`, `API_URL`, and `COOKIE_DOMAIN` are required in production. If any are missing or malformed, `node dist/server.js` exits during startup before the API can listen.
+- Production CORS only allows `https://app.izledger.xyz` and always responds with `Access-Control-Allow-Credentials: true`.
+- For `https://app.izledger.xyz` calling `https://api.izledger.xyz`, use `SESSION_COOKIE_SAME_SITE=lax`, `SESSION_COOKIE_SECURE=true`, `COOKIE_DOMAIN=.izledger.xyz`, and `Path=/`.
+- Local development should keep `APP_URL=http://localhost:5173`, `API_URL=http://localhost:4000`, `COOKIE_DOMAIN=` blank, and `SESSION_COOKIE_SECURE=false`.
 - If your Postgres provider offers pooled and direct connection strings, prefer pooled for `DATABASE_URL` and direct for `DIRECT_URL`.
 - If staging storage is not ready yet, keep `STORAGE_ENABLED=false` until the staging upload checklist passes.
 
@@ -195,8 +197,8 @@ Verify all of the following against the real staging domains:
 
 1. Register succeeds and sets an HTTP-only cookie.
 2. Login succeeds and reuses the same cookie configuration.
-3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, and `SameSite=None`.
-4. Authenticated API calls succeed from `https://izledger.xyz` with `Access-Control-Allow-Credentials: true`.
+3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, `SameSite=Lax`, and `Domain=.izledger.xyz`.
+4. Authenticated API calls succeed from `https://app.izledger.xyz` with `Access-Control-Allow-Credentials: true`.
 5. Requests from a non-allowed origin fail CORS.
 6. Logout clears the session cookie and revokes the stored session.
 7. Reloading the frontend preserves the logged-in session until logout or expiry.
