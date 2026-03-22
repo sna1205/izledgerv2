@@ -1,12 +1,15 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
+const require = createRequire(import.meta.url);
+const prismaCliPath = require.resolve("prisma/build/index.js", { paths: [apiRoot] });
 const migrationDatabaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
-const npmExecPath = process.env.npm_execpath;
 
 function fail(message, details = "") {
   console.error(details ? `${message}\n${details}` : message);
@@ -18,15 +21,7 @@ function outputText(value) {
 }
 
 function runPrisma(args, options = {}) {
-  if (npmExecPath) {
-    return spawnSync(process.execPath, [npmExecPath, "exec", "--", "prisma", ...args], {
-      encoding: "utf8",
-      stdio: "pipe",
-      ...options,
-    });
-  }
-
-  return spawnSync("npx", ["prisma", ...args], {
+  return spawnSync(process.execPath, [prismaCliPath, ...args], {
     encoding: "utf8",
     stdio: "pipe",
     ...options,
@@ -34,7 +29,7 @@ function runPrisma(args, options = {}) {
 }
 
 function createPrismaWorkspace(databaseUrl) {
-  const workspaceRoot = fs.mkdtempSync(path.join(apiRoot, ".prisma-release-workspace-"));
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "izledger-prisma-release-"));
   const workspacePrismaDir = path.join(workspaceRoot, "prisma");
   fs.cpSync(path.join(apiRoot, "prisma"), workspacePrismaDir, { recursive: true });
   fs.writeFileSync(

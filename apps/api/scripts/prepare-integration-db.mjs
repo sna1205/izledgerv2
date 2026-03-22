@@ -1,16 +1,19 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
+const require = createRequire(import.meta.url);
+const prismaCliPath = require.resolve("prisma/build/index.js", { paths: [apiRoot] });
 const composeArgs = ["compose", "-f", "docker-compose.test.yml"];
 const integrationDatabaseUrl =
   process.env.TEST_DATABASE_URL
   ?? process.env.INTEGRATION_DATABASE_URL
   ?? "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
-const npmExecPath = process.env.npm_execpath;
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
@@ -22,11 +25,7 @@ function run(command, args, options = {}) {
 }
 
 function runPrisma(args, options = {}) {
-  if (npmExecPath) {
-    return run(process.execPath, [npmExecPath, "exec", "--", "prisma", ...args], options);
-  }
-
-  return run("npx", ["prisma", ...args], options);
+  return run(process.execPath, [prismaCliPath, ...args], options);
 }
 
 function outputText(value) {
@@ -34,7 +33,7 @@ function outputText(value) {
 }
 
 function createPrismaWorkspace(databaseUrl) {
-  const workspaceRoot = fs.mkdtempSync(path.join(apiRoot, ".prisma-test-workspace-"));
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "izledger-prisma-test-"));
   const workspacePrismaDir = path.join(workspaceRoot, "prisma");
   fs.cpSync(path.join(apiRoot, "prisma"), workspacePrismaDir, { recursive: true });
   fs.writeFileSync(

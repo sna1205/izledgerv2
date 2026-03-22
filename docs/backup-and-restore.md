@@ -171,7 +171,7 @@ If objects were deleted or overwritten:
 ### D. Reconcile schema and app version
 
 1. Deploy the app commit that matches the restored schema state, or a forward-compatible newer commit.
-2. Run `npm run prisma:migrate:deploy --workspace @izledger/api` against the restored database.
+2. Run `npm run release:migrate --workspace @izledger/api` against the restored database.
 3. Confirm migrations complete cleanly before any production cutover.
 
 ### E. Boot and verify

@@ -30,7 +30,7 @@
     "test": "npm run test:db:prepare && npm run test:run",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:deploy": "npm run release:migrate",
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
