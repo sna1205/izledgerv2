@@ -68,13 +68,18 @@ function renderAuthRoutes(initialPath = "/settings") {
 }
 
 function AuthHarness() {
-  const { login, user } = useAuth();
+  const { login, refreshSession, sessionMessage, sessionState, user } = useAuth();
 
   return (
     <div>
       <span>{user?.username ?? "anonymous"}</span>
+      <span>{sessionState}</span>
+      <span>{sessionMessage ?? "no-session-message"}</span>
       <button type="button" onClick={() => void login("next-user", "password123")}>
         Switch User
+      </button>
+      <button type="button" onClick={() => void refreshSession()}>
+        Refresh Session
       </button>
     </div>
   );
@@ -195,7 +200,7 @@ describe("auth session behavior", () => {
     expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
   });
 
-  it("redirects to login with a session expired message when bootstrap returns 401", async () => {
+  it("treats a stale legacy browser auth cache as anonymous when bootstrap returns 401", async () => {
     localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, JSON.stringify({
       id: "user-1",
       username: "trader",
@@ -215,7 +220,7 @@ describe("auth session behavior", () => {
 
     await screen.findByRole("heading", { name: "Log in" });
 
-    expect(screen.getByText("Your session expired. Please log in again.")).toBeInTheDocument();
+    expect(screen.queryByText("Your session expired. Please log in again.")).not.toBeInTheDocument();
     expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
   });
 
@@ -385,7 +390,7 @@ describe("auth session behavior", () => {
     expect(await screen.findByText("Could not create your account right now.")).toBeInTheDocument();
   });
 
-  it("treats invalid bootstrap credentials as a true session expiry", async () => {
+  it("treats invalid bootstrap credentials with only a stale legacy cache as anonymous", async () => {
     localStorage.setItem(LEGACY_AUTH_STORAGE_KEY, JSON.stringify({
       id: "user-1",
       username: "trader",
@@ -405,8 +410,44 @@ describe("auth session behavior", () => {
 
     await screen.findByRole("heading", { name: "Log in" });
 
-    expect(screen.getByText("Your session expired. Please log in again.")).toBeInTheDocument();
+    expect(screen.queryByText("Your session expired. Please log in again.")).not.toBeInTheDocument();
     expect(localStorage.getItem(LEGACY_AUTH_STORAGE_KEY)).toBeNull();
+  });
+
+  it("marks a real in-memory session as expired when a refresh returns 401", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({
+        user: {
+          id: "user-1",
+          username: "trader",
+        },
+      }))
+      .mockResolvedValueOnce(createJsonResponse({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required.",
+          details: [],
+        },
+      }, 401)) as typeof fetch;
+
+    renderAuthHarness(queryClient);
+
+    await screen.findByText("trader");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Session" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("anonymous")).toBeInTheDocument();
+      expect(screen.getByText("session-expired")).toBeInTheDocument();
+      expect(screen.getByText("Your session expired. Please log in again.")).toBeInTheDocument();
+    });
   });
 
   it("clears the previous user's private caches when logging in as another user", async () => {

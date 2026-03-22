@@ -245,8 +245,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   const bootstrapSession = useCallback(async () => {
-    const hadLegacyStoredUser = clearLegacyStoredUser();
-    const hadKnownUser = Boolean(userRef.current) || hadLegacyStoredUser;
+    clearLegacyStoredUser();
+    const hadKnownUser = Boolean(userRef.current);
 
     try {
       const response = await getSessionUserWithRetry();
