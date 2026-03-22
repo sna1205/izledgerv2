@@ -63,6 +63,23 @@ export async function createPresignedUpload(params: {
   };
 }
 
+export async function putObject(params: {
+  key: string;
+  contentType: string;
+  body: Uint8Array;
+}) {
+  const s3 = getStorageClient();
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: env.STORAGE_BUCKET!,
+      Key: params.key,
+      ContentType: params.contentType,
+      Body: params.body,
+    }),
+  );
+}
+
 export async function getObjectMetadata(key: string) {
   const s3 = getStorageClient();
 

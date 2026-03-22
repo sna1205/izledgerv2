@@ -22,3 +22,7 @@ export function getFileExtension(fileName: string) {
 
   return extension;
 }
+
+export function normalizeScreenshotContentType(contentType: string) {
+  return contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}

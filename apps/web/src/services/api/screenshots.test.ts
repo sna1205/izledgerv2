@@ -64,17 +64,36 @@ describe("screenshot api helpers", () => {
         sortOrder: 0,
       },
     });
+    apiMocks.apiFetch.mockResolvedValueOnce({
+      screenshot: {
+        id: "shot-1",
+        storageKey: "screenshots/shot-1.png",
+        url: "https://cdn.example.com/shot-1.png",
+        sortOrder: 0,
+        createdAt: new Date().toISOString(),
+      },
+    });
     fetchMock.mockResolvedValueOnce(new Response("", { status: 500 }));
 
     await expect(uploadTradeScreenshot({
       tradeId: "trade-1",
       file: createFile("chart.png"),
       sortOrder: 0,
-    })).rejects.toMatchObject({
-      stage: "upload",
-      message: "The screenshot file could not be uploaded. Please try again.",
-      code: "UPLOAD_FAILED",
+    })).resolves.toMatchObject({
+      id: "shot-1",
+      storageKey: "screenshots/shot-1.png",
     });
+
+    expect(apiMocks.apiFetch).toHaveBeenNthCalledWith(2, "/trades/trade-1/screenshots/upload", expect.objectContaining({
+      method: "POST",
+      body: expect.any(File),
+      headers: expect.objectContaining({
+        "Content-Type": "image/png",
+        "X-Storage-Key": "screenshots/shot-1.png",
+        "X-Upload-Token": "token-1",
+        "X-Sort-Order": "0",
+      }),
+    }));
   });
 
   it("sanitizes completion failures after a successful upload", async () => {
@@ -102,6 +121,34 @@ describe("screenshot api helpers", () => {
       stage: "complete",
       message: "The screenshot uploaded, but we could not attach it to this trade. Please try again.",
       code: "INVALID_UPLOAD_TOKEN",
+    });
+  });
+
+  it("surfaces a user-friendly error when both direct and fallback uploads fail", async () => {
+    apiMocks.apiFetch
+      .mockResolvedValueOnce({
+        upload: {
+          method: "PUT",
+          url: "https://uploads.example.com/shot-1.png",
+          storageKey: "screenshots/shot-1.png",
+          uploadToken: "token-1",
+          contentType: "image/png",
+          fileSize: 1024,
+          maxFileSizeBytes: 10 * 1024 * 1024,
+          sortOrder: 0,
+        },
+      })
+      .mockRejectedValueOnce(new ApiError("storage blocked", 500, "INTERNAL_SERVER_ERROR"));
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(uploadTradeScreenshot({
+      tradeId: "trade-1",
+      file: createFile("chart.png"),
+      sortOrder: 0,
+    })).rejects.toMatchObject({
+      stage: "upload",
+      message: "The screenshot file could not be uploaded. Please try again.",
+      code: "INTERNAL_SERVER_ERROR",
     });
   });
 

@@ -23,7 +23,7 @@ import { listAccounts } from "@/services/api/accounts";
 import { ApiError } from "@/services/api/client";
 import { createReview, listReviews, updateReview } from "@/services/api/reviews";
 import { listSetups } from "@/services/api/setups";
-import { uploadTradeScreenshot } from "@/services/api/screenshots";
+import { readTradeScreenshotClipboardFiles, uploadTradeScreenshot } from "@/services/api/screenshots";
 import { deleteTrade, getTrade, updateTrade } from "@/services/api/trades";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -100,12 +100,14 @@ function ScreenshotGalleryCard({
   trade,
   onAddScreenshot,
   onPasteScreenshots,
+  onPasteButtonClick,
   pasteEnabled,
   isUploading,
 }: {
   trade: Trade;
   onAddScreenshot: () => void;
   onPasteScreenshots: (files: File[]) => Promise<void>;
+  onPasteButtonClick: () => Promise<void>;
   pasteEnabled: boolean;
   isUploading: boolean;
 }) {
@@ -144,10 +146,15 @@ function ScreenshotGalleryCard({
         title="Screenshot Gallery"
         description={isUploading ? "Uploading screenshot from clipboard..." : "Execution charts, post-trade markup, and context images for future review. Press Ctrl+V to paste a screenshot here."}
         action={
-          <Button variant="outline" size="sm" onClick={onAddScreenshot} disabled={isUploading}>
-            <ImagePlus className="mr-1 h-4 w-4" />
-            {isUploading ? "Uploading..." : "Manage Screenshots"}
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => void onPasteButtonClick()} disabled={isUploading}>
+              {isUploading ? "Uploading..." : "Paste Screenshot"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onAddScreenshot} disabled={isUploading}>
+              <ImagePlus className="mr-1 h-4 w-4" />
+              Manage Screenshots
+            </Button>
+          </div>
         }
       >
         {screenshots.length > 0 ? (
@@ -244,6 +251,7 @@ export default function TradeDetail() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
+  const [isReadingScreenshotClipboard, setIsReadingScreenshotClipboard] = useState(false);
 
   const tradeQuery = useQuery({
     queryKey: privateQueryKey(user.id, "trades", "detail", id),
@@ -352,9 +360,10 @@ export default function TradeDetail() {
   }, [trade, review]);
   const isTradeLoading = tradeQuery.isLoading && !trade;
   const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
+  const isProcessingScreenshotClipboard = isUploadingScreenshot || isReadingScreenshotClipboard;
 
   const handlePasteScreenshots = async (files: File[]) => {
-    if (!trade || isUploadingScreenshot) {
+    if (!trade || isProcessingScreenshotClipboard) {
       return;
     }
 
@@ -387,6 +396,24 @@ export default function TradeDetail() {
       toast.error(message);
     } finally {
       setIsUploadingScreenshot(false);
+    }
+  };
+
+  const handlePasteScreenshotsFromClipboard = async () => {
+    if (isProcessingScreenshotClipboard) {
+      return;
+    }
+
+    setIsReadingScreenshotClipboard(true);
+
+    try {
+      const files = await readTradeScreenshotClipboardFiles();
+      await handlePasteScreenshots(files);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not read an image from your clipboard.";
+      toast.error(message);
+    } finally {
+      setIsReadingScreenshotClipboard(false);
     }
   };
 
@@ -579,8 +606,9 @@ export default function TradeDetail() {
               trade={trade}
               onAddScreenshot={() => setEditOpen(true)}
               onPasteScreenshots={handlePasteScreenshots}
+              onPasteButtonClick={handlePasteScreenshotsFromClipboard}
               pasteEnabled={!editOpen}
-              isUploading={isUploadingScreenshot}
+              isUploading={isProcessingScreenshotClipboard}
             />
 
             <SectionCard title="Journal Notes" description="Execution context, planning notes, or post-trade comments.">

@@ -7,6 +7,7 @@ import { MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES, ScreenshotUploadError } from "@/s
 const screenshotMocks = vi.hoisted(() => ({
   uploadTradeScreenshot: vi.fn(),
   deleteTradeScreenshot: vi.fn(),
+  readTradeScreenshotClipboardFiles: vi.fn(),
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("@/services/api/screenshots", async () => {
 
   return {
     ...actual,
+    readTradeScreenshotClipboardFiles: screenshotMocks.readTradeScreenshotClipboardFiles,
     uploadTradeScreenshot: screenshotMocks.uploadTradeScreenshot,
     deleteTradeScreenshot: screenshotMocks.deleteTradeScreenshot,
   };
@@ -47,6 +49,7 @@ describe("ScreenshotUpload", () => {
   beforeEach(() => {
     screenshotMocks.uploadTradeScreenshot.mockReset();
     screenshotMocks.deleteTradeScreenshot.mockReset();
+    screenshotMocks.readTradeScreenshotClipboardFiles.mockReset();
     screenshotMocks.toast.success.mockReset();
     screenshotMocks.toast.error.mockReset();
     vi.stubGlobal("URL", {
@@ -121,6 +124,39 @@ describe("ScreenshotUpload", () => {
     });
 
     await waitFor(() => {
+      expect(screenshotMocks.uploadTradeScreenshot).toHaveBeenCalledWith({
+        tradeId: "trade-1",
+        file,
+        sortOrder: 0,
+      });
+    });
+
+    expect(onChange).toHaveBeenCalledWith([screenshot]);
+    expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot uploaded.");
+  });
+
+  it("uploads a clipboard screenshot when the paste button is clicked", async () => {
+    const onChange = vi.fn();
+    const file = createImageFile("chart.png");
+    const screenshot = {
+      id: "shot-1",
+      url: "https://example.com/shot-1.png",
+      storageKey: "screenshots/shot-1.png",
+      sortOrder: 0,
+      createdAt: "2026-03-17T10:00:00.000Z",
+    };
+
+    screenshotMocks.readTradeScreenshotClipboardFiles.mockResolvedValue([file]);
+    screenshotMocks.uploadTradeScreenshot.mockResolvedValue(screenshot);
+
+    render(
+      <ScreenshotUpload tradeId="trade-1" screenshots={[]} onChange={onChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Paste Screenshot" }));
+
+    await waitFor(() => {
+      expect(screenshotMocks.readTradeScreenshotClipboardFiles).toHaveBeenCalled();
       expect(screenshotMocks.uploadTradeScreenshot).toHaveBeenCalledWith({
         tradeId: "trade-1",
         file,
@@ -240,7 +276,7 @@ describe("ScreenshotUpload", () => {
       <ScreenshotUpload tradeId="trade-1" screenshots={screenshots} onChange={onChange} />,
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove screenshot 1" }));
 
     await waitFor(() => {
       expect(screenshotMocks.deleteTradeScreenshot).toHaveBeenCalledWith("trade-1", "shot-1");
@@ -297,6 +333,36 @@ describe("ScreenshotUpload", () => {
 
     fireEvent.paste(window, {
       clipboardData: createClipboardData([file]),
+    });
+
+    expect(screenshotMocks.uploadTradeScreenshot).not.toHaveBeenCalled();
+    expect(await screen.findByText("Queued until save")).toBeInTheDocument();
+    expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot queued for upload.");
+  });
+
+  it("queues a clipboard screenshot when the paste button is clicked before the trade is saved", async () => {
+    function Harness() {
+      const [draftFiles, setDraftFiles] = React.useState<File[]>([]);
+
+      return (
+        <ScreenshotUpload
+          screenshots={[]}
+          draftFiles={draftFiles}
+          onDraftFilesChange={setDraftFiles}
+          onChange={vi.fn()}
+        />
+      );
+    }
+
+    const file = createImageFile("chart.png");
+    screenshotMocks.readTradeScreenshotClipboardFiles.mockResolvedValue([file]);
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Paste Screenshot" }));
+
+    await waitFor(() => {
+      expect(screenshotMocks.readTradeScreenshotClipboardFiles).toHaveBeenCalled();
     });
 
     expect(screenshotMocks.uploadTradeScreenshot).not.toHaveBeenCalled();

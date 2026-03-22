@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CameraOff, Loader2, Upload, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import {
   deleteTradeScreenshot,
   MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES,
+  readTradeScreenshotClipboardFiles,
   TRADE_SCREENSHOT_ACCEPT,
   uploadTradeScreenshot,
   validateTradeScreenshotFile,
@@ -30,11 +32,12 @@ export function ScreenshotUpload({
 }: ScreenshotUploadProps) {
   const [dragOver, setDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isReadingClipboard, setIsReadingClipboard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadsEnabled = Boolean(tradeId || onDraftFilesChange);
-  const uploadsDisabled = !uploadsEnabled || isUploading;
+  const uploadsDisabled = !uploadsEnabled || isUploading || isReadingClipboard;
   const totalCount = screenshots.length + draftFiles.length;
   const draftPreviews = useMemo(
     () => draftFiles.map((file) => ({ file, previewUrl: URL.createObjectURL(file) })),
@@ -147,6 +150,25 @@ export function ScreenshotUpload({
     };
   }, [handleFiles, uploadsEnabled]);
 
+  const handlePasteButtonClick = useCallback(async () => {
+    if (!uploadsEnabled || isUploading || isReadingClipboard) {
+      return;
+    }
+
+    setIsReadingClipboard(true);
+
+    try {
+      const files = await readTradeScreenshotClipboardFiles();
+      await handleFiles(files);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not read an image from your clipboard.";
+      setFeedback(message);
+      toast.error(message);
+    } finally {
+      setIsReadingClipboard(false);
+    }
+  }, [handleFiles, isReadingClipboard, isUploading, uploadsEnabled]);
+
   const removeScreenshot = useCallback(async (screenshot: TradeScreenshotAsset) => {
     if (!tradeId) {
       return;
@@ -186,53 +208,62 @@ export function ScreenshotUpload({
       ) : null}
 
       {totalCount < maxFiles ? (
-        <div
-          className={cn(
-            "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
-            uploadsDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-            dragOver ? "border-foreground bg-accent" : "border-border hover:border-muted-foreground",
-          )}
-          onDragOver={(event) => {
-            event.preventDefault();
-            if (!uploadsDisabled) {
-              setDragOver(true);
-            }
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragOver(false);
-            if (!uploadsDisabled) {
-              void handleFiles(event.dataTransfer.files);
-            }
-          }}
-          onClick={() => {
-            if (!uploadsDisabled) {
-              inputRef.current?.click();
-            }
-          }}
-        >
-          {isUploading ? <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-muted-foreground" /> : <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />}
-          <p className="text-sm text-muted-foreground">
-            {isUploading ? "Uploading screenshot..." : tradeId ? "Drop, paste, or click to upload" : "Drop, paste, or click to queue"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {totalCount}/{maxFiles} screenshots
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            PNG, JPEG, or WebP up to {Math.round(MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES / (1024 * 1024))} MB
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={TRADE_SCREENSHOT_ACCEPT}
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              void handleFiles(event.target.files);
-              event.target.value = "";
+        <div className="space-y-3">
+          <div
+            className={cn(
+              "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+              uploadsDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
+              dragOver ? "border-foreground bg-accent" : "border-border hover:border-muted-foreground",
+            )}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!uploadsDisabled) {
+                setDragOver(true);
+              }
             }}
-          />
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragOver(false);
+              if (!uploadsDisabled) {
+                void handleFiles(event.dataTransfer.files);
+              }
+            }}
+            onClick={() => {
+              if (!uploadsDisabled) {
+                inputRef.current?.click();
+              }
+            }}
+          >
+            {isUploading || isReadingClipboard ? <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-muted-foreground" /> : <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />}
+            <p className="text-sm text-muted-foreground">
+              {isUploading ? "Uploading screenshot..." : isReadingClipboard ? "Reading screenshot from clipboard..." : tradeId ? "Drop, paste, or click to upload" : "Drop, paste, or click to queue"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {totalCount}/{maxFiles} screenshots
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              PNG, JPEG, or WebP up to {Math.round(MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES / (1024 * 1024))} MB
+            </p>
+            <input
+              ref={inputRef}
+              type="file"
+              accept={TRADE_SCREENSHOT_ACCEPT}
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void handleFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </div>
+
+          <div className="flex justify-center">
+            <Button type="button" variant="outline" size="sm" onClick={() => void handlePasteButtonClick()} disabled={uploadsDisabled}>
+              {isReadingClipboard ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Paste Screenshot
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -251,6 +282,7 @@ export function ScreenshotUpload({
                 type="button"
                 onClick={() => void removeScreenshot(screenshot)}
                 disabled={deletingId === screenshot.id}
+                aria-label={`Remove screenshot ${index + 1}`}
                 className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
               >
                 {deletingId === screenshot.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
@@ -266,6 +298,7 @@ export function ScreenshotUpload({
               <button
                 type="button"
                 onClick={() => removeDraftScreenshot(index)}
+                aria-label={`Remove queued screenshot ${screenshots.length + index + 1}`}
                 className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background opacity-0 transition-opacity group-hover:opacity-100"
               >
                 <X className="h-3 w-3" />
