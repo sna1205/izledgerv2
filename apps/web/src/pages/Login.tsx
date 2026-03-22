@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Cookie, Eye, EyeOff } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AuthPageShell } from "@/layouts/AuthPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,9 @@ export default function Login() {
   const locationState = location.state as { from?: { pathname?: string }; authMessage?: string | null } | null;
   const nextPath = locationState?.from?.pathname || "/dashboard";
   const authMessage = locationState?.authMessage || (sessionState === "backend-unavailable" && !user ? sessionMessage : null);
+  const cookieHelpVisible = authMessage?.toLowerCase().includes("cookie")
+    || error.toLowerCase().includes("cookie")
+    || error.toLowerCase().includes("signed in on this device");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -92,6 +96,16 @@ export default function Login() {
 
         {authMessage ? <p className="text-sm text-amber-700">{authMessage}</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <Alert className={cookieHelpVisible ? "border-amber-500/40 bg-amber-50/80 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100" : "border-border/70 bg-background/70"}>
+          <Cookie className="h-4 w-4" />
+          <AlertTitle>{cookieHelpVisible ? "Allow cookies for IZLedger" : "Session cookies required"}</AlertTitle>
+          <AlertDescription>
+            IZLedger uses a secure cookie to keep you signed in.
+            {" "}
+            If login returns you here, allow cookies for this site and disable strict tracking or content blocking for `izledger.xyz` and `api.izledger.xyz`.
+          </AlertDescription>
+        </Alert>
 
         <Button type="submit" className="h-11 w-full rounded-xl" disabled={isSubmitting}>
           {isSubmitting ? "Logging in..." : "Log in"}
