@@ -315,6 +315,46 @@ describe("auth session behavior", () => {
     expect(await screen.findByText("Incorrect username or password.")).toBeInTheDocument();
   });
 
+  it("shows a cookie persistence error instead of booting into an expired session after login", async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(createJsonResponse({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required.",
+          details: [],
+        },
+      }, 401))
+      .mockResolvedValueOnce(createJsonResponse({
+        user: {
+          id: "user-1",
+          username: "trader",
+        },
+      }))
+      .mockResolvedValueOnce(createJsonResponse({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication required.",
+          details: [],
+        },
+      }, 401)) as typeof fetch;
+
+    renderAuthRoutes("/login");
+
+    await screen.findByRole("heading", { name: "Log in" });
+
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "trader" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "Password123!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+
+    expect(await screen.findByText("We couldn't keep you signed in on this device. Please allow cookies and try again.")).toBeInTheDocument();
+    expect(screen.queryByText("Your session expired. Please log in again.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
+  });
+
   it("surfaces backend validation details as a friendly auth error", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -469,6 +509,12 @@ describe("auth session behavior", () => {
         user: {
           id: "user-1",
           username: "first-user",
+        },
+      }))
+      .mockResolvedValueOnce(createJsonResponse({
+        user: {
+          id: "user-2",
+          username: "next-user",
         },
       }))
       .mockResolvedValueOnce(createJsonResponse({

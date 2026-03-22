@@ -24,6 +24,8 @@ type SessionState = "loading" | "authenticated" | "anonymous" | "session-expired
 
 const LEGACY_AUTH_STORAGE_KEY = "izledger-auth-user";
 const SESSION_EXPIRED_MESSAGE = "Your session expired. Please log in again.";
+const SESSION_PERSISTENCE_MESSAGE = "We couldn't keep you signed in on this device. Please allow cookies and try again.";
+const PASSWORD_CHANGE_SESSION_PERSISTENCE_MESSAGE = "Password updated, but we couldn't keep you signed in on this device. Please log in again.";
 const SESSION_CHECK_MAX_ATTEMPTS = 2;
 const SESSION_CHECK_RETRY_DELAY_MS = 400;
 const INVALID_CREDENTIALS_MESSAGE = "Incorrect username or password.";
@@ -266,6 +268,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearAuthenticatedUser, syncAuthenticatedUser]);
 
+  const verifyPersistedAuthenticatedSession = useCallback(async (
+    fallbackUser: AuthUser,
+    options?: {
+      resetPrivateCache?: boolean;
+      persistenceErrorMessage?: string;
+    },
+  ) => {
+    try {
+      const response = await getSessionUserWithRetry();
+      await syncAuthenticatedUser(response.user ?? fallbackUser, options);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await clearAuthenticatedUser("anonymous", null, { resetPrivateCache: true });
+        throw new ApiError(
+          options?.persistenceErrorMessage ?? SESSION_PERSISTENCE_MESSAGE,
+          401,
+          "SESSION_NOT_PERSISTED",
+        );
+      }
+
+      throw error;
+    }
+  }, [clearAuthenticatedUser, syncAuthenticatedUser]);
+
   useEffect(() => {
     void bootstrapSession();
   }, [bootstrapSession]);
@@ -288,7 +314,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password,
         });
 
-        await syncAuthenticatedUser(response.user, { resetPrivateCache: true });
+        await verifyPersistedAuthenticatedSession(response.user, {
+          resetPrivateCache: true,
+          persistenceErrorMessage: SESSION_PERSISTENCE_MESSAGE,
+        });
         return {};
       } catch (error) {
         return { error: getApiErrorMessage(error, "Could not log in right now.") };
@@ -307,7 +336,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password,
         });
 
-        await syncAuthenticatedUser(response.user, { resetPrivateCache: true });
+        await verifyPersistedAuthenticatedSession(response.user, {
+          resetPrivateCache: true,
+          persistenceErrorMessage: SESSION_PERSISTENCE_MESSAGE,
+        });
         return {};
       } catch (error) {
         return { error: getApiErrorMessage(error, "Could not create your account right now.") };
@@ -339,7 +371,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           nextPassword,
         });
 
-        await syncAuthenticatedUser(response.user);
+        await verifyPersistedAuthenticatedSession(response.user, {
+          persistenceErrorMessage: PASSWORD_CHANGE_SESSION_PERSISTENCE_MESSAGE,
+        });
         return {};
       } catch (error) {
         return { error: getApiErrorMessage(error, "Could not update your password right now.") };
