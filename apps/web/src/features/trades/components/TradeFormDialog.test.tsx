@@ -1,8 +1,12 @@
 import React, { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TradeFormDialog } from "./TradeFormDialog";
 import type { Account, SetupDefinition, Trade } from "@/types";
+
+const screenshotServiceMocks = vi.hoisted(() => ({
+  uploadTradeScreenshot: vi.fn(),
+}));
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? <div>{children}</div> : null),
@@ -17,8 +21,30 @@ vi.mock("./InstrumentSelect", () => ({
   ),
 }));
 
-vi.mock("./ScreenshotUpload", () => ({
-  ScreenshotUpload: () => null,
+vi.mock("@/features/screenshots/components/ScreenshotUpload", () => ({
+  ScreenshotUpload: ({
+    tradeId,
+    onDraftFilesChange,
+  }: {
+    tradeId?: string;
+    onDraftFilesChange?: (files: File[]) => void;
+  }) => (
+    <div>
+      <span>{tradeId ? "saved-screenshots" : "draft-screenshots"}</span>
+      {onDraftFilesChange ? (
+        <button
+          type="button"
+          onClick={() => onDraftFilesChange([new File(["image"], "chart.png", { type: "image/png" })])}
+        >
+          Queue Screenshot
+        </button>
+      ) : null}
+    </div>
+  ),
+}));
+
+vi.mock("@/services/api/screenshots", () => ({
+  uploadTradeScreenshot: screenshotServiceMocks.uploadTradeScreenshot,
 }));
 
 vi.mock("@/components/ui/select", async () => {
@@ -151,6 +177,10 @@ function getReadonlyField(label: string) {
 }
 
 describe("TradeFormDialog", () => {
+  beforeEach(() => {
+    screenshotServiceMocks.uploadTradeScreenshot.mockReset();
+  });
+
   it("derives direction from entry and stop loss and blocks equal prices", async () => {
     render(<Harness />);
 
@@ -268,5 +298,59 @@ describe("TradeFormDialog", () => {
 
     expect(screen.getByText("Archived accounts stay available here only so historical trades can still be edited safely.")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Legacy Account (archived)" })).toBeInTheDocument();
+  });
+
+  it("uploads queued screenshots after saving a new trade", async () => {
+    const createdTrade: Trade = {
+      id: "trade-1",
+      date: "2026-03-21",
+      pair: "XAUUSD",
+      accountId: "account-1",
+      direction: "Buy",
+      entry: 100,
+      stopLoss: 99,
+      takeProfit: 105,
+      profit: 25,
+      result: "Win",
+      setupId: null,
+      setup: "",
+      session: "London",
+      emotion: "Calm",
+      notes: "",
+      screenshots: [],
+      screenshotAssets: [],
+      createdAt: "2026-03-21T10:00:00.000Z",
+      updatedAt: "2026-03-21T10:00:00.000Z",
+    };
+
+    const saveImpl = vi.fn().mockResolvedValue(createdTrade);
+    screenshotServiceMocks.uploadTradeScreenshot.mockResolvedValue({
+      id: "shot-1",
+      url: "https://example.com/shot-1.png",
+      storageKey: "users/user-1/trades/trade-1/shot-1.png",
+      sortOrder: 0,
+      createdAt: "2026-03-21T10:00:00.000Z",
+    });
+
+    render(<Harness saveImpl={saveImpl} />);
+
+    fireEvent.change(getInputByLabel("Entry"), { target: { value: "100" } });
+    fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "99" } });
+    fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "105" } });
+    fireEvent.change(getProfitInput(), { target: { value: "25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Queue Screenshot" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Trade" }));
+
+    await waitFor(() => {
+      expect(saveImpl).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screenshotServiceMocks.uploadTradeScreenshot).toHaveBeenCalledWith({
+        tradeId: "trade-1",
+        file: expect.any(File),
+        sortOrder: 0,
+      });
+    });
   });
 });

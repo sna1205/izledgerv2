@@ -215,8 +215,6 @@ export default function Trades() {
       updateTradeQueryData(queryClient, user.id, result.trade);
       await invalidateJournalQueries(queryClient, user.id);
       toast.success(editingTrade ? "Trade updated successfully." : "Trade saved successfully.");
-      setEditingTrade(null);
-      setFormOpen(false);
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not save the trade right now.";
@@ -624,9 +622,16 @@ export default function Trades() {
 
       <TradeFormDialog
         open={formOpen}
-        onOpenChange={setFormOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+
+          if (!open) {
+            setEditingTrade(null);
+          }
+        }}
         onSave={async (payload) => {
-          await saveTradeMutation.mutateAsync(payload);
+          const result = await saveTradeMutation.mutateAsync(payload);
+          return result.trade;
         }}
         editTrade={editingTrade}
         accounts={accounts}

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CameraOff, Loader2, Upload, X } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import {
@@ -15,23 +15,42 @@ interface ScreenshotUploadProps {
   tradeId?: string;
   screenshots: TradeScreenshotAsset[];
   onChange: (screenshots: TradeScreenshotAsset[]) => void;
+  draftFiles?: File[];
+  onDraftFilesChange?: (files: File[]) => void;
   maxFiles?: number;
 }
 
-export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 }: ScreenshotUploadProps) {
+export function ScreenshotUpload({
+  tradeId,
+  screenshots,
+  onChange,
+  draftFiles = [],
+  onDraftFilesChange,
+  maxFiles = 3,
+}: ScreenshotUploadProps) {
   const [dragOver, setDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const uploadsDisabled = !tradeId || isUploading;
+  const uploadsEnabled = Boolean(tradeId || onDraftFilesChange);
+  const uploadsDisabled = !uploadsEnabled || isUploading;
+  const totalCount = screenshots.length + draftFiles.length;
+  const draftPreviews = useMemo(
+    () => draftFiles.map((file) => ({ file, previewUrl: URL.createObjectURL(file) })),
+    [draftFiles],
+  );
+
+  useEffect(() => () => {
+    draftPreviews.forEach((draft) => URL.revokeObjectURL(draft.previewUrl));
+  }, [draftPreviews]);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
-    if (!files || !tradeId) {
+    if (!files || !uploadsEnabled) {
       return;
     }
 
-    const remaining = Math.max(maxFiles - screenshots.length, 0);
+    const remaining = Math.max(maxFiles - totalCount, 0);
     const toProcess = Array.from(files).slice(0, remaining);
 
     if (toProcess.length === 0) {
@@ -67,6 +86,13 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
       return;
     }
 
+    if (!tradeId) {
+      onDraftFilesChange?.([...draftFiles, ...validFiles]);
+      setFeedback(validationMessage);
+      toast.success(validFiles.length === 1 ? "Screenshot queued for upload." : "Screenshots queued for upload.");
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -92,10 +118,10 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
     } finally {
       setIsUploading(false);
     }
-  }, [maxFiles, onChange, screenshots, tradeId]);
+  }, [draftFiles, maxFiles, onChange, onDraftFilesChange, screenshots, totalCount, tradeId, uploadsEnabled]);
 
   const handlePaste = useCallback(async (event: React.ClipboardEvent) => {
-    if (!tradeId) {
+    if (!uploadsEnabled) {
       return;
     }
 
@@ -111,7 +137,7 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
     const transfer = new DataTransfer();
     files.forEach((file) => transfer.items.add(file));
     await handleFiles(transfer.files);
-  }, [handleFiles, tradeId]);
+  }, [handleFiles, uploadsEnabled]);
 
   const removeScreenshot = useCallback(async (screenshot: TradeScreenshotAsset) => {
     if (!tradeId) {
@@ -134,15 +160,24 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
     }
   }, [onChange, screenshots, tradeId]);
 
+  const removeDraftScreenshot = useCallback((index: number) => {
+    if (!onDraftFilesChange) {
+      return;
+    }
+
+    onDraftFilesChange(draftFiles.filter((_file, draftIndex) => draftIndex !== index));
+    setFeedback(null);
+  }, [draftFiles, onDraftFilesChange]);
+
   return (
     <div className="space-y-3" onPaste={(event) => void handlePaste(event)}>
       {!tradeId ? (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          Save the trade first, then reopen it to upload screenshots securely.
+          Screenshots added here will upload right after the trade is saved.
         </div>
       ) : null}
 
-      {screenshots.length < maxFiles ? (
+      {totalCount < maxFiles ? (
         <div
           className={cn(
             "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
@@ -171,10 +206,10 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
         >
           {isUploading ? <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-muted-foreground" /> : <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />}
           <p className="text-sm text-muted-foreground">
-            {isUploading ? "Uploading screenshot..." : "Drop, paste, or click to upload"}
+            {isUploading ? "Uploading screenshot..." : tradeId ? "Drop, paste, or click to upload" : "Drop, paste, or click to queue"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {screenshots.length}/{maxFiles} screenshots
+            {totalCount}/{maxFiles} screenshots
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             PNG, JPEG, or WebP up to {Math.round(MAX_TRADE_SCREENSHOT_FILE_SIZE_BYTES / (1024 * 1024))} MB
@@ -199,7 +234,7 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
         </p>
       ) : null}
 
-      {screenshots.length > 0 ? (
+      {totalCount > 0 ? (
         <div className="grid grid-cols-3 gap-3">
           {screenshots.map((screenshot, index) => (
             <div key={screenshot.id} className="group relative overflow-hidden rounded-lg border">
@@ -211,6 +246,21 @@ export function ScreenshotUpload({ tradeId, screenshots, onChange, maxFiles = 3 
                 className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-100"
               >
                 {deletingId === screenshot.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+              </button>
+            </div>
+          ))}
+          {draftPreviews.map((draft, index) => (
+            <div key={`${draft.file.name}-${draft.file.lastModified}-${index}`} className="group relative overflow-hidden rounded-lg border border-dashed">
+              <img src={draft.previewUrl} alt={`Queued screenshot ${screenshots.length + index + 1}`} className="h-32 w-full object-cover opacity-90" />
+              <div className="absolute inset-x-0 bottom-0 bg-background/85 px-2 py-1 text-[11px] text-muted-foreground">
+                Queued until save
+              </div>
+              <button
+                type="button"
+                onClick={() => removeDraftScreenshot(index)}
+                className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}

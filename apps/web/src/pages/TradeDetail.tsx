@@ -538,7 +538,8 @@ export default function TradeDetail() {
         open={editOpen}
         onOpenChange={setEditOpen}
         onSave={async (payload) => {
-          await updateTradeMutation.mutateAsync(payload);
+          const result = await updateTradeMutation.mutateAsync(payload);
+          return result.trade;
         }}
         editTrade={trade}
         accounts={accountsQuery.data ?? []}

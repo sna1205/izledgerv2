@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "@/components/ui/sonner";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
+import { uploadTradeScreenshot } from "@/services/api/screenshots";
 import { InstrumentSelect } from "./InstrumentSelect";
 import { ResultBadge } from "./ResultBadge";
-import type { Account, Direction, Result, SetupDefinition, Trade, TradeEmotion, TradeSession } from "@/types";
+import type { Account, Direction, Result, SetupDefinition, Trade, TradeEmotion, TradeScreenshotAsset, TradeSession } from "@/types";
 import { EMOTIONS, SESSIONS } from "@/types";
 import {
   deriveTradeDirectionFromPrices,
@@ -51,7 +53,7 @@ interface TradeFormDialogProps {
     session?: TradeSession | null;
     emotion?: TradeEmotion | null;
     notes: string;
-  }) => Promise<void> | void;
+  }) => Promise<Trade | void> | Trade | void;
   editTrade?: Trade | null;
   accounts: Account[];
   setups: SetupDefinition[];
@@ -86,6 +88,10 @@ export function TradeFormDialog({
   onScreenshotsChange,
 }: TradeFormDialogProps) {
   const [form, setForm] = useState<TradeFormValue>(() => buildEmptyForm(accounts));
+  const [createdTrade, setCreatedTrade] = useState<Trade | null>(null);
+  const [draftScreenshots, setDraftScreenshots] = useState<File[]>([]);
+  const [isUploadingDraftScreenshots, setIsUploadingDraftScreenshots] = useState(false);
+  const activeTrade = editTrade ?? createdTrade;
 
   const availableAccountOptions = useMemo(() => {
     const baseOptions = accounts.map((account) => ({
@@ -139,6 +145,16 @@ export function TradeFormDialog({
     setForm(buildEmptyForm(accounts));
   }, [accounts, editTrade, open]);
 
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    setCreatedTrade(null);
+    setDraftScreenshots([]);
+    setIsUploadingDraftScreenshots(false);
+  }, [open]);
+
   const derivedResult = useMemo(() => deriveTradeResultFromProfit(form.profit), [form.profit]);
   const parsedProfit = useMemo(() => parseTradeProfitInput(form.profit), [form.profit]);
   const parsedEntry = useMemo(() => parseTradeNumericInput(form.entry), [form.entry]);
@@ -172,7 +188,7 @@ export function TradeFormDialog({
 
     const selectedSetup = setups.find((setup) => setup.id === form.setupId);
 
-    await onSave({
+    const savedTrade = await onSave({
       date: form.date,
       accountId: form.accountId,
       pair: form.pair,
@@ -189,7 +205,72 @@ export function TradeFormDialog({
       notes: form.notes.trim(),
     });
 
+    const persistedTrade = savedTrade ?? activeTrade;
+
+    if (!activeTrade && savedTrade) {
+      setCreatedTrade(savedTrade);
+    }
+
+    if (draftScreenshots.length > 0) {
+      if (!persistedTrade) {
+        toast.error("Trade saved, but screenshot upload could not start. Reopen the trade to add screenshots.");
+        return;
+      }
+
+      setIsUploadingDraftScreenshots(true);
+
+      try {
+        let nextTrade = persistedTrade;
+
+        for (const file of draftScreenshots) {
+          const screenshot = await uploadTradeScreenshot({
+            tradeId: nextTrade.id,
+            file,
+            sortOrder: nextTrade.screenshotAssets?.length ?? 0,
+          });
+
+          const nextScreenshots: TradeScreenshotAsset[] = [...(nextTrade.screenshotAssets ?? []), screenshot];
+
+          nextTrade = {
+            ...nextTrade,
+            screenshotAssets: nextScreenshots,
+            screenshots: nextScreenshots.map((item) => item.url),
+          };
+
+          setCreatedTrade(nextTrade);
+          onScreenshotsChange?.(nextTrade);
+        }
+
+        setDraftScreenshots([]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Trade saved, but screenshot upload failed.";
+        setDraftScreenshots([]);
+        toast.error(message);
+        return;
+      } finally {
+        setIsUploadingDraftScreenshots(false);
+      }
+    }
+
     onOpenChange(false);
+  };
+
+  const handleScreenshotsChange = (screenshots: TradeScreenshotAsset[]) => {
+    if (!activeTrade) {
+      return;
+    }
+
+    const updatedTrade = {
+      ...activeTrade,
+      screenshotAssets: screenshots,
+      screenshots: screenshots.map((screenshot) => screenshot.url),
+    };
+
+    if (!editTrade) {
+      setCreatedTrade(updatedTrade);
+    }
+
+    onScreenshotsChange?.(updatedTrade);
   };
 
   return (
@@ -314,26 +395,16 @@ export function TradeFormDialog({
             <Textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} rows={3} />
           </div>
 
-          {editTrade ? (
-            <div className="space-y-2 sm:col-span-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Screenshots</Label>
-              <ScreenshotUpload
-                tradeId={editTrade.id}
-                screenshots={editTrade.screenshotAssets ?? []}
-                onChange={(screenshots) => {
-                  if (!onScreenshotsChange) {
-                    return;
-                  }
-
-                  onScreenshotsChange({
-                    ...editTrade,
-                    screenshotAssets: screenshots,
-                    screenshots: screenshots.map((screenshot) => screenshot.url),
-                  });
-                }}
-              />
-            </div>
-          ) : null}
+          <div className="space-y-2 sm:col-span-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Screenshots</Label>
+            <ScreenshotUpload
+              tradeId={activeTrade?.id}
+              screenshots={activeTrade?.screenshotAssets ?? []}
+              draftFiles={activeTrade ? [] : draftScreenshots}
+              onDraftFilesChange={activeTrade ? undefined : setDraftScreenshots}
+              onChange={handleScreenshotsChange}
+            />
+          </div>
         </div>
 
         <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
@@ -343,9 +414,9 @@ export function TradeFormDialog({
           <Button
             onClick={() => void handleSave()}
             className="w-full sm:w-auto"
-            disabled={isSaving || accounts.length === 0 || derivedResult === null || derivedDirection === null || parsedTakeProfit === null}
+            disabled={isSaving || isUploadingDraftScreenshots || accounts.length === 0 || derivedResult === null || derivedDirection === null || parsedTakeProfit === null}
           >
-            {isSaving ? "Saving..." : editTrade ? "Update Trade" : "Save Trade"}
+            {isUploadingDraftScreenshots ? "Uploading screenshots..." : isSaving ? "Saving..." : activeTrade ? "Update Trade" : "Save Trade"}
           </Button>
         </div>
       </DialogContent>

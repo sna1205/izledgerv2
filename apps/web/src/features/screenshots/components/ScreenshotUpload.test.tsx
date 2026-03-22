@@ -1,3 +1,4 @@
+import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
@@ -39,6 +40,11 @@ describe("ScreenshotUpload", () => {
     screenshotMocks.deleteTradeScreenshot.mockReset();
     screenshotMocks.toast.success.mockReset();
     screenshotMocks.toast.error.mockReset();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:preview"),
+      revokeObjectURL: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -200,5 +206,32 @@ describe("ScreenshotUpload", () => {
 
     expect(onChange).toHaveBeenCalledWith([]);
     expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot removed.");
+  });
+
+  it("queues draft screenshots when the trade has not been saved yet", async () => {
+    function Harness() {
+      const [draftFiles, setDraftFiles] = React.useState<File[]>([]);
+
+      return (
+        <ScreenshotUpload
+          screenshots={[]}
+          draftFiles={draftFiles}
+          onDraftFilesChange={setDraftFiles}
+          onChange={vi.fn()}
+        />
+      );
+    }
+
+    const { container } = render(<Harness />);
+
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+      target: {
+        files: [createImageFile("chart.png")],
+      },
+    });
+
+    expect(screenshotMocks.uploadTradeScreenshot).not.toHaveBeenCalled();
+    expect(await screen.findByText("Queued until save")).toBeInTheDocument();
+    expect(screenshotMocks.toast.success).toHaveBeenCalledWith("Screenshot queued for upload.");
   });
 });
