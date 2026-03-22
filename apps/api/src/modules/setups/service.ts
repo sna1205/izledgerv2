@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
-import { generateUniqueSetupColor, normalizeSetupColor } from "@izledger/shared/constants/setup-colors";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/errors.js";
 import { buildPagination } from "../../utils/http.js";
+import { generateUniqueSetupColor, normalizeSetupColor } from "./colors.js";
 
 function normalizeSetupName(name: string) {
   return name.trim().toLowerCase();
