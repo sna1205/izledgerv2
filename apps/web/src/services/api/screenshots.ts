@@ -204,6 +204,7 @@ async function uploadTradeScreenshotViaApi(params: {
       body: params.file,
       headers: {
         "Content-Type": params.file.type,
+        "X-Upload-Content-Type": params.file.type,
         "X-Storage-Key": params.upload.storageKey,
         "X-Upload-Token": params.upload.uploadToken,
         "X-Sort-Order": String(params.sortOrder),

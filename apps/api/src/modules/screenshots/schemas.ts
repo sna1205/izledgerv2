@@ -52,13 +52,8 @@ export const completeScreenshotSchema = z.object({
 });
 
 export const uploadScreenshotHeadersSchema = z.object({
-  "content-type": z.string().trim().min(1).transform(normalizeScreenshotContentType).refine(
-    (value): value is (typeof allowedScreenshotContentTypes)[number] =>
-      allowedScreenshotContentTypes.includes(value as (typeof allowedScreenshotContentTypes)[number]),
-    {
-      message: "Use a PNG, JPEG, or WebP image.",
-    },
-  ),
+  "content-type": z.string().trim().min(1).transform(normalizeScreenshotContentType),
+  "x-upload-content-type": z.string().trim().min(1).transform(normalizeScreenshotContentType).optional(),
   "x-upload-token": z.string().trim().min(1),
   "x-storage-key": z.string().trim().min(1),
   "x-sort-order": z.coerce.number().int().min(0).max(numericBounds.maxScreenshotSortOrder).default(0),

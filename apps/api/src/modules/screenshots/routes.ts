@@ -20,7 +20,7 @@ import {
 } from "./service.js";
 
 export async function screenshotRoutes(app: FastifyInstance) {
-  app.addContentTypeParser(["image/png", "image/jpeg", "image/webp"], { parseAs: "buffer" }, (_request, body, done) => {
+  app.addContentTypeParser(["image/png", "image/jpeg", "image/webp", "application/octet-stream"], { parseAs: "buffer" }, (_request, body, done) => {
     done(null, body);
   });
 
@@ -58,7 +58,7 @@ export async function screenshotRoutes(app: FastifyInstance) {
     const screenshot = await uploadTradeScreenshot(request.auth!.userId, params.id, {
       storageKey: headers["x-storage-key"],
       uploadToken: headers["x-upload-token"],
-      contentType: headers["content-type"],
+      contentType: headers["x-upload-content-type"] ?? headers["content-type"],
       sortOrder: headers["x-sort-order"] ?? 0,
       file: request.body,
     });

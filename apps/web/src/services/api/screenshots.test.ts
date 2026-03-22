@@ -89,6 +89,7 @@ describe("screenshot api helpers", () => {
       body: expect.any(File),
       headers: expect.objectContaining({
         "Content-Type": "image/png",
+        "X-Upload-Content-Type": "image/png",
         "X-Storage-Key": "screenshots/shot-1.png",
         "X-Upload-Token": "token-1",
         "X-Sort-Order": "0",
