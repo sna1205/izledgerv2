@@ -135,6 +135,10 @@ STORAGE_PUBLIC_BASE_URL=
 STORAGE_FORCE_PATH_STYLE=true
 STORAGE_SIGNED_READS=true
 STORAGE_SIGNED_READ_TTL_SECONDS=900
+ECONOMIC_CALENDAR_PROVIDER=trading-economics
+ECONOMIC_CALENDAR_PROVIDER_URL=https://nfs.faireconomy.media/ff_calendar_thisweek.json
+ECONOMIC_CALENDAR_TRADING_ECONOMICS_BASE_URL=https://api.tradingeconomics.com
+ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY=replace-me
 LOG_LEVEL=info
 ```
 
@@ -147,6 +151,7 @@ Notes:
 - Local development should keep `APP_URL=http://localhost:5173`, `API_URL=http://localhost:4000`, `COOKIE_DOMAIN=` blank, and `SESSION_COOKIE_SECURE=false`.
 - If your Postgres provider offers pooled and direct connection strings, prefer pooled for `DATABASE_URL` and direct for `DIRECT_URL`.
 - If staging storage is not ready yet, keep `STORAGE_ENABLED=false` until the staging upload checklist passes.
+- `fair-economy` is still supported as a limited weekly-feed adapter, but production should use `ECONOMIC_CALENDAR_PROVIDER=trading-economics` with a real backend API key for real historical and future calendar ranges.
 
 ## 5.1 API Custom Domain On Render
 

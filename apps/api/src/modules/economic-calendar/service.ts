@@ -12,14 +12,15 @@ import {
 import { env } from "../../config/env.js";
 import { AppError } from "../../utils/errors.js";
 import {
-  dedupeEconomicCalendarEvents,
   fetchEconomicCalendarFeed,
-  normalizeEconomicCalendarEvent,
 } from "./provider.js";
 import { attachEconomicEventRelevance } from "./relevance.js";
 import type { EconomicCalendarQuery } from "./schemas.js";
 
 type CachedEconomicCalendar = {
+  cacheKey: string;
+  startDate: string;
+  endDate: string;
   fetchedAtMs: number;
   fetchedAtUtc: string;
   items: EconomicCalendarEvent[];
@@ -30,15 +31,22 @@ type CachedEconomicCalendarResult = CachedEconomicCalendar & {
   cacheStatus: "miss" | "hit" | "stale";
 };
 
-let cachedEconomicCalendar: CachedEconomicCalendar | null = null;
-let economicCalendarFetchPromise: Promise<CachedEconomicCalendar> | null = null;
+const cachedEconomicCalendarByKey = new Map<string, CachedEconomicCalendar>();
+const economicCalendarFetchPromiseByKey = new Map<string, Promise<CachedEconomicCalendar>>();
 
 export function resetEconomicCalendarCache() {
-  cachedEconomicCalendar = null;
+  cachedEconomicCalendarByKey.clear();
+  economicCalendarFetchPromiseByKey.clear();
 }
 
 function toUtcDateKey(value: Date) {
   return value.toISOString().slice(0, 10);
+}
+
+function shiftUtcDateKey(dateKey: string, amount: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return toUtcDateKey(date);
 }
 
 function sortEvents(events: EconomicCalendarEvent[]) {
@@ -164,41 +172,21 @@ function getRequestedRefreshMode(
   }, "normal");
 }
 
-async function fetchAndCacheEconomicCalendar(fetchImpl: typeof fetch = globalThis.fetch) {
-  if (!economicCalendarFetchPromise) {
-    economicCalendarFetchPromise = (async () => {
-      const fetchedAt = new Date(Date.now());
-      const rawEvents = await fetchEconomicCalendarFeed(fetchImpl);
-      const normalizedEvents = rawEvents
-        .map((event) => normalizeEconomicCalendarEvent(event, fetchedAt))
-        .filter((event): event is EconomicCalendarEvent => Boolean(event));
-      const dedupedEvents = sortEvents(dedupeEconomicCalendarEvents(normalizedEvents));
-
-      const nextCache = {
-        fetchedAtMs: fetchedAt.getTime(),
-        fetchedAtUtc: fetchedAt.toISOString(),
-        items: dedupedEvents,
-      } satisfies CachedEconomicCalendar;
-
-      cachedEconomicCalendar = nextCache;
-      return nextCache;
-    })().finally(() => {
-      economicCalendarFetchPromise = null;
-    });
-  }
-
-  return economicCalendarFetchPromise;
-}
-
 async function getCachedOrFetchedEconomicCalendar(
   options: {
+    bounds: {
+      startDate: string;
+      endDate: string;
+    };
     live?: boolean;
     selectLiveFocusEvents?: ((items: EconomicCalendarEvent[]) => EconomicCalendarEvent[]) | null;
-  } = {},
+  },
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<CachedEconomicCalendarResult> {
+  const cacheKey = `${options.bounds.startDate}:${options.bounds.endDate}`;
   const nowMs = Date.now();
   const now = new Date(nowMs);
+  const cachedEconomicCalendar = cachedEconomicCalendarByKey.get(cacheKey) ?? null;
   const refreshMode = cachedEconomicCalendar
     ? getRequestedRefreshMode(cachedEconomicCalendar.items, options.live ? options.selectLiveFocusEvents : null, now)
     : "normal";
@@ -213,7 +201,34 @@ async function getCachedOrFetchedEconomicCalendar(
   }
 
   try {
-    const nextCache = await fetchAndCacheEconomicCalendar(fetchImpl);
+    let fetchPromise = economicCalendarFetchPromiseByKey.get(cacheKey);
+
+    if (!fetchPromise) {
+      fetchPromise = (async () => {
+        const fetchedAt = new Date(Date.now());
+        const fetchedEvents = await fetchEconomicCalendarFeed({
+          startDate: options.bounds.startDate,
+          endDate: options.bounds.endDate,
+        }, fetchImpl);
+        const nextCache = {
+          cacheKey,
+          startDate: options.bounds.startDate,
+          endDate: options.bounds.endDate,
+          fetchedAtMs: fetchedAt.getTime(),
+          fetchedAtUtc: fetchedAt.toISOString(),
+          items: sortEvents(fetchedEvents),
+        } satisfies CachedEconomicCalendar;
+
+        cachedEconomicCalendarByKey.set(cacheKey, nextCache);
+        return nextCache;
+      })().finally(() => {
+        economicCalendarFetchPromiseByKey.delete(cacheKey);
+      });
+
+      economicCalendarFetchPromiseByKey.set(cacheKey, fetchPromise);
+    }
+
+    const nextCache = await fetchPromise;
 
     return {
       ...nextCache,
@@ -237,12 +252,28 @@ async function getCachedOrFetchedEconomicCalendar(
   }
 }
 
+function getCachedEconomicCalendarContainingEvent(eventId: string) {
+  return Array.from(cachedEconomicCalendarByKey.values())
+    .filter((entry) => entry.items.some((event) => event.id === eventId))
+    .sort((left, right) => right.fetchedAtMs - left.fetchedAtMs)[0] ?? null;
+}
+
+function getEconomicCalendarDetailBounds(now = new Date()) {
+  const todayKey = toUtcDateKey(now);
+
+  return {
+    startDate: shiftUtcDateKey(todayKey, -31),
+    endDate: shiftUtcDateKey(todayKey, 31),
+  };
+}
+
 export async function listEconomicCalendarEvents(
   query: EconomicCalendarQuery,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<EconomicCalendarListResponse> {
   const bounds = getRangeBounds(query);
   const cached = await getCachedOrFetchedEconomicCalendar({
+    bounds,
     live: query.live,
     selectLiveFocusEvents: createLiveFocusSelector({
       bounds,
@@ -302,7 +333,15 @@ export async function getEconomicCalendarEventDetail(
   query: { instrument?: string; live?: boolean },
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<EconomicCalendarEventDetailResponse> {
+  const cachedEventRange = getCachedEconomicCalendarContainingEvent(eventId);
+  const detailBounds = cachedEventRange
+    ? {
+        startDate: cachedEventRange.startDate,
+        endDate: cachedEventRange.endDate,
+      }
+    : getEconomicCalendarDetailBounds();
   const cached = await getCachedOrFetchedEconomicCalendar({
+    bounds: detailBounds,
     live: query.live,
     selectLiveFocusEvents: (items) => items
       .map((event) => attachEconomicEventRelevance(event, query.instrument?.trim().toUpperCase() ?? null))

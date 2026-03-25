@@ -10,6 +10,7 @@ const [
   {
     dedupeEconomicCalendarEvents,
     normalizeEconomicCalendarEvent,
+    normalizeTradingEconomicsEconomicCalendarEvent,
   },
   {
     getDashboardImportantEvents,
@@ -70,6 +71,31 @@ test("provider normalization rejects malformed data cleanly", () => {
 
   assert.equal(missingTitle, null);
   assert.equal(invalidDate, null);
+});
+
+test("trading economics normalization keeps the shared event shape for range-capable providers", () => {
+  const normalized = normalizeTradingEconomicsEconomicCalendarEvent({
+    CalendarId: "te-123",
+    Country: "United Kingdom",
+    Currency: "GBP",
+    Date: "2026-03-25T14:00:00",
+    Event: "CPI y/y",
+    Category: "Inflation Rate YoY",
+    Actual: "3.2%",
+    Previous: "3.0%",
+    Forecast: "3.1%",
+    Importance: 3,
+    LastUpdate: "2026-03-25T14:00:20",
+    Revised: "",
+  });
+
+  assert.ok(normalized);
+  assert.equal(normalized.currency, "GBP");
+  assert.equal(normalized.country, "United Kingdom");
+  assert.equal(normalized.sourceProvider, "trading-economics");
+  assert.equal(normalized.actualValue, "3.2%");
+  assert.equal(normalized.forecastValue, "3.1%");
+  assert.equal(normalized.status, "released");
 });
 
 test("duplicate provider events are collapsed predictably", () => {
@@ -338,6 +364,43 @@ test("live requests refresh high-impact pending releases before the normal cache
   } finally {
     Date.now = originalDateNow;
   }
+});
+
+test("range caches are keyed by the requested provider window", async () => {
+  resetEconomicCalendarCache();
+  let fetchCount = 0;
+
+  const fetchStub: typeof fetch = async (_input) => {
+    fetchCount += 1;
+
+    return new Response(JSON.stringify([
+      createRawEvent({
+        id: `event-${fetchCount}`,
+        title: `Event ${fetchCount}`,
+        date: "2026-03-25T12:30:00.000Z",
+      }),
+    ]), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }) as Response;
+  };
+
+  await listEconomicCalendarEvents({
+    dateFrom: "2026-03-25",
+    dateTo: "2026-03-25",
+  }, fetchStub);
+
+  await listEconomicCalendarEvents({
+    dateFrom: "2026-03-26",
+    dateTo: "2026-03-26",
+  }, fetchStub);
+
+  await listEconomicCalendarEvents({
+    dateFrom: "2026-03-25",
+    dateTo: "2026-03-25",
+  }, fetchStub);
+
+  assert.equal(fetchCount, 2);
 });
 
 test("concurrent live refresh requests share a single provider fetch", async () => {

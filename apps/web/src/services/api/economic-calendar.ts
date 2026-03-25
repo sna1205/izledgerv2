@@ -57,13 +57,13 @@ function buildEconomicCalendarQuery(params: EconomicCalendarQueryParams = {}) {
 }
 
 export function getEconomicCalendarList(params: EconomicCalendarQueryParams = {}) {
-  return apiFetch<EconomicCalendarListResponse>(`/economic-calendar${buildEconomicCalendarQuery(params)}`);
+  return apiFetch<EconomicCalendarListResponse>(`/economic-calendar/events${buildEconomicCalendarQuery(params)}`);
 }
 
 export function getDashboardImportantEvents(params: EconomicCalendarQueryParams = {}) {
-  return apiFetch<DashboardImportantEventsResponse>(`/dashboard/important-events${buildEconomicCalendarQuery(params)}`);
+  return apiFetch<DashboardImportantEventsResponse>(`/economic-calendar/next-event${buildEconomicCalendarQuery(params)}`);
 }
 
 export function getEconomicCalendarEventDetail(eventId: string, params: Pick<EconomicCalendarQueryParams, "instrument" | "live"> = {}) {
-  return apiFetch<EconomicCalendarEventDetailResponse>(`/economic-calendar/${eventId}${buildEconomicCalendarQuery(params)}`);
+  return apiFetch<EconomicCalendarEventDetailResponse>(`/economic-calendar/events/${eventId}${buildEconomicCalendarQuery(params)}`);
 }

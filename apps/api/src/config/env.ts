@@ -164,7 +164,10 @@ const envSchema = z.object({
   STORAGE_FORCE_PATH_STYLE: booleanFromEnv.default(true),
   STORAGE_SIGNED_READS: booleanFromEnv.default(true),
   STORAGE_SIGNED_READ_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  ECONOMIC_CALENDAR_PROVIDER: z.enum(["fair-economy", "trading-economics"]).default("fair-economy"),
   ECONOMIC_CALENDAR_PROVIDER_URL: z.string().url().default("https://nfs.faireconomy.media/ff_calendar_thisweek.json"),
+  ECONOMIC_CALENDAR_TRADING_ECONOMICS_BASE_URL: z.string().url().default("https://api.tradingeconomics.com"),
+  ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY: optionalStringFromEnv,
   ECONOMIC_CALENDAR_PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().default(7000),
   ECONOMIC_CALENDAR_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
@@ -290,6 +293,14 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["SESSION_COOKIE_SAME_SITE"],
       message: "SESSION_COOKIE_SAME_SITE must be none when APP_URL and API_URL are on different sites",
+    });
+  }
+
+  if (data.ECONOMIC_CALENDAR_PROVIDER === "trading-economics" && !data.ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY"],
+      message: "ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY is required when ECONOMIC_CALENDAR_PROVIDER=trading-economics",
     });
   }
 
