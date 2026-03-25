@@ -1,10 +1,29 @@
 import { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/auth.js";
 import { parseOrThrow } from "../../utils/http.js";
-import { completeScreenshotSchema, presignScreenshotSchema, reorderScreenshotsSchema, screenshotParamsSchema, screenshotTradeParamsSchema } from "./schemas.js";
-import { completeTradeScreenshot, deleteTradeScreenshot, presignTradeScreenshot, reorderTradeScreenshots } from "./service.js";
+import { AppError } from "../../utils/errors.js";
+import { maxScreenshotFileSizeBytes } from "./constants.js";
+import {
+  completeScreenshotSchema,
+  presignScreenshotSchema,
+  reorderScreenshotsSchema,
+  screenshotParamsSchema,
+  screenshotTradeParamsSchema,
+  uploadScreenshotHeadersSchema,
+} from "./schemas.js";
+import {
+  completeTradeScreenshot,
+  deleteTradeScreenshot,
+  presignTradeScreenshot,
+  reorderTradeScreenshots,
+  uploadTradeScreenshot,
+} from "./service.js";
 
 export async function screenshotRoutes(app: FastifyInstance) {
+  app.addContentTypeParser(["image/png", "image/jpeg", "image/webp", "application/octet-stream"], { parseAs: "buffer" }, (_request, body, done) => {
+    done(null, body);
+  });
+
   app.post("/:id/screenshots/presign", { preHandler: authenticate }, async (request) => {
     const params = parseOrThrow(screenshotTradeParamsSchema, request.params);
     const body = parseOrThrow(presignScreenshotSchema, request.body);
@@ -22,6 +41,28 @@ export async function screenshotRoutes(app: FastifyInstance) {
       ...body,
       sortOrder: body.sortOrder ?? 0,
     });
+    reply.status(201).send({ screenshot });
+  });
+
+  app.post("/:id/screenshots/upload", {
+    preHandler: authenticate,
+    bodyLimit: maxScreenshotFileSizeBytes,
+  }, async (request, reply) => {
+    const params = parseOrThrow(screenshotTradeParamsSchema, request.params);
+    const headers = parseOrThrow(uploadScreenshotHeadersSchema, request.headers);
+
+    if (!Buffer.isBuffer(request.body)) {
+      throw new AppError(400, "BAD_REQUEST", "Invalid request");
+    }
+
+    const screenshot = await uploadTradeScreenshot(request.auth!.userId, params.id, {
+      storageKey: headers["x-storage-key"],
+      uploadToken: headers["x-upload-token"],
+      contentType: headers["x-upload-content-type"] ?? headers["content-type"],
+      sortOrder: headers["x-sort-order"] ?? 0,
+      file: request.body,
+    });
+
     reply.status(201).send({ screenshot });
   });
 

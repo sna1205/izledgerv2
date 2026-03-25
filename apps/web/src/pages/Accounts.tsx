@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Bitcoin, FlaskConical, Landmark, Pencil, Plus, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
+import { Archive, Bitcoin, FlaskConical, Landmark, Pencil, Plus, RotateCcw, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
 import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
 import { StatCard } from "@/components/StatCard";
 import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
@@ -24,24 +24,25 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
-import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api/client";
-import { createAccount, deleteAccount, listAccounts, updateAccount } from "@/lib/api/accounts";
-import { getAnalyticsBreakdowns } from "@/lib/api/analytics";
-import { setStoredAccountFilter } from "@/lib/account-filter";
+import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { ApiError } from "@/services/api/client";
+import { createAccount, deleteAccount, listAccounts, updateAccount } from "@/services/api/accounts";
+import { getAnalyticsBreakdowns } from "@/services/api/analytics";
+import { setStoredAccountFilter } from "@/utils/account-filter";
 import {
   ACCOUNT_CURRENCY_MAX_LENGTH,
   ACCOUNT_NAME_MAX_LENGTH,
   getAccountApiErrorMessage,
   validateAccountForm,
-} from "@/lib/account-validation";
-import { formatCurrencyDisplay, formatPercentageDisplay } from "@/lib/analytics-rendering";
-import { getPageErrorState } from "@/lib/page-errors";
-import { withMinimumDelay } from "@/lib/loading";
-import { privateQueryKey } from "@/lib/react-query";
-import type { Account, AccountType } from "@/lib/types";
-import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/lib/types";
-import { cn } from "@/lib/utils";
+} from "@/utils/account-validation";
+import { formatCurrencyDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
+import { getPageErrorState } from "@/utils/page-errors";
+import { withMinimumDelay } from "@/utils/loading";
+import { privateQueryKey } from "@/services/query-client";
+import type { Account, AccountType } from "@/types";
+import { ACCOUNT_BROKERS, ACCOUNT_TYPES } from "@/types";
+import { cn } from "@/utils/class-names";
 
 type AccountFormState = {
   name: string;
@@ -115,9 +116,9 @@ export default function Accounts() {
   const [formError, setFormError] = useState("");
 
   const accountsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "accounts"),
+    queryKey: privateQueryKey(user.id, "accounts", "all"),
     queryFn: async () => {
-      const response = await withMinimumDelay(() => listAccounts());
+      const response = await withMinimumDelay(() => listAccounts({ status: "all" }));
       return response.items;
     },
   });
@@ -190,8 +191,22 @@ export default function Accounts() {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async ({ accountId, isArchived }: { accountId: string; isArchived: boolean }) => updateAccount(accountId, { isArchived }),
+    onSuccess: async (_result, variables) => {
+      await invalidateAccountData();
+      toast.success(variables.isArchived ? "Account archived." : "Account restored.");
+    },
+    onError: (error) => {
+      const message = getAccountApiErrorMessage(error, "Could not update the account right now.");
+      toast.error(message);
+    },
+  });
+
   const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
   const totalPnl = breakdownsQuery.data?.summary.totalProfit ?? 0;
+
+  useUnauthorizedSessionGuard(accountsQuery.error, breakdownsQuery.error);
 
   const openCreateModal = () => {
     setEditingAccount(null);
@@ -227,7 +242,7 @@ export default function Accounts() {
     const errorState = getPageErrorState(accountsQuery.error, {
       unavailableTitle: "Accounts unavailable",
       unavailableDescription: "The accounts service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view accounts right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Accounts request invalid",
       validationDescription: "The accounts request could not be processed.",
       timeoutTitle: "Accounts request timed out",
@@ -301,12 +316,22 @@ export default function Accounts() {
                           <h2 className="text-base font-medium text-foreground">{account.name}</h2>
                           <DataBadge tone={iconData.badgeTone}>{account.type}</DataBadge>
                           {account.isDefault ? <DataBadge tone="primary">Default</DataBadge> : null}
+                          {account.isArchived ? <DataBadge tone="neutral">Archived</DataBadge> : null}
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{account.broker}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => archiveMutation.mutate({ accountId: account.id, isArchived: !account.isArchived })}
+                        disabled={archiveMutation.isPending}
+                      >
+                        {account.isArchived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                        {account.isArchived ? "Restore" : "Archive"}
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => openEditModal(account)}>
                         <Pencil className="h-4 w-4" />
                         Edit
@@ -344,29 +369,35 @@ export default function Accounts() {
 
                   <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-muted-foreground">
-                      Created {new Date(account.createdAt).toLocaleDateString("en-US")}
+                      {account.isArchived
+                        ? "Archived accounts are hidden from active account selectors."
+                        : `Created ${new Date(account.createdAt).toLocaleDateString("en-US")}`}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setStoredAccountFilter(account.id);
-                          navigate("/dashboard");
-                        }}
-                      >
-                        View Overview
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setStoredAccountFilter(account.id);
-                          navigate("/analytics");
-                        }}
-                      >
-                        View Analytics
-                      </Button>
+                      {!account.isArchived ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setStoredAccountFilter(account.id);
+                              navigate("/dashboard");
+                            }}
+                          >
+                            View Overview
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setStoredAccountFilter(account.id);
+                              navigate("/analytics");
+                            }}
+                          >
+                            View Analytics
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -486,7 +517,7 @@ export default function Accounts() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Account</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone and may affect existing trade references.
+              This permanently deletes the account only when no trades still reference it. If trade history exists, archive the account instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

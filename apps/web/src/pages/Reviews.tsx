@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addMonths,
   eachDayOfInterval,
@@ -14,10 +14,10 @@ import {
 import { ArrowRight, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
-import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { ReviewContent } from "@/components/ReviewContent";
-import { TradeReviewDialog } from "@/components/TradeReviewDialog";
+import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
+import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
+import { ReviewContent } from "@/features/reviews/components/ReviewContent";
+import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,15 +28,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TagChip } from "@/components/ui/TagChip";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
-import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api/client";
-import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
-import { getTrade } from "@/lib/api/trades";
-import { formatNumberDisplay } from "@/lib/analytics-rendering";
-import { withMinimumDelay } from "@/lib/loading";
-import { getPageErrorState } from "@/lib/page-errors";
-import { privateQueryKey } from "@/lib/react-query";
-import { getReviewScope, getReviewTitle } from "@/lib/reviews";
+import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { ApiError } from "@/services/api/client";
+import { createReview, listReviews, type ListReviewsParams, updateReview } from "@/services/api/reviews";
+import { getTrade } from "@/services/api/trades";
+import { formatNumberDisplay } from "@/utils/analytics-rendering";
+import { withMinimumDelay } from "@/utils/loading";
+import { getPageErrorState } from "@/utils/page-errors";
+import { privateQueryKey } from "@/services/query-client";
+import { getReviewScope, getReviewTitle } from "@/utils/reviews";
 import {
   REVIEW_EMOTIONS,
   REVIEW_RISK_STATUSES,
@@ -48,8 +49,8 @@ import {
   type ReviewTradeSnapshot,
   type ReviewType,
   type Trade,
-} from "@/lib/types";
-import { cn } from "@/lib/utils";
+} from "@/types";
+import { cn } from "@/utils/class-names";
 
 const emptyDailyForm = {
   reviewDate: new Date().toISOString().split("T")[0],
@@ -74,14 +75,17 @@ const emptyWeeklyForm = {
 };
 
 const EMPTY_REVIEWS: Review[] = [];
+const CALENDAR_REVIEW_PAGE_SIZE = 50;
+const WEEKLY_REVIEW_PAGE_SIZE = 12;
 
-type CalendarTone = "good" | "warn" | "bad" | "empty";
+type CalendarTone = "good" | "warn" | "bad" | "review" | "empty";
 type CalendarReviewDay = {
   key: string;
   date: Date;
   dayLabel: string;
   inCurrentMonth: boolean;
   review: Review | null;
+  hasTradeReviews: boolean;
   tone: CalendarTone;
   icon: string | null;
 };
@@ -293,13 +297,16 @@ function getTradeReviewMeta(trade: Trade | null, review: Review) {
   ].filter(Boolean).join(" · ");
 }
 
-function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>) {
+function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>, tradeReviewDates: Set<string>) {
   const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
   const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
 
   return eachDayOfInterval({ start, end }).map((date) => {
     const key = format(date, "yyyy-MM-dd");
     const review = reviewMap.get(key) ?? null;
+    const hasTradeReviews = tradeReviewDates.has(key);
+    const tone = review ? getDailyTone(review) : hasTradeReviews ? "review" : "empty";
+    const icon = review ? getDailyIcon(review) : hasTradeReviews ? "✎" : null;
 
     return {
       key,
@@ -307,8 +314,9 @@ function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>) {
       dayLabel: format(date, "d"),
       inCurrentMonth: isSameMonth(date, currentMonth),
       review,
-      tone: getDailyTone(review),
-      icon: getDailyIcon(review),
+      hasTradeReviews,
+      tone,
+      icon,
     } satisfies CalendarReviewDay;
   });
 }
@@ -316,6 +324,25 @@ function buildCalendarDays(currentMonth: Date, reviewMap: Map<string, Review>) {
 function isReviewForDate(review: Review, dateKey: string) {
   const candidate = review.reviewDate || review.tradeSnapshot?.date || null;
   return candidate === dateKey;
+}
+
+async function listAllReviewPages(params: ListReviewsParams) {
+  const items: Review[] = [];
+  let page = 1;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const response = await listReviews({
+      ...params,
+      page,
+    });
+
+    items.push(...response.items);
+    hasNextPage = response.pagination.hasNextPage;
+    page += 1;
+  }
+
+  return items;
 }
 
 export default function Reviews() {
@@ -333,43 +360,60 @@ export default function Reviews() {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [selectedWeeklyIndex, setSelectedWeeklyIndex] = useState(0);
+  const calendarRangeStart = useMemo(
+    () => startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 }),
+    [currentMonth],
+  );
+  const calendarRangeEnd = useMemo(
+    () => endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 }),
+    [currentMonth],
+  );
+  const calendarDateFrom = useMemo(() => format(calendarRangeStart, "yyyy-MM-dd"), [calendarRangeStart]);
+  const calendarDateTo = useMemo(() => format(calendarRangeEnd, "yyyy-MM-dd"), [calendarRangeEnd]);
 
   const dailyReviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "daily-calendar"),
-    queryFn: async () => withMinimumDelay(() => listReviews({
+    queryKey: privateQueryKey(user.id, "reviews", "daily-calendar", calendarDateFrom, calendarDateTo),
+    queryFn: async () => withMinimumDelay(() => listAllReviewPages({
       type: "daily",
-      page: 1,
-      pageSize: 100,
-      sortBy: "updatedAt",
-      sortOrder: "desc",
+      dateFrom: calendarDateFrom,
+      dateTo: calendarDateTo,
+      pageSize: CALENDAR_REVIEW_PAGE_SIZE,
+      sortBy: "reviewDate",
+      sortOrder: "asc",
     })),
   });
 
-  const weeklyReviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "weekly-top"),
-    queryFn: async () => withMinimumDelay(() => listReviews({
+  const weeklyReviewsQuery = useInfiniteQuery({
+    queryKey: privateQueryKey(user.id, "reviews", "weekly-pages"),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => withMinimumDelay(() => listReviews({
       type: "weekly",
-      page: 1,
-      pageSize: 60,
-      sortBy: "updatedAt",
+      page: pageParam,
+      pageSize: WEEKLY_REVIEW_PAGE_SIZE,
+      sortBy: "weekEnd",
       sortOrder: "desc",
     })),
+    getNextPageParam: (lastPage) => lastPage.pagination.hasNextPage ? lastPage.pagination.page + 1 : undefined,
   });
 
   const tradeReviewsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "reviews", "trade-panel"),
-    queryFn: async () => withMinimumDelay(() => listReviews({
+    queryKey: privateQueryKey(user.id, "reviews", "trade-calendar", calendarDateFrom, calendarDateTo),
+    queryFn: async () => withMinimumDelay(() => listAllReviewPages({
       type: "trade",
-      page: 1,
-      pageSize: 100,
-      sortBy: "updatedAt",
-      sortOrder: "desc",
+      dateFrom: calendarDateFrom,
+      dateTo: calendarDateTo,
+      pageSize: CALENDAR_REVIEW_PAGE_SIZE,
+      sortBy: "reviewDate",
+      sortOrder: "asc",
     })),
   });
 
-  const dailyReviews = dailyReviewsQuery.data?.items ?? EMPTY_REVIEWS;
-  const weeklyReviews = weeklyReviewsQuery.data?.items ?? EMPTY_REVIEWS;
-  const tradeReviews = tradeReviewsQuery.data?.items ?? EMPTY_REVIEWS;
+  const dailyReviews = dailyReviewsQuery.data ?? EMPTY_REVIEWS;
+  const weeklyReviews = useMemo(
+    () => weeklyReviewsQuery.data?.pages.flatMap((page) => page.items) ?? EMPTY_REVIEWS,
+    [weeklyReviewsQuery.data],
+  );
+  const tradeReviews = tradeReviewsQuery.data ?? EMPTY_REVIEWS;
 
   const viewingTrade = useMemo(() => {
     if (!viewingReview || getReviewScope(viewingReview) !== "trade") {
@@ -392,13 +436,26 @@ export default function Reviews() {
     () => new Map(dailyReviews.filter((review) => review.reviewDate).map((review) => [review.reviewDate as string, review])),
     [dailyReviews],
   );
-
-  const calendarDays = useMemo(
-    () => buildCalendarDays(currentMonth, dailyReviewMap),
-    [currentMonth, dailyReviewMap],
+  const tradeReviewDates = useMemo(
+    () => new Set(
+      tradeReviews
+        .map((review) => review.reviewDate || review.tradeSnapshot?.date || null)
+        .filter((value): value is string => Boolean(value)),
+    ),
+    [tradeReviews],
   );
 
+  const calendarDays = useMemo(
+    () => buildCalendarDays(currentMonth, dailyReviewMap, tradeReviewDates),
+    [currentMonth, dailyReviewMap, tradeReviewDates],
+  );
+  const isCalendarSelectionReady = dailyReviewsQuery.isFetched && tradeReviewsQuery.isFetched;
+
   useEffect(() => {
+    if (!isCalendarSelectionReady) {
+      return;
+    }
+
     if (calendarDays.length === 0) {
       setSelectedDayKey(null);
       return;
@@ -412,10 +469,10 @@ export default function Reviews() {
       return;
     }
 
-    const reviewedDay = [...calendarDays].reverse().find((day) => day.review && day.inCurrentMonth);
+    const reviewedDay = [...calendarDays].reverse().find((day) => (day.review || day.hasTradeReviews) && day.inCurrentMonth);
     const fallbackDay = calendarDays.find((day) => day.inCurrentMonth) ?? calendarDays[0];
     setSelectedDayKey((reviewedDay ?? fallbackDay)?.key ?? null);
-  }, [calendarDays, selectedDayKey]);
+  }, [calendarDays, isCalendarSelectionReady, selectedDayKey]);
 
   useEffect(() => {
     if (sortedWeeklyReviews.length === 0) {
@@ -429,6 +486,20 @@ export default function Reviews() {
       setSelectedWeeklyIndex(sortedWeeklyReviews.length - 1);
     }
   }, [selectedWeeklyIndex, sortedWeeklyReviews]);
+
+  useEffect(() => {
+    if (!weeklyReviewsQuery.hasNextPage || weeklyReviewsQuery.isFetchingNextPage) {
+      return;
+    }
+
+    if (selectedWeeklyIndex >= Math.max(sortedWeeklyReviews.length - 2, 0)) {
+      void weeklyReviewsQuery.fetchNextPage();
+    }
+  }, [
+    selectedWeeklyIndex,
+    sortedWeeklyReviews.length,
+    weeklyReviewsQuery,
+  ]);
 
   const selectedDay = calendarDays.find((day) => day.key === selectedDayKey) ?? null;
   const selectedDailyReview = selectedDayKey ? dailyReviewMap.get(selectedDayKey) ?? null : null;
@@ -595,6 +666,8 @@ export default function Reviews() {
   const isInitialLoading = !dailyReviewsQuery.data && !weeklyReviewsQuery.data && !tradeReviewsQuery.data
     && (dailyReviewsQuery.isLoading || weeklyReviewsQuery.isLoading || tradeReviewsQuery.isLoading);
 
+  useUnauthorizedSessionGuard(dailyReviewsQuery.error, weeklyReviewsQuery.error, tradeReviewsQuery.error);
+
   if (isInitialLoading) {
     return <ReviewsSkeleton />;
   }
@@ -603,7 +676,7 @@ export default function Reviews() {
     const errorState = getPageErrorState(dailyReviewsQuery.error ?? weeklyReviewsQuery.error ?? tradeReviewsQuery.error, {
       unavailableTitle: "Reviews unavailable",
       unavailableDescription: "The reviews service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view reviews right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Reviews request invalid",
       validationDescription: "The review filters in this request are invalid.",
       timeoutTitle: "Reviews request timed out",
@@ -656,16 +729,30 @@ export default function Reviews() {
                   {activeWeeklyReview ? `${activeWeeklyReview.weeklyRating ?? 0}/10` : "No weekly review yet"}
                 </h2>
               </div>
-              <div className="flex items-center gap-2">
-                {activeWeeklyReview ? (
-                  <>
-                    <Button
+            <div className="flex items-center gap-2">
+              {activeWeeklyReview ? (
+                <>
+                  <Button
                       variant="outline"
                       size="icon"
                       aria-label="Previous week"
-                      onClick={() => setSelectedWeeklyIndex((value) => Math.min(value + 1, sortedWeeklyReviews.length - 1))}
-                      disabled={clampedWeeklyIndex >= sortedWeeklyReviews.length - 1}
-                    >
+                    onClick={() => {
+                      setSelectedWeeklyIndex((value) => {
+                        const nextValue = Math.min(value + 1, sortedWeeklyReviews.length - 1);
+
+                        if (
+                          weeklyReviewsQuery.hasNextPage
+                          && !weeklyReviewsQuery.isFetchingNextPage
+                          && nextValue >= Math.max(sortedWeeklyReviews.length - 2, 0)
+                        ) {
+                          void weeklyReviewsQuery.fetchNextPage();
+                        }
+
+                        return nextValue;
+                      });
+                    }}
+                    disabled={clampedWeeklyIndex >= sortedWeeklyReviews.length - 1}
+                  >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button
@@ -710,6 +797,17 @@ export default function Reviews() {
                   <Sparkles className="h-3.5 w-3.5" />
                   {clampedWeeklyIndex === 0 ? "Latest" : "Earlier week"}
                 </div>
+              ) : null}
+              {weeklyReviewsQuery.hasNextPage ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full px-3"
+                  onClick={() => void weeklyReviewsQuery.fetchNextPage()}
+                  disabled={weeklyReviewsQuery.isFetchingNextPage}
+                >
+                  {weeklyReviewsQuery.isFetchingNextPage ? "Loading older weeks..." : "Load Older Weeks"}
+                </Button>
               ) : null}
             </div>
           </div>
@@ -784,6 +882,7 @@ export default function Reviews() {
                     day.tone === "good" && "border-emerald-500/20 bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300",
                     day.tone === "warn" && "border-amber-500/20 bg-amber-500/[0.12] text-amber-700 dark:text-amber-300",
                     day.tone === "bad" && "border-rose-500/20 bg-rose-500/[0.12] text-rose-700 dark:text-rose-300",
+                    day.tone === "review" && "border-rose-500/20 bg-rose-500/[0.12] text-rose-700 dark:text-rose-300",
                     day.tone === "empty" && "border-border/60 bg-background/70 text-muted-foreground",
                     selectedDayKey === day.key && "ring-2 ring-primary/45 ring-offset-2 ring-offset-background",
                   )}

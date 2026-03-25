@@ -6,15 +6,15 @@ import { useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { FilterBar, FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
 import { PaginationControls } from "@/components/PaginationControls";
-import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { ResultBadge } from "@/components/ResultBadge";
-import { ShareTradeModal } from "@/components/ShareTradeModal";
+import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
+import { ResultBadge } from "@/features/trades/components/ResultBadge";
+import { ShareTradeModal } from "@/features/trade-sharing/components/ShareTradeModal";
 import { StatCard } from "@/components/StatCard";
-import { TradeFormDialog } from "@/components/TradeFormDialog";
-import { TradeReviewDialog } from "@/components/TradeReviewDialog";
-import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { TradeFormDialog } from "@/features/trades/components/TradeFormDialog";
+import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
+import { TradeReviewStatusBadge } from "@/features/reviews/components/TradeReviewStatusBadge";
 import { SetupTag } from "@/components/SetupTag";
 import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
 import { Button } from "@/components/ui/button";
@@ -41,18 +41,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { DataBadge } from "@/components/DataBadge";
-import { listAccounts } from "@/lib/api/accounts";
-import { ApiError } from "@/lib/api/client";
-import { listReviews, createReview, updateReview } from "@/lib/api/reviews";
-import { listSetups } from "@/lib/api/setups";
-import { createTrade, deleteTrade, listTrades, updateTrade } from "@/lib/api/trades";
-import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
-import { formatCurrencyDisplay, formatNumberDisplay } from "@/lib/analytics-rendering";
-import { useAuth } from "@/lib/auth";
-import { withMinimumDelay } from "@/lib/loading";
-import { getPageErrorState } from "@/lib/page-errors";
-import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
-import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/lib/types";
+import { listAccounts } from "@/services/api/accounts";
+import { ApiError } from "@/services/api/client";
+import { listReviews, createReview, updateReview } from "@/services/api/reviews";
+import { listSetups } from "@/services/api/setups";
+import { createTrade, deleteTrade, listTrades, updateTrade } from "@/services/api/trades";
+import { resolveAccountFilter, useAccountFilter } from "@/utils/account-filter";
+import { formatCurrencyDisplay, formatNumberDisplay } from "@/utils/analytics-rendering";
+import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { withMinimumDelay } from "@/utils/loading";
+import { getPageErrorState } from "@/utils/page-errors";
+import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/services/query-client";
+import { EMOTIONS, SESSIONS, type Review, type Trade } from "@/types";
 
 const LEDGER_PAGE_SIZE = 10;
 const SCREENBOOK_PAGE_SIZE = 9;
@@ -97,9 +98,9 @@ export default function Trades() {
   const [screenbookPage, setScreenbookPage] = useState(1);
 
   const accountsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "accounts"),
+    queryKey: privateQueryKey(user.id, "accounts", "active"),
     queryFn: async () => {
-      const response = await withMinimumDelay(() => listAccounts());
+      const response = await withMinimumDelay(() => listAccounts({ status: "active" }));
       return response.items;
     },
   });
@@ -215,8 +216,6 @@ export default function Trades() {
       updateTradeQueryData(queryClient, user.id, result.trade);
       await invalidateJournalQueries(queryClient, user.id);
       toast.success(editingTrade ? "Trade updated successfully." : "Trade saved successfully.");
-      setEditingTrade(null);
-      setFormOpen(false);
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not save the trade right now.";
@@ -272,6 +271,8 @@ export default function Trades() {
   const hasError = [accountsQuery, setupsQuery, tradesQuery].some((query) => query.isError);
   const journalError = [accountsQuery, setupsQuery, tradesQuery].find((query) => query.isError)?.error;
 
+  useUnauthorizedSessionGuard(accountsQuery.error, setupsQuery.error, tradesQuery.error);
+
   if (isLoading) {
     return <TradesSkeleton />;
   }
@@ -280,7 +281,7 @@ export default function Trades() {
     const errorState = getPageErrorState(journalError, {
       unavailableTitle: "Trades unavailable",
       unavailableDescription: "The trading journal is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view this trading journal right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Trade request invalid",
       validationDescription: "The trade filters in this request are invalid.",
       timeoutTitle: "Trades request timed out",
@@ -462,7 +463,7 @@ export default function Trades() {
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {accountNames[trade.accountId] ?? "Unknown Account"}
+                            {trade.account?.name ?? accountNames[trade.accountId] ?? "Unknown Account"}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-2">
@@ -624,9 +625,16 @@ export default function Trades() {
 
       <TradeFormDialog
         open={formOpen}
-        onOpenChange={setFormOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+
+          if (!open) {
+            setEditingTrade(null);
+          }
+        }}
         onSave={async (payload) => {
-          await saveTradeMutation.mutateAsync(payload);
+          const result = await saveTradeMutation.mutateAsync(payload);
+          return result.trade;
         }}
         editTrade={editingTrade}
         accounts={accounts}

@@ -1,10 +1,27 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
 
 export function isStorageEnabled() {
   return env.STORAGE_ENABLED;
+}
+
+export function normalizeStorageEndpoint(endpoint: string | undefined, bucket = env.STORAGE_BUCKET) {
+  if (!endpoint) {
+    return endpoint;
+  }
+
+  const normalizedEndpoint = new URL(endpoint);
+  const trimmedPath = normalizedEndpoint.pathname.replace(/\/+$/, "");
+
+  // Some S3-compatible dashboards show endpoints with the bucket appended.
+  // The S3 client adds the bucket itself, so strip that duplicate segment.
+  if (bucket && trimmedPath === `/${bucket}`) {
+    normalizedEndpoint.pathname = "/";
+  }
+
+  return normalizedEndpoint.toString().replace(/\/$/, "");
 }
 
 function getStorageClient() {
@@ -14,7 +31,7 @@ function getStorageClient() {
 
   return new S3Client({
     region: env.STORAGE_REGION,
-    endpoint: env.STORAGE_ENDPOINT,
+    endpoint: normalizeStorageEndpoint(env.STORAGE_ENDPOINT),
     forcePathStyle: env.STORAGE_FORCE_PATH_STYLE,
     credentials: {
       accessKeyId: env.STORAGE_ACCESS_KEY!,
@@ -37,12 +54,30 @@ export async function createPresignedUpload(params: {
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
 
   return {
+    url: uploadUrl,
     uploadUrl,
     method: "PUT" as const,
     headers: {
       "Content-Type": params.contentType,
     },
   };
+}
+
+export async function putObject(params: {
+  key: string;
+  contentType: string;
+  body: Uint8Array;
+}) {
+  const s3 = getStorageClient();
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: env.STORAGE_BUCKET!,
+      Key: params.key,
+      ContentType: params.contentType,
+      Body: params.body,
+    }),
+  );
 }
 
 export async function getObjectMetadata(key: string) {
@@ -121,6 +156,36 @@ export async function objectExists(key: string) {
   return metadata.exists;
 }
 
+export async function listObjectKeys(params?: {
+  prefix?: string;
+  continuationToken?: string;
+  maxKeys?: number;
+}) {
+  if (!env.STORAGE_ENABLED) {
+    return {
+      keys: [],
+      nextContinuationToken: undefined,
+    };
+  }
+
+  const s3 = getStorageClient();
+  const response = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: env.STORAGE_BUCKET!,
+      Prefix: params?.prefix,
+      ContinuationToken: params?.continuationToken,
+      MaxKeys: params?.maxKeys,
+    }),
+  );
+
+  return {
+    keys: (response.Contents ?? [])
+      .map((item) => item.Key)
+      .filter((key): key is string => Boolean(key)),
+    nextContinuationToken: response.IsTruncated ? response.NextContinuationToken ?? undefined : undefined,
+  };
+}
+
 export function storageObjectUrl(key: string) {
   if (!env.STORAGE_ENABLED) {
     return "";
@@ -130,5 +195,5 @@ export function storageObjectUrl(key: string) {
     return `${env.STORAGE_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`;
   }
 
-  return `${env.STORAGE_ENDPOINT!.replace(/\/$/, "")}/${env.STORAGE_BUCKET}/${key}`;
+  return `${normalizeStorageEndpoint(env.STORAGE_ENDPOINT)!}/${env.STORAGE_BUCKET}/${key}`;
 }

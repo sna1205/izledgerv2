@@ -1,6 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
 import type { TradeResultValue } from "../../config/domain.js";
-import { toNumber } from "../../lib/decimal.js";
+import { toNumber } from "../../utils/decimal.js";
 import { sessionFromDb } from "../../utils/domain-mappers.js";
 
 type PlainTrade = {

@@ -4,6 +4,7 @@ import {
   allowedScreenshotContentTypes,
   getFileExtension,
   maxScreenshotFileSizeBytes,
+  normalizeScreenshotContentType,
   screenshotFileExtensionsByContentType,
 } from "./constants.js";
 
@@ -48,6 +49,14 @@ export const completeScreenshotSchema = z.object({
   storageKey: z.string().trim().min(1),
   uploadToken: z.string().trim().min(1),
   sortOrder: boundedIntSchema(0, numericBounds.maxScreenshotSortOrder).default(0),
+});
+
+export const uploadScreenshotHeadersSchema = z.object({
+  "content-type": z.string().trim().min(1).transform(normalizeScreenshotContentType),
+  "x-upload-content-type": z.string().trim().min(1).transform(normalizeScreenshotContentType).optional(),
+  "x-upload-token": z.string().trim().min(1),
+  "x-storage-key": z.string().trim().min(1),
+  "x-sort-order": z.coerce.number().int().min(0).max(numericBounds.maxScreenshotSortOrder).default(0),
 });
 
 export const reorderScreenshotsSchema = z.object({

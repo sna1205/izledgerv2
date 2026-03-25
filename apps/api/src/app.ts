@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { env } from "./config/env.js";
+import { prisma } from "./lib/prisma.js";
 import { AppError, toAppError, toErrorResponse } from "./utils/errors.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
@@ -14,19 +15,35 @@ import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
 
+function normalizeOrigin(origin: string) {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return null;
+  }
+}
+
 function isAllowedCorsOrigin(origin?: string) {
   if (!origin) {
     return true;
   }
 
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  if (!normalizedOrigin) {
+    return false;
+  }
+
   try {
-    const requestOrigin = new URL(origin);
+    const requestOrigin = new URL(normalizedOrigin);
 
     if (env.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(requestOrigin.hostname)) {
       return true;
     }
 
-    return Boolean(env.FRONTEND_URL && origin === env.FRONTEND_URL);
+    const allowedOrigin = env.APP_URL ? normalizeOrigin(env.APP_URL) : null;
+
+    return Boolean(allowedOrigin && normalizedOrigin === allowedOrigin);
   } catch {
     return false;
   }
@@ -34,6 +51,7 @@ function isAllowedCorsOrigin(origin?: string) {
 
 export async function buildApp() {
   const app = Fastify({
+    trustProxy: env.NODE_ENV === "production",
     logger: env.NODE_ENV === "development"
       ? {
           level: env.LOG_LEVEL,
@@ -54,7 +72,13 @@ export async function buildApp() {
 
   await app.register(cors, {
     origin: (origin, callback) => {
-      callback(null, isAllowedCorsOrigin(origin));
+      const allowed = isAllowedCorsOrigin(origin);
+
+      if (!allowed && origin) {
+        app.log.warn({ origin }, "Blocked request from disallowed CORS origin.");
+      }
+
+      callback(null, allowed);
     },
     credentials: true,
   });
@@ -74,11 +98,30 @@ export async function buildApp() {
     ),
   });
 
-  app.get("/health", async () => ({
-    status: "ok",
-    service: "izledger-backend",
-    timestamp: new Date().toISOString(),
-  }));
+  app.get("/health", async (_request, reply) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+
+      return {
+        status: "ok",
+        service: "izledger-backend",
+        database: "ok",
+        storageEnabled: env.STORAGE_ENABLED,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      app.log.error(error);
+      reply.status(503);
+
+      return {
+        status: "error",
+        service: "izledger-backend",
+        database: "unavailable",
+        storageEnabled: env.STORAGE_ENABLED,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  });
 
   app.setNotFoundHandler((_request, reply) => {
     reply.status(404).send(toErrorResponse(new AppError(404, "NOT_FOUND", "Resource not found.")));

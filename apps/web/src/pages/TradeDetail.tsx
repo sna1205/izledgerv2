@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, Camera, CameraOff, CheckCircle2, Clock3, ImagePlus, Pencil, Share2, Sparkles, Trash2 } from "lucide-react";
@@ -9,27 +9,29 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
-import { PageShell } from "@/components/PageShell";
-import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { ResultBadge } from "@/components/ResultBadge";
+import { PageShell } from "@/layouts/PageShell";
+import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
+import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
-import { ShareTradeModal } from "@/components/ShareTradeModal";
-import { TradeFormDialog } from "@/components/TradeFormDialog";
-import { TradeReviewContent } from "@/components/TradeReviewContent";
-import { TradeReviewDialog } from "@/components/TradeReviewDialog";
-import { TradeReviewStatusBadge } from "@/components/TradeReviewStatusBadge";
+import { ShareTradeModal } from "@/features/trade-sharing/components/ShareTradeModal";
+import { TradeFormDialog } from "@/features/trades/components/TradeFormDialog";
+import { TradeReviewContent } from "@/features/reviews/components/TradeReviewContent";
+import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
+import { TradeReviewStatusBadge } from "@/features/reviews/components/TradeReviewStatusBadge";
 import { TagChip } from "@/components/ui/TagChip";
-import { listAccounts } from "@/lib/api/accounts";
-import { ApiError } from "@/lib/api/client";
-import { createReview, listReviews, updateReview } from "@/lib/api/reviews";
-import { listSetups } from "@/lib/api/setups";
-import { deleteTrade, getTrade, updateTrade } from "@/lib/api/trades";
-import { useAuth } from "@/lib/auth";
-import { withMinimumDelay } from "@/lib/loading";
-import { getPageErrorState } from "@/lib/page-errors";
-import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/lib/react-query";
-import type { Review, Trade } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { listAccounts } from "@/services/api/accounts";
+import { ApiError } from "@/services/api/client";
+import { createReview, listReviews, updateReview } from "@/services/api/reviews";
+import { listSetups } from "@/services/api/setups";
+import { readTradeScreenshotClipboardFiles, uploadTradeScreenshot } from "@/services/api/screenshots";
+import { deleteTrade, getTrade, updateTrade } from "@/services/api/trades";
+import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { withMinimumDelay } from "@/utils/loading";
+import { getPageErrorState } from "@/utils/page-errors";
+import { privateQueryKey, removeTradeQueryData, syncTradeScreenshotQueryData, updateTradeQueryData } from "@/services/query-client";
+import type { Review, Trade } from "@/types";
+import { cn } from "@/utils/class-names";
 
 function formatTradeDate(date: string) {
   return format(parseISO(date), "MMMM d, yyyy");
@@ -97,23 +99,62 @@ function InsightRow({
 function ScreenshotGalleryCard({
   trade,
   onAddScreenshot,
+  onPasteScreenshots,
+  onPasteButtonClick,
+  pasteEnabled,
+  isUploading,
 }: {
   trade: Trade;
   onAddScreenshot: () => void;
+  onPasteScreenshots: (files: File[]) => Promise<void>;
+  onPasteButtonClick: () => Promise<void>;
+  pasteEnabled: boolean;
+  isUploading: boolean;
 }) {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const screenshots = trade.screenshotAssets ?? [];
+
+  useEffect(() => {
+    if (!pasteEnabled) {
+      return;
+    }
+
+    const handleWindowPaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.items ?? [])
+        .filter((item) => item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
+
+      if (files.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      void onPasteScreenshots(files);
+    };
+
+    window.addEventListener("paste", handleWindowPaste);
+
+    return () => {
+      window.removeEventListener("paste", handleWindowPaste);
+    };
+  }, [onPasteScreenshots, pasteEnabled]);
 
   return (
     <>
       <SectionCard
         title="Screenshot Gallery"
-        description="Execution charts, post-trade markup, and context images for future review."
+        description={isUploading ? "Uploading screenshot..." : undefined}
         action={
-          <Button variant="outline" size="sm" onClick={onAddScreenshot}>
-            <ImagePlus className="mr-1 h-4 w-4" />
-            Manage Screenshots
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => void onPasteButtonClick()} disabled={isUploading}>
+              {isUploading ? "Uploading..." : "Paste Screenshot"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={onAddScreenshot} disabled={isUploading}>
+              <ImagePlus className="mr-1 h-4 w-4" />
+              Manage Screenshots
+            </Button>
+          </div>
         }
       >
         {screenshots.length > 0 ? (
@@ -138,9 +179,6 @@ function ScreenshotGalleryCard({
               <CameraOff className="h-5 w-5" />
             </div>
             <h3 className="mt-4 text-base font-medium text-foreground">No screenshots added</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Add charts or execution images to improve future review.
-            </p>
             <Button className="mt-4" variant="outline" size="sm" onClick={onAddScreenshot}>
               <Camera className="mr-1 h-4 w-4" />
               Add Screenshot
@@ -209,6 +247,8 @@ export default function TradeDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
+  const [isReadingScreenshotClipboard, setIsReadingScreenshotClipboard] = useState(false);
 
   const tradeQuery = useQuery({
     queryKey: privateQueryKey(user.id, "trades", "detail", id),
@@ -227,9 +267,9 @@ export default function TradeDetail() {
     enabled: Boolean(id),
   });
   const accountsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "accounts"),
+    queryKey: privateQueryKey(user.id, "accounts", "active"),
     queryFn: async () => {
-      const response = await listAccounts();
+      const response = await listAccounts({ status: "active" });
       return response.items;
     },
   });
@@ -317,6 +357,64 @@ export default function TradeDetail() {
   }, [trade, review]);
   const isTradeLoading = tradeQuery.isLoading && !trade;
   const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
+  const isProcessingScreenshotClipboard = isUploadingScreenshot || isReadingScreenshotClipboard;
+
+  const handlePasteScreenshots = async (files: File[]) => {
+    if (!trade || isProcessingScreenshotClipboard) {
+      return;
+    }
+
+    setIsUploadingScreenshot(true);
+
+    try {
+      let nextTrade = trade;
+
+      for (const file of files) {
+        const screenshot = await uploadTradeScreenshot({
+          tradeId: nextTrade.id,
+          file,
+          sortOrder: nextTrade.screenshotAssets?.length ?? 0,
+        });
+
+        const nextScreenshots = [...(nextTrade.screenshotAssets ?? []), screenshot];
+        nextTrade = {
+          ...nextTrade,
+          screenshotAssets: nextScreenshots,
+          screenshots: nextScreenshots.map((item) => item.url),
+        };
+
+        updateTradeQueryData(queryClient, user.id, nextTrade);
+      }
+
+      await syncTradeScreenshotQueryData(queryClient, user.id, nextTrade);
+      toast.success(files.length === 1 ? "Screenshot uploaded." : "Screenshots uploaded.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Screenshot upload failed.";
+      toast.error(message);
+    } finally {
+      setIsUploadingScreenshot(false);
+    }
+  };
+
+  const handlePasteScreenshotsFromClipboard = async () => {
+    if (isProcessingScreenshotClipboard) {
+      return;
+    }
+
+    setIsReadingScreenshotClipboard(true);
+
+    try {
+      const files = await readTradeScreenshotClipboardFiles();
+      await handlePasteScreenshots(files);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not read an image from your clipboard.";
+      toast.error(message);
+    } finally {
+      setIsReadingScreenshotClipboard(false);
+    }
+  };
+
+  useUnauthorizedSessionGuard(tradeQuery.error, reviewQuery.error, accountsQuery.error, setupsQuery.error);
 
   if (isTradeLoading) {
     return <TradeDetailSkeleton />;
@@ -327,7 +425,7 @@ export default function TradeDetail() {
       unavailableTitle: "Trade unavailable",
       unavailableDescription: "This trade could not be loaded right now. Please try again in a moment.",
       unauthorizedTitle: "Trade access denied",
-      unauthorizedDescription: "You are not allowed to view this trade right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       notFoundTitle: "Trade not found",
       notFoundDescription: "This trade does not exist or may have been deleted.",
       validationTitle: "Invalid trade link",
@@ -437,7 +535,7 @@ export default function TradeDetail() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
           <div className="space-y-6">
-            <SectionCard title="Trade Overview" description="Core context for this execution, account, and trader state.">
+            <SectionCard title="Trade Overview">
               <div className="grid gap-4 md:grid-cols-2">
                 <MetricTile label="Account" value={accountName} />
                 <MetricTile label="Direction" value={trade.direction} />
@@ -446,7 +544,7 @@ export default function TradeDetail() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Execution Metrics" description="Price levels, structure, and trade quality inputs.">
+            <SectionCard title="Execution Metrics">
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <MetricTile label="Entry" value={<span className="font-mono-price">{trade.entry}</span>} />
@@ -469,7 +567,6 @@ export default function TradeDetail() {
 
             <SectionCard
               title="Trade Review"
-              description="Capture execution quality, discipline, and the lesson while it is still fresh."
               action={<Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>{review ? "Edit Review" : "Write Review"}</Button>}
             >
               {review ? (
@@ -489,9 +586,6 @@ export default function TradeDetail() {
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <h3 className="mt-4 text-base font-medium text-foreground">No review yet</h3>
-                  <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-                    Capture mistakes, discipline, and lessons while the trade is still fresh.
-                  </p>
                   <Button className="mt-4" onClick={() => setReviewOpen(true)}>
                     Write Review
                   </Button>
@@ -501,21 +595,28 @@ export default function TradeDetail() {
           </div>
 
           <div className="space-y-6">
-            <ScreenshotGalleryCard trade={trade} onAddScreenshot={() => setEditOpen(true)} />
+            <ScreenshotGalleryCard
+              trade={trade}
+              onAddScreenshot={() => setEditOpen(true)}
+              onPasteScreenshots={handlePasteScreenshots}
+              onPasteButtonClick={handlePasteScreenshotsFromClipboard}
+              pasteEnabled={!editOpen}
+              isUploading={isProcessingScreenshotClipboard}
+            />
 
-            <SectionCard title="Journal Notes" description="Execution context, planning notes, or post-trade comments.">
+            <SectionCard title="Journal Notes">
               {trade.notes ? (
                 <div className="surface-muted p-4">
                   <p className="whitespace-pre-wrap text-sm text-foreground">{trade.notes}</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">
-                  No notes added yet. Add pre-trade context or post-trade observations to deepen the review.
+                  No notes added yet.
                 </div>
               )}
             </SectionCard>
 
-            <SectionCard title="Quick Insights" description="A lightweight summary of what stands out in this trade journal entry.">
+            <SectionCard title="Quick Insights">
               <div className="space-y-3">
                 {insights.map((insight, index) => (
                   <div
@@ -538,7 +639,8 @@ export default function TradeDetail() {
         open={editOpen}
         onOpenChange={setEditOpen}
         onSave={async (payload) => {
-          await updateTradeMutation.mutateAsync(payload);
+          const result = await updateTradeMutation.mutateAsync(payload);
+          return result.trade;
         }}
         editTrade={trade}
         accounts={accountsQuery.data ?? []}

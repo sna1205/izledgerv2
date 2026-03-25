@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/class-names";
 
 function getStaggerStyle(index: number): CSSProperties {
   return {

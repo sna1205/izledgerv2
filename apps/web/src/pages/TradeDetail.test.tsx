@@ -2,10 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
+import { ApiError } from "@/services/api/client";
 import TradeDetail from "@/pages/TradeDetail";
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -19,6 +19,8 @@ const apiMocks = vi.hoisted(() => ({
   listReviews: vi.fn(),
   listAccounts: vi.fn(),
   listSetups: vi.fn(),
+  readTradeScreenshotClipboardFiles: vi.fn(),
+  uploadTradeScreenshot: vi.fn(),
   updateTrade: vi.fn(),
   deleteTrade: vi.fn(),
   createReview: vi.fn(),
@@ -29,24 +31,29 @@ const apiMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/api/trades", () => ({
+vi.mock("@/services/api/trades", () => ({
   getTrade: apiMocks.getTrade,
   updateTrade: apiMocks.updateTrade,
   deleteTrade: apiMocks.deleteTrade,
 }));
 
-vi.mock("@/lib/api/reviews", () => ({
+vi.mock("@/services/api/reviews", () => ({
   listReviews: apiMocks.listReviews,
   createReview: apiMocks.createReview,
   updateReview: apiMocks.updateReview,
 }));
 
-vi.mock("@/lib/api/accounts", () => ({
+vi.mock("@/services/api/accounts", () => ({
   listAccounts: apiMocks.listAccounts,
 }));
 
-vi.mock("@/lib/api/setups", () => ({
+vi.mock("@/services/api/setups", () => ({
   listSetups: apiMocks.listSetups,
+}));
+
+vi.mock("@/services/api/screenshots", () => ({
+  readTradeScreenshotClipboardFiles: apiMocks.readTradeScreenshotClipboardFiles,
+  uploadTradeScreenshot: apiMocks.uploadTradeScreenshot,
 }));
 
 vi.mock("@/components/ui/sonner", () => ({
@@ -54,11 +61,11 @@ vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
 }));
 
-vi.mock("@/components/ProfitDisplay", () => ({
+vi.mock("@/features/trades/components/ProfitDisplay", () => ({
   ProfitDisplay: ({ value, className }: { value: number; className?: string }) => <span className={className}>{value}</span>,
 }));
 
-vi.mock("@/components/ResultBadge", () => ({
+vi.mock("@/features/trades/components/ResultBadge", () => ({
   ResultBadge: ({ result }: { result: string }) => <span>{result}</span>,
 }));
 
@@ -66,25 +73,25 @@ vi.mock("@/components/SetupTag", () => ({
   SetupTag: ({ label }: { label: string }) => <span>{label}</span>,
 }));
 
-vi.mock("@/components/TradeReviewStatusBadge", () => ({
+vi.mock("@/features/reviews/components/TradeReviewStatusBadge", () => ({
   TradeReviewStatusBadge: ({ reviewed }: { reviewed: boolean }) => <span>{reviewed ? "Reviewed" : "Pending Review"}</span>,
 }));
 
-vi.mock("@/components/TradeReviewContent", () => ({
+vi.mock("@/features/reviews/components/TradeReviewContent", () => ({
   TradeReviewContent: ({ review }: { review: { lessonLearned?: string | null } }) => (
     <div>Review lesson: {review.lessonLearned || "None"}</div>
   ),
 }));
 
-vi.mock("@/components/TradeFormDialog", () => ({
+vi.mock("@/features/trades/components/TradeFormDialog", () => ({
   TradeFormDialog: () => null,
 }));
 
-vi.mock("@/components/TradeReviewDialog", () => ({
+vi.mock("@/features/reviews/components/TradeReviewDialog", () => ({
   TradeReviewDialog: () => null,
 }));
 
-vi.mock("@/components/ShareTradeModal", () => ({
+vi.mock("@/features/trade-sharing/components/ShareTradeModal", () => ({
   ShareTradeModal: ({ open }: { open: boolean }) => (
     open ? <div>Share modal open</div> : null
   ),
@@ -99,6 +106,12 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve, reject };
+}
+
+function createImageFile(name: string, type = "image/png", size = 1024) {
+  const file = new File(["image"], name, { type });
+  Object.defineProperty(file, "size", { value: size });
+  return file;
 }
 
 const baseTrade = {
@@ -125,6 +138,7 @@ const baseTrade = {
     type: "Personal" as const,
     currency: "USD",
     isDefault: true,
+    isArchived: false,
   },
 };
 
@@ -174,6 +188,8 @@ describe("TradeDetail", () => {
     apiMocks.listReviews.mockReset();
     apiMocks.listAccounts.mockReset();
     apiMocks.listSetups.mockReset();
+    apiMocks.readTradeScreenshotClipboardFiles.mockReset();
+    apiMocks.uploadTradeScreenshot.mockReset();
     apiMocks.updateTrade.mockReset();
     apiMocks.deleteTrade.mockReset();
     apiMocks.createReview.mockReset();
@@ -181,7 +197,7 @@ describe("TradeDetail", () => {
     apiMocks.toast.success.mockReset();
     apiMocks.toast.error.mockReset();
     apiMocks.listAccounts.mockResolvedValue({ items: [baseTrade.account] });
-    apiMocks.listSetups.mockResolvedValue({ items: [{ id: "setup-1", name: "Breakout", description: "", color: "#000000" }] });
+    apiMocks.listSetups.mockResolvedValue({ items: [{ id: "setup-1", name: "Breakout", description: "", color: "#000000", isArchived: false }] });
     apiMocks.listReviews.mockResolvedValue({ items: [], pagination: { page: 1, pageSize: 10, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
   });
 
@@ -234,7 +250,7 @@ describe("TradeDetail", () => {
     renderTradeDetail("private-trade");
 
     await screen.findByText("Trade access denied");
-    expect(screen.getByText("You are not allowed to view this trade right now.")).toBeInTheDocument();
+    expect(screen.getByText("Your session expired or could not be verified. Redirecting to login.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /back to trades/i })).toBeInTheDocument();
   });
 
@@ -289,6 +305,39 @@ describe("TradeDetail", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Share modal open")).toBeInTheDocument();
+    });
+  });
+
+  it("uploads a pasted screenshot directly from the detail page", async () => {
+    apiMocks.getTrade.mockResolvedValue({ trade: baseTrade });
+    const file = createImageFile("chart.png");
+    apiMocks.readTradeScreenshotClipboardFiles.mockResolvedValue([file]);
+    apiMocks.uploadTradeScreenshot.mockResolvedValue({
+      id: "shot-1",
+      url: "https://example.com/shot-1.png",
+      storageKey: "users/user-1/trades/trade-1/chart.png",
+      sortOrder: 0,
+      createdAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    renderTradeDetail();
+
+    await screen.findByText("Screenshot Gallery");
+
+    fireEvent.click(screen.getByRole("button", { name: "Paste Screenshot" }));
+
+    await waitFor(() => {
+      expect(apiMocks.readTradeScreenshotClipboardFiles).toHaveBeenCalled();
+      expect(apiMocks.uploadTradeScreenshot).toHaveBeenCalledWith({
+        tradeId: "trade-1",
+        file,
+        sortOrder: 0,
+      });
+    });
+
+    expect(await screen.findByText("1 image")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiMocks.toast.success).toHaveBeenCalledWith("Screenshot uploaded.");
     });
   });
 });

@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
+import { ScreenshotCleanupAction, ScreenshotCleanupReason } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { env } from "../../config/env.js";
-import { createPresignedUpload, deleteObjectIfPresent, getObjectMetadata, getReadUrl } from "../../lib/storage.js";
+import { createPresignedUpload, getObjectMetadata, getReadUrl, putObject } from "../../lib/storage.js";
 import { AppError } from "../../utils/errors.js";
 import { safeFileName } from "../../utils/strings.js";
-import { maxScreenshotFileSizeBytes } from "./constants.js";
+import { allowedScreenshotContentTypes, maxScreenshotFileSizeBytes, normalizeScreenshotContentType } from "./constants.js";
+import { enqueueScreenshotCleanupTask, tryProcessScreenshotCleanupTaskNow } from "./reconciliation.js";
 
 const SCREENSHOT_UPLOAD_TOKEN_TTL_MS = 5 * 60 * 1000;
 
@@ -156,6 +158,14 @@ async function ensureOwnedTrade(userId: string, tradeId: string) {
   }
 
   return trade;
+}
+
+async function getPendingScreenshotUploadOrThrow(uploadId: string) {
+  return prisma.tradeScreenshotUpload.findUnique({
+    where: {
+      id: uploadId,
+    },
+  });
 }
 
 export function assertTradeStorageKey(userId: string, tradeId: string, storageKey: string) {
@@ -334,6 +344,59 @@ export async function completeTradeScreenshot(userId: string, tradeId: string, i
   };
 }
 
+export async function uploadTradeScreenshot(userId: string, tradeId: string, input: {
+  storageKey: string;
+  uploadToken: string;
+  contentType: string;
+  sortOrder: number;
+  file: Uint8Array;
+}) {
+  await ensureOwnedTrade(userId, tradeId);
+  assertTradeStorageKey(userId, tradeId, input.storageKey);
+
+  const normalizedContentType = normalizeScreenshotContentType(input.contentType);
+
+  if (!allowedScreenshotContentTypes.includes(normalizedContentType as (typeof allowedScreenshotContentTypes)[number])) {
+    throw new AppError(400, "INVALID_FILE_TYPE", "Use a PNG, JPEG, or WebP image.");
+  }
+
+  if (input.file.byteLength <= 0) {
+    throw new AppError(400, "SCREENSHOT_UPLOAD_INVALID", "Uploaded screenshot size is invalid.");
+  }
+
+  if (input.file.byteLength > maxScreenshotFileSizeBytes) {
+    throw new AppError(400, "FILE_TOO_LARGE", "Screenshots must be 10 MB or smaller.");
+  }
+
+  const tokenPayload = verifyUploadToken(input.uploadToken, {
+    userId,
+    tradeId,
+    storageKey: input.storageKey,
+    contentType: normalizedContentType,
+    fileSize: input.file.byteLength,
+  });
+
+  const pendingUpload = await getPendingScreenshotUploadOrThrow(tokenPayload.uploadId);
+
+  assertPendingScreenshotUploadIsCompletable(pendingUpload, tokenPayload, {
+    userId,
+    tradeId,
+    storageKey: input.storageKey,
+  });
+
+  await putObject({
+    key: input.storageKey,
+    contentType: normalizedContentType,
+    body: input.file,
+  });
+
+  return completeTradeScreenshot(userId, tradeId, {
+    storageKey: input.storageKey,
+    uploadToken: input.uploadToken,
+    sortOrder: input.sortOrder,
+  });
+}
+
 export async function deleteTradeScreenshot(userId: string, tradeId: string, screenshotId: string) {
   await ensureOwnedTrade(userId, tradeId);
 
@@ -349,13 +412,24 @@ export async function deleteTradeScreenshot(userId: string, tradeId: string, scr
     throw new AppError(404, "SCREENSHOT_NOT_FOUND", "Screenshot not found.");
   }
 
-  await prisma.tradeScreenshot.delete({
-    where: { id: screenshot.id },
+  const cleanupTask = await prisma.$transaction(async (tx) => {
+    await tx.tradeScreenshot.delete({
+      where: { id: screenshot.id },
+    });
+
+    return enqueueScreenshotCleanupTask(tx, {
+      action: ScreenshotCleanupAction.deleteObject,
+      reason: ScreenshotCleanupReason.screenshotDelete,
+      storageKey: screenshot.storageKey,
+      screenshotId: screenshot.id,
+      userId,
+      tradeId,
+    });
   });
 
-  // Remove the object after the DB row is gone so a transient storage error cannot leave
-  // a broken screenshot reference visible in the product.
-  await deleteObjectIfPresent(screenshot.storageKey);
+  await tryProcessScreenshotCleanupTaskNow(cleanupTask.id).catch(() => {
+    // Keep the user-facing delete successful even if storage cleanup has to retry later.
+  });
 }
 
 export async function reorderTradeScreenshots(userId: string, tradeId: string, screenshotIds: string[]) {

@@ -2,9 +2,11 @@ services:
   - type: web
     name: izledger-api
     runtime: node
+    region: singapore
     rootDir: apps/api
     buildCommand: npm install --include=dev && npm run prisma:generate && npm run build
-    startCommand: npm run start:render
+    preDeployCommand: npm run release:migrate
+    startCommand: npm run start:server
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -15,15 +17,35 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
-      - key: FRONTEND_URL
-        sync: false
-      - key: JWT_SECRET
-        generateValue: true
+      - key: APP_URL
+        value: https://app.izledger.xyz
+      - key: API_URL
+        value: https://api.izledger.xyz
       - key: SESSION_COOKIE_SAME_SITE
-        value: none
+        value: lax
       - key: SESSION_COOKIE_SECURE
         value: true
+      - key: COOKIE_DOMAIN
+        value: .izledger.xyz
       - key: STORAGE_ENABLED
         value: false
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_REGION
+        value: auto
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_ACCESS_KEY
+        sync: false
+      - key: STORAGE_SECRET_KEY
+        sync: false
+      - key: STORAGE_PUBLIC_BASE_URL
+        sync: false
+      - key: STORAGE_FORCE_PATH_STYLE
+        value: true
+      - key: STORAGE_SIGNED_READS
+        value: true
+      - key: STORAGE_SIGNED_READ_TTL_SECONDS
+        value: 900
       - key: LOG_LEVEL
         value: info

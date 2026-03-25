@@ -14,10 +14,16 @@
     "build:api": "npm run build --workspace @izledger/api",
     "test": "npm run test --workspace @izledger/web",
     "lint": "npm run lint --workspace @izledger/web",
+    "prisma:validate": "npm run prisma:validate --workspace @izledger/api",
+    "prisma:check:migrations": "npm run prisma:check:migrations --workspace @izledger/api",
+    "prisma:check:release": "npm run prisma:check:release --workspace @izledger/api",
     "prisma:generate": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js generate\"",
     "prisma:migrate:dev": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js migrate dev\"",
-    "prisma:migrate:deploy": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js migrate deploy\"",
-    "prisma:studio": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js studio\""
+    "prisma:migrate:deploy": "npm run prisma:migrate:deploy --workspace @izledger/api",
+    "prisma:studio": "bash -lc \"cd apps/api && /usr/bin/node ../../node_modules/prisma/build/index.js studio\"",
+    "restore:verify": "npm run restore:verify --workspace @izledger/api",
+    "test:persistence": "npm run test:persistence --workspace @izledger/api",
+    "check:persistence:release": "npm run check:persistence:release --workspace @izledger/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

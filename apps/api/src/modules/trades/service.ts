@@ -1,6 +1,6 @@
 import { Prisma, TradeSession } from "@prisma/client";
 import type { TradeDirectionValue, TradeResultValue } from "../../config/domain.js";
-import { toNumber } from "../../lib/decimal.js";
+import { toNumber } from "../../utils/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
 import { buildPagination } from "../../utils/http.js";
@@ -68,7 +68,9 @@ async function resolveSetup(userId: string, input: {
   };
 }
 
-async function ensureOwnedAccount(userId: string, accountId: string) {
+async function ensureOwnedAccount(userId: string, accountId: string, options?: {
+  allowArchived?: boolean;
+}) {
   const account = await prisma.account.findFirst({
     where: {
       id: accountId,
@@ -78,6 +80,10 @@ async function ensureOwnedAccount(userId: string, accountId: string) {
 
   if (!account) {
     throw new AppError(404, "ACCOUNT_NOT_FOUND", "Account not found.");
+  }
+
+  if (account.isArchived && !options?.allowArchived) {
+    throw new AppError(409, "ACCOUNT_ARCHIVED", "Archived accounts cannot be used for new trades.");
   }
 
   return account;
@@ -122,6 +128,7 @@ async function toTradeDto(trade: Prisma.TradeGetPayload<{ include: typeof tradeI
       type: trade.account.type,
       currency: trade.account.currency,
       isDefault: trade.account.isDefault,
+      isArchived: trade.account.isArchived,
     },
   };
 }
@@ -301,7 +308,9 @@ export async function updateTrade(userId: string, tradeId: string, input: {
   const existingTrade = await getOwnedTrade(userId, tradeId);
 
   if (input.accountId) {
-    await ensureOwnedAccount(userId, input.accountId);
+    await ensureOwnedAccount(userId, input.accountId, {
+      allowArchived: input.accountId === existingTrade.accountId,
+    });
   }
 
   const setup =

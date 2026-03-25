@@ -4,7 +4,7 @@ import { Layers3, Pencil, Plus, RefreshCw, Sparkles, SwatchBook, Trash2 } from "
 import { EmptyState } from "@/components/EmptyState";
 import { FilterBar, FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard } from "@/components/PageShell";
+import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
 import { PaginationControls } from "@/components/PaginationControls";
 import { StatCard } from "@/components/StatCard";
 import { DataBadge } from "@/components/DataBadge";
@@ -26,18 +26,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
-import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api/client";
-import { createSetup, deleteSetup, listSetups, updateSetup } from "@/lib/api/setups";
-import { formatNumberDisplay } from "@/lib/analytics-rendering";
-import { getPageErrorState } from "@/lib/page-errors";
-import { withMinimumDelay } from "@/lib/loading";
-import { privateQueryKey } from "@/lib/react-query";
+import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { ApiError } from "@/services/api/client";
+import { createSetup, deleteSetup, listSetups, updateSetup } from "@/services/api/setups";
+import { formatNumberDisplay } from "@/utils/analytics-rendering";
+import { getPageErrorState } from "@/utils/page-errors";
+import { withMinimumDelay } from "@/utils/loading";
+import { privateQueryKey } from "@/services/query-client";
 import {
   generateUniqueSetupColor,
   normalizeSetupColor,
   type SetupDefinition,
-} from "@/lib/types";
+} from "@/types";
 
 function createEmptyForm(color = "") {
   return {
@@ -158,6 +159,8 @@ export default function Setups() {
     },
   });
 
+  useUnauthorizedSessionGuard(setupsQuery.error);
+
   const openCreateModal = () => {
     setEditingSetup(null);
     setForm(createEmptyForm(buildUniqueFormColor(setups)));
@@ -189,7 +192,7 @@ export default function Setups() {
     const errorState = getPageErrorState(setupsQuery.error, {
       unavailableTitle: "Setups unavailable",
       unavailableDescription: "The setups service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to view setups right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Setups request invalid",
       validationDescription: "The setup filters in this request are invalid.",
       timeoutTitle: "Setups request timed out",

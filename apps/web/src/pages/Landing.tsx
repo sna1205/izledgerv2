@@ -2,8 +2,8 @@ import { ArrowRight, BarChart3, CalendarDays, CheckCircle2, ChevronRight, Clipbo
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
+import { useAuth } from "@/features/auth/auth-context";
+import { cn } from "@/utils/class-names";
 
 const heroStats = [
   { value: "Structured", label: "trade logging built for review" },

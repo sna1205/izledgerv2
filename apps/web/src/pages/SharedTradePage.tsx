@@ -2,12 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, CalendarDays, Lock, ShieldOff } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { SharedTradeSkeleton } from "@/components/skeletons/SharedTradeSkeleton";
-import { ShareTradeCard } from "@/components/ShareTradeCard";
+import { ShareTradeCard } from "@/features/trade-sharing/components/ShareTradeCard";
 import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api/client";
-import { getPublicTradeShare } from "@/lib/api/trade-shares";
-import { withMinimumDelay } from "@/lib/loading";
-import { formatMoney, formatPrice, formatSharedTradeDate } from "@/lib/trade-sharing";
+import { ApiError } from "@/services/api/client";
+import { getPublicTradeShare } from "@/services/api/trade-shares";
+import { withMinimumDelay } from "@/utils/loading";
+import { formatMoney, formatPrice, formatSharedTradeDate } from "@/utils/trade-sharing";
 
 function DetailBlock({
   label,

@@ -3,14 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 import { Activity, ArrowRight, CalendarDays, Target, Wallet } from "lucide-react";
-import { AccountFilterSelect } from "@/components/AccountFilterSelect";
+import { AccountFilterSelect } from "@/features/accounts/components/AccountFilterSelect";
 import { DataBadge } from "@/components/DataBadge";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
-import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/components/PageShell";
-import { ProfitDisplay } from "@/components/ProfitDisplay";
-import { ResultBadge } from "@/components/ResultBadge";
+import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/layouts/PageShell";
+import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
+import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
 import { StatCard } from "@/components/StatCard";
 import {
@@ -22,21 +22,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { listAccounts } from "@/lib/api/accounts";
-import { getDashboardSummary } from "@/lib/api/analytics";
-import { resolveAccountFilter, useAccountFilter } from "@/lib/account-filter";
+import { listAccounts } from "@/services/api/accounts";
+import { getDashboardSummary } from "@/services/api/analytics";
+import { resolveAccountFilter, useAccountFilter } from "@/utils/account-filter";
 import {
   formatCompactCurrencyDisplay,
   formatCurrencyDisplay,
   formatDateDisplay,
   formatPercentageDisplay,
   normalizeDashboardSummaryResponse,
-} from "@/lib/analytics-rendering";
-import { useAuth } from "@/lib/auth";
-import { withMinimumDelay } from "@/lib/loading";
-import { getPageErrorState } from "@/lib/page-errors";
-import { privateQueryKey } from "@/lib/react-query";
-import { cn } from "@/lib/utils";
+} from "@/utils/analytics-rendering";
+import { useAuth } from "@/features/auth/auth-context";
+import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { withMinimumDelay } from "@/utils/loading";
+import { getPageErrorState } from "@/utils/page-errors";
+import { privateQueryKey } from "@/services/query-client";
+import { cn } from "@/utils/class-names";
 
 const equityChartConfig = {
   equity: {
@@ -58,9 +59,9 @@ export default function Dashboard() {
   const [accountFilter, setAccountFilter] = useAccountFilter();
 
   const accountsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "accounts"),
+    queryKey: privateQueryKey(user.id, "accounts", "active"),
     queryFn: async () => {
-      const response = await listAccounts();
+      const response = await listAccounts({ status: "active" });
       return response.items;
     },
   });
@@ -85,6 +86,8 @@ export default function Dashboard() {
       )),
     ),
   });
+
+  useUnauthorizedSessionGuard(accountsQuery.error, summaryQuery.error);
 
   const equityCurve = useMemo(() => summaryQuery.data?.equityCurve ?? [], [summaryQuery.data?.equityCurve]);
   const equityRange = useMemo(() => {
@@ -115,7 +118,7 @@ export default function Dashboard() {
     const errorState = getPageErrorState(summaryQuery.error, {
       unavailableTitle: "Dashboard unavailable",
       unavailableDescription: "The dashboard service is temporarily unavailable. Please try again in a moment.",
-      unauthorizedDescription: "Your session is not allowed to load the dashboard right now.",
+      unauthorizedDescription: "Your session expired or could not be verified. Redirecting to login.",
       validationTitle: "Dashboard request invalid",
       validationDescription: "The dashboard request could not be processed.",
       timeoutTitle: "Dashboard request timed out",

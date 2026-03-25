@@ -62,7 +62,8 @@ Every user-owned row now carries `user_id` directly, including screenshot metada
 3. The browser uploads the file directly to object storage.
 4. The client calls the completion endpoint.
 5. The API verifies the signed upload token, checks object metadata, and writes screenshot metadata to Postgres.
-6. Deleting a screenshot removes the metadata row and then removes the object from storage.
+6. Deleting a screenshot removes the metadata row and queues durable blob cleanup.
+7. A background cleanup runner retries failed deletes and reconciles expired uploads, orphaned blobs, and dangling screenshot rows.
 
 ## Environment separation
 
@@ -76,7 +77,7 @@ Every user-owned row now carries `user_id` directly, including screenshot metada
 ## Deployment and data safety
 
 - Database schema changes must be committed under `apps/api/prisma/migrations`
-- Render startup runs `prisma migrate deploy` before boot
+- Render runs `prisma migrate deploy` in a dedicated pre-deploy step
 - Production should use Neon pooled `DATABASE_URL`
 - `DIRECT_URL` is recommended for Prisma migrations
 - Object storage should be treated as persistent infrastructure, never temporary server disk

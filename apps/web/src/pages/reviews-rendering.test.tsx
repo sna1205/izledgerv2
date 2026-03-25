@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Reviews from "@/pages/Reviews";
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {
       id: "user-1",
@@ -14,7 +14,7 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 
-vi.mock("@/lib/loading", () => ({
+vi.mock("@/utils/loading", () => ({
   withMinimumDelay: async <T,>(operation: Promise<T> | (() => Promise<T>)) => {
     return typeof operation === "function" ? operation() : operation;
   },
@@ -32,14 +32,14 @@ const apiMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/api/reviews", () => ({
+vi.mock("@/services/api/reviews", () => ({
   listReviews: apiMocks.listReviews,
   createReview: apiMocks.createReview,
   updateReview: apiMocks.updateReview,
   deleteReview: apiMocks.deleteReview,
 }));
 
-vi.mock("@/lib/api/trades", () => ({
+vi.mock("@/services/api/trades", () => ({
   getTrade: apiMocks.getTrade,
 }));
 
@@ -48,7 +48,7 @@ vi.mock("@/components/ui/sonner", () => ({
   Toaster: () => null,
 }));
 
-vi.mock("@/components/TradeReviewDialog", () => ({
+vi.mock("@/features/reviews/components/TradeReviewDialog", () => ({
   TradeReviewDialog: () => null,
 }));
 
@@ -402,7 +402,7 @@ describe("reviews hybrid layout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next month" }));
 
     expect(screen.getByRole("button", { name: "April 1, 2026" })).toBeInTheDocument();
-    expect(screen.getByText("Take the clean continuation earlier.")).toBeInTheDocument();
+    expect(await screen.findByText("Take the clean continuation earlier.")).toBeInTheDocument();
   });
 
   it("opens the weekly review dialog from the dashboard controls", async () => {

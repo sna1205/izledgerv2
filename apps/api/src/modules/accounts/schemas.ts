@@ -6,6 +6,10 @@ export const accountParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
+export const listAccountsQuerySchema = z.object({
+  status: z.enum(["all", "active", "archived"]).default("active"),
+});
+
 export const createAccountSchema = z.object({
   name: z.string().trim().min(1).max(100),
   broker: z.string().trim().min(1).max(100),
@@ -15,7 +19,9 @@ export const createAccountSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
-export const updateAccountSchema = createAccountSchema.partial().refine(
+export const updateAccountSchema = createAccountSchema.partial().extend({
+  isArchived: z.boolean().optional(),
+}).refine(
   (value) => Object.keys(value).length > 0,
   "At least one field is required.",
 );

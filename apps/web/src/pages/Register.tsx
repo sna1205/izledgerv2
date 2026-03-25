@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import { AuthPageShell } from "@/components/AuthPageShell";
+import { AuthPageShell } from "@/layouts/AuthPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/features/auth/auth-context";
 import {
   AUTH_PASSWORD_MAX_LENGTH,
   AUTH_PASSWORD_MIN_LENGTH,
   AUTH_USERNAME_MAX_LENGTH,
   AUTH_USERNAME_MIN_LENGTH,
-} from "@/lib/auth-validation";
+} from "@/utils/auth-validation";
 
 export default function Register() {
   const navigate = useNavigate();

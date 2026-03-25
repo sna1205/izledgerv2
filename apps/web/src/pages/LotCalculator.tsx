@@ -11,15 +11,15 @@ import {
   Ruler,
   TriangleAlert,
 } from "lucide-react";
-import { PageShell, SectionCard } from "@/components/PageShell";
+import { PageShell, SectionCard } from "@/layouts/PageShell";
 import { DataBadge } from "@/components/DataBadge";
-import { InstrumentSelect } from "@/components/InstrumentSelect";
+import { InstrumentSelect } from "@/features/trades/components/InstrumentSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrencyDisplay, formatNumberDisplay } from "@/lib/analytics-rendering";
-import { INSTRUMENTS_BY_VALUE } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { formatCurrencyDisplay, formatNumberDisplay } from "@/utils/analytics-rendering";
+import { INSTRUMENTS_BY_VALUE } from "@/types";
+import { cn } from "@/utils/class-names";
 
 const QUICK_RISK_PRESETS = ["0.5", "1", "2"] as const;
 const RISK_MODE_STORAGE_KEY = "lotCalc:riskMode";
