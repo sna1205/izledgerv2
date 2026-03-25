@@ -58,8 +58,8 @@ Use production-like custom domains before launch:
 
 Recommended production shape:
 
-- frontend: `https://app.izledger.xyz`
-- API: `https://api.izledger.xyz`
+- frontend: `https://app.example.com`
+- API: `https://api.example.com`
 
 Keep `APP_URL` set to the exact frontend origin that should be allowed by CORS.
 
@@ -99,8 +99,8 @@ Vercel project settings:
 Set in Vercel:
 
 ```bash
-API_URL=https://api.izledger.xyz
-VITE_API_BASE_URL=https://api.izledger.xyz
+VITE_APP_ENV=production
+VITE_API_BASE_URL=https://api.example.com
 ```
 
 ### Backend
@@ -109,15 +109,18 @@ Set in Render:
 
 ```bash
 NODE_ENV=production
+APP_ENV=production
+APP_DEBUG=false
 HOST=0.0.0.0
-APP_URL=https://app.izledger.xyz
-API_URL=https://api.izledger.xyz
+APP_URL=https://app.example.com
+API_URL=https://api.example.com
+CORS_ALLOWED_ORIGINS=https://app.example.com
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 DIRECT_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
-SESSION_COOKIE_SAME_SITE=none
-COOKIE_DOMAIN=.izledger.xyz
+SESSION_COOKIE_SAME_SITE=lax
+COOKIE_DOMAIN=.example.com
 SESSION_COOKIE_SECURE=true
 BCRYPT_ROUNDS=12
 AUTH_RATE_LIMIT_MAX=10
@@ -137,23 +140,24 @@ LOG_LEVEL=info
 
 Notes:
 
-- `APP_URL`, `API_URL`, and `COOKIE_DOMAIN` are required in production. If any are missing or malformed, `node dist/server.js` exits during startup before the API can listen.
-- Production CORS only allows `https://app.izledger.xyz` and always responds with `Access-Control-Allow-Credentials: true`.
-- For `https://app.izledger.xyz` calling `https://api.izledger.xyz`, use `SESSION_COOKIE_SAME_SITE=none`, `SESSION_COOKIE_SECURE=true`, `COOKIE_DOMAIN=.izledger.xyz`, and `Path=/`.
+- `APP_URL` and `API_URL` are required in production. If either is missing, malformed, uses `http`, or points at `localhost`, `node dist/server.js` exits during startup before the API can listen.
+- Production CORS should only allow the exact frontend origin in `CORS_ALLOWED_ORIGINS`, and always responds with `Access-Control-Allow-Credentials: true`.
+- For `https://app.example.com` calling `https://api.example.com`, use `SESSION_COOKIE_SAME_SITE=lax`, `SESSION_COOKIE_SECURE=true`, `COOKIE_DOMAIN=.example.com`, and `Path=/`.
+- If the frontend and backend are on different sites, switch `SESSION_COOKIE_SAME_SITE=none`.
 - Local development should keep `APP_URL=http://localhost:5173`, `API_URL=http://localhost:4000`, `COOKIE_DOMAIN=` blank, and `SESSION_COOKIE_SECURE=false`.
 - If your Postgres provider offers pooled and direct connection strings, prefer pooled for `DATABASE_URL` and direct for `DIRECT_URL`.
 - If staging storage is not ready yet, keep `STORAGE_ENABLED=false` until the staging upload checklist passes.
 
 ## 5.1 API Custom Domain On Render
 
-Point `api.izledger.xyz` at the Render web service before updating the frontend.
+Point `api.example.com` at the Render web service before updating the frontend.
 
-1. In the Render dashboard, open the API web service and add `api.izledger.xyz` under `Settings -> Custom Domains`.
+1. In the Render dashboard, open the API web service and add `api.example.com` under `Settings -> Custom Domains`.
 2. In your DNS provider, create a `CNAME` record for `api` that points to the service's `onrender.com` hostname.
 3. If you use Cloudflare DNS, set the new `CNAME` to `DNS only` until Render verifies the domain and issues the certificate.
-4. Remove conflicting `AAAA` records for `api.izledger.xyz` while verifying the Render custom domain.
-5. Back in Render, click `Verify` for `api.izledger.xyz` and wait for the managed TLS certificate to show as valid.
-6. After the custom domain is healthy, update `VITE_API_BASE_URL=https://api.izledger.xyz` in Vercel and redeploy the frontend.
+4. Remove conflicting `AAAA` records for `api.example.com` while verifying the Render custom domain.
+5. Back in Render, click `Verify` for `api.example.com` and wait for the managed TLS certificate to show as valid.
+6. After the custom domain is healthy, update `VITE_API_BASE_URL=https://api.example.com` in Vercel and redeploy the frontend.
 7. Optionally disable the default `onrender.com` hostname after the custom domain is live and verified.
 
 ## 6. Migration Plan
@@ -189,7 +193,7 @@ That script:
 - runs `prisma migrate deploy`
 - avoids accidental `.env` leakage into the wrong database target
 
-Do not run `prisma db push` in staging or production.
+Use reviewed Prisma migrations for staging and production changes; do not rely on schema sync commands there.
 
 ## 7. Staging Auth Checklist
 
@@ -197,13 +201,13 @@ Verify all of the following against the real staging domains:
 
 1. Register succeeds and sets an HTTP-only cookie.
 2. Login succeeds and reuses the same cookie configuration.
-3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, `SameSite=None`, and `Domain=.izledger.xyz`.
-4. Authenticated API calls succeed from `https://app.izledger.xyz` with `Access-Control-Allow-Credentials: true`.
+3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, and the expected `SameSite`/`Domain` values for your production domain layout.
+4. Authenticated API calls succeed from your configured frontend origin with `Access-Control-Allow-Credentials: true`.
 5. Requests from a non-allowed origin fail CORS.
 6. Logout clears the session cookie and revokes the stored session.
 7. Reloading the frontend preserves the logged-in session until logout or expiry.
 8. Opening the app over plain HTTP is redirected or unavailable in the real environment.
-9. Safari on iOS and macOS sends the session cookie to `https://api.izledger.xyz` on `/auth/me`, `/dashboard/summary`, and `/analytics/*`.
+9. Safari on iOS and macOS sends the session cookie to your API origin on `/auth/me`, `/dashboard/summary`, and `/analytics/*`.
 
 ## 8. Staging Storage Checklist
 

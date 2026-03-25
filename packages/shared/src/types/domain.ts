@@ -7,6 +7,19 @@ export type ReviewType = "daily" | "weekly" | "trade";
 export type ReviewRuleStatus = "Yes" | "Partially" | "No";
 export type ReviewRiskStatus = "Yes" | "Partially" | "No";
 export type ReviewEmotion = "Calm" | "Confident" | "Hesitant" | "FOMO" | "Revenge" | "Frustrated";
+export type EconomicEventImpact = "holiday" | "low" | "medium" | "high";
+export type EconomicEventStatus = "upcoming" | "pending_release" | "released" | "revised" | "passed" | "holiday";
+export type EconomicEventCategory =
+  | "inflation"
+  | "labor"
+  | "growth"
+  | "central-bank"
+  | "activity"
+  | "housing"
+  | "energy"
+  | "sentiment"
+  | "holiday"
+  | "other";
 
 export interface Pagination {
   page: number;
@@ -243,6 +256,69 @@ export interface AnalyticsCalendarResponse {
   };
   days: AnalyticsCalendarDay[];
   weeks: AnalyticsCalendarWeek[];
+}
+
+export interface EconomicCalendarEvent {
+  id: string;
+  providerEventId: string;
+  title: string;
+  country: string;
+  currency: string;
+  impactLevel: EconomicEventImpact;
+  eventTimeUtc: string;
+  previousValue: string | null;
+  forecastValue: string | null;
+  actualValue: string | null;
+  revisedValue: string | null;
+  status: EconomicEventStatus;
+  category: EconomicEventCategory;
+  sourceProvider: string;
+  lastUpdatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  relevance?: {
+    relevant: boolean;
+    reason: string | null;
+  } | null;
+}
+
+export interface EconomicCalendarListResponse {
+  fetchedAtUtc: string;
+  providerStatus: "live" | "stale";
+  cacheStatus: "miss" | "hit" | "stale";
+  range: {
+    startDate: string;
+    endDate: string;
+  };
+  filters: {
+    range: "today" | "week" | "custom";
+    currencies: string[];
+    impacts: EconomicEventImpact[];
+    instrument: string | null;
+    relevantOnly: boolean;
+  };
+  items: EconomicCalendarEvent[];
+}
+
+export interface DashboardImportantEventsResponse {
+  fetchedAtUtc: string;
+  providerStatus: "live" | "stale";
+  cacheStatus: "miss" | "hit" | "stale";
+  nextImportantEvent: EconomicCalendarEvent | null;
+  items: EconomicCalendarEvent[];
+}
+
+export interface EconomicCalendarEventDetailResponse {
+  fetchedAtUtc: string;
+  providerStatus: "live" | "stale";
+  cacheStatus: "miss" | "hit" | "stale";
+  event: EconomicCalendarEvent;
+  navigation: {
+    previousEventId: string | null;
+    nextEventId: string | null;
+  };
+  sameTimeEvents: EconomicCalendarEvent[];
+  sameSessionEvents: EconomicCalendarEvent[];
 }
 
 export const SESSIONS: TradeSession[] = ["Asia", "London", "New York"];

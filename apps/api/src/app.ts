@@ -14,6 +14,7 @@ import { screenshotRoutes } from "./modules/screenshots/routes.js";
 import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
+import { economicCalendarRoutes } from "./modules/economic-calendar/routes.js";
 
 function normalizeOrigin(origin: string) {
   try {
@@ -41,9 +42,7 @@ function isAllowedCorsOrigin(origin?: string) {
       return true;
     }
 
-    const allowedOrigin = env.APP_URL ? normalizeOrigin(env.APP_URL) : null;
-
-    return Boolean(allowedOrigin && normalizedOrigin === allowedOrigin);
+    return env.CORS_ALLOWED_ORIGINS.includes(normalizedOrigin);
   } catch {
     return false;
   }
@@ -146,6 +145,7 @@ export async function buildApp() {
   await app.register(screenshotRoutes, { prefix: "/trades" });
   await app.register(reviewRoutes, { prefix: "/reviews" });
   await app.register(analyticsRoutes, { prefix: "/" });
+  await app.register(economicCalendarRoutes, { prefix: "/" });
   await app.register(tradeShareRoutes, { prefix: "/" });
 
   return app;

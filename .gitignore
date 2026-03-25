@@ -16,8 +16,10 @@ apps/*/dist
 packages/*/node_modules
 packages/*/dist
 *.tsbuildinfo
-.env
-apps/*/.env
+.env*
+!.env.example
+apps/*/.env*
+!apps/*/.env.example
 
 # Editor directories and files
 .vscode/*

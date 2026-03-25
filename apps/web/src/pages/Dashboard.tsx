@@ -9,6 +9,7 @@ import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/layouts/PageShell";
+import { TodayImportantEventsWidget } from "@/features/economic-calendar/components/TodayImportantEventsWidget";
 import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
 import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
@@ -145,6 +146,7 @@ export default function Dashboard() {
   const summary = dashboard.summary;
   const recentTrades = dashboard.recentTrades;
   const currentEquity = equityCurve[equityCurve.length - 1]?.equity ?? 0;
+  const instrumentUniverse = Array.from(new Set(recentTrades.map((trade) => trade.pair))).slice(0, 6);
 
   return (
     <PageShell size="wide">
@@ -360,6 +362,10 @@ export default function Dashboard() {
             </Table>
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard>
+        <TodayImportantEventsWidget instrumentUniverse={instrumentUniverse} />
       </SectionCard>
     </PageShell>
   );

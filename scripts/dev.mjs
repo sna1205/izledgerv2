@@ -177,7 +177,7 @@ process.on("exit", () => {
 async function main() {
   const apiEnvPath = path.join(rootDir, "apps/api/.env");
   const apiEnvExamplePath = path.join(rootDir, "apps/api/.env.example");
-  const webEnvPath = path.join(rootDir, "apps/web/.env.local");
+  const webEnvPath = path.join(rootDir, "apps/web/.env");
   const webEnvExamplePath = path.join(rootDir, "apps/web/.env.example");
 
   const createdApiEnv = await ensureFile(apiEnvPath, apiEnvExamplePath);
@@ -214,12 +214,15 @@ async function main() {
     path.join(rootDir, "node_modules/tsx/dist/cli.mjs"),
     ["watch", "src/server.ts"],
     {
-    ...process.env,
-    PORT: String(apiPort),
-    FRONTEND_URL: webOrigin,
-    TMPDIR: WSL_SAFE_TMP_DIR,
-    TMP: WSL_SAFE_TMP_DIR,
-    TEMP: WSL_SAFE_TMP_DIR,
+      ...process.env,
+      NODE_ENV: process.env.NODE_ENV ?? "development",
+      PORT: String(apiPort),
+      APP_URL: webOrigin,
+      API_URL: apiOrigin,
+      CORS_ALLOWED_ORIGINS: webOrigin,
+      TMPDIR: WSL_SAFE_TMP_DIR,
+      TMP: WSL_SAFE_TMP_DIR,
+      TEMP: WSL_SAFE_TMP_DIR,
     },
   );
 
@@ -231,6 +234,7 @@ async function main() {
     {
       ...process.env,
       VITE_API_BASE_URL: apiOrigin,
+      VITE_APP_ENV: "local",
     },
   );
 }

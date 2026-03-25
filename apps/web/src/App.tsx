@@ -28,6 +28,8 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Setups = lazy(() => import("./pages/Setups"));
 const Reviews = lazy(() => import("./pages/Reviews"));
+const EconomicCalendar = lazy(() => import("./pages/EconomicCalendar"));
+const EconomicCalendarEventDetail = lazy(() => import("./pages/EconomicCalendarEventDetail"));
 const LotCalculator = lazy(() => import("./pages/LotCalculator"));
 const Login = lazy(() => import("./pages/Login"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -80,6 +82,13 @@ function getProtectedBootFallback(pathname: string) {
     };
   }
 
+  if (pathname.startsWith("/economic-calendar")) {
+    return {
+      pageTitleWidth: "w-40",
+      content: <DashboardSkeleton />,
+    };
+  }
+
   return {
     pageTitleWidth: "w-24",
     content: <DashboardSkeleton />,
@@ -96,6 +105,7 @@ function AppRoutes() {
     pathname.startsWith("/accounts") ||
     pathname.startsWith("/setups") ||
     pathname.startsWith("/reviews") ||
+    pathname.startsWith("/economic-calendar") ||
     pathname.startsWith("/trades") ||
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/calculator") ||
@@ -141,6 +151,8 @@ function AppRoutes() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
             <Route path="/reviews" element={<Reviews />} />
+            <Route path="/economic-calendar" element={<EconomicCalendar />} />
+            <Route path="/economic-calendar/:eventId" element={<EconomicCalendarEventDetail />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/:id" element={<TradeDetail />} />
             <Route path="/analytics" element={<Analytics />} />

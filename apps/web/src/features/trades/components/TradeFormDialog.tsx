@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/components/ui/sonner";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
 import { uploadTradeScreenshot } from "@/services/api/screenshots";
+import { getEconomicCalendarList } from "@/services/api/economic-calendar";
+import { privateQueryKey } from "@/services/query-client";
+import { useAuth } from "@/features/auth/auth-context";
+import { getLocalDateKey, getTradeEventWarning } from "@/features/economic-calendar/utils";
 import { InstrumentSelect } from "./InstrumentSelect";
 import { ResultBadge } from "./ResultBadge";
 import type { Account, Direction, Result, SetupDefinition, Trade, TradeEmotion, TradeScreenshotAsset, TradeSession } from "@/types";
@@ -87,6 +94,7 @@ export function TradeFormDialog({
   isSaving = false,
   onScreenshotsChange,
 }: TradeFormDialogProps) {
+  const { user } = useAuth();
   const [form, setForm] = useState<TradeFormValue>(() => buildEmptyForm(accounts));
   const [createdTrade, setCreatedTrade] = useState<Trade | null>(null);
   const [draftScreenshots, setDraftScreenshots] = useState<File[]>([]);
@@ -172,6 +180,29 @@ export function TradeFormDialog({
     () => getTakeProfitDirectionWarning(form.entry, form.stopLoss, form.takeProfit),
     [form.entry, form.stopLoss, form.takeProfit],
   );
+  const economicCalendarQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "economic-calendar", "trade-warning", form.date, form.pair),
+    queryFn: () => getEconomicCalendarList({
+      dateFrom: form.date,
+      dateTo: form.date,
+      impacts: ["high"],
+      instrument: form.pair,
+      relevantOnly: true,
+    }),
+    enabled: open,
+  });
+  const isTradeDateToday = form.date === getLocalDateKey(new Date());
+  const tradeWarning = useMemo(() => {
+    if (!isTradeDateToday) {
+      return null;
+    }
+
+    return getTradeEventWarning({
+      events: economicCalendarQuery.data?.items ?? [],
+      instrument: form.pair,
+      now: new Date(),
+    });
+  }, [economicCalendarQuery.data?.items, form.pair, isTradeDateToday]);
 
   const handleSave = async () => {
     if (
@@ -281,6 +312,36 @@ export function TradeFormDialog({
         <DialogHeader>
           <DialogTitle>{editTrade ? "Edit Trade" : "New Trade"}</DialogTitle>
         </DialogHeader>
+
+        {tradeWarning ? (
+          <Alert className="border-amber-400/30 bg-amber-500/10 text-amber-950 dark:text-amber-100">
+            <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+            <AlertTitle>
+              Relevant high-impact event
+              {" "}
+              {tradeWarning.direction === "upcoming" ? "in" : ""}
+              {" "}
+              {tradeWarning.minutesAway}
+              m
+              {tradeWarning.direction === "recent" ? " ago" : ""}
+            </AlertTitle>
+            <AlertDescription>
+              {tradeWarning.event.currency}
+              {" "}
+              {tradeWarning.event.title}
+              {" "}
+              is within the
+              {" "}
+              {tradeWarning.thresholdMinutes}
+              m risk window for
+              {" "}
+              {form.pair}
+              .
+              {" "}
+              {tradeWarning.relevance.reason}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

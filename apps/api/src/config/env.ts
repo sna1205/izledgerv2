@@ -1,4 +1,7 @@
-import "dotenv/config";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse as parseDotenv } from "dotenv";
 import { z } from "zod";
 
 const booleanFromEnv = z.preprocess((value) => {
@@ -37,12 +40,111 @@ const optionalUrlFromEnv = z.preprocess((value) => {
   return value;
 }, z.string().url().optional());
 
+const optionalUrlArrayFromEnv = z.preprocess((value) => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const values = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    return values;
+  }
+
+  return [];
+}, z.array(z.string().url()).default([]));
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function normalizeOrigin(value: string) {
+  return trimTrailingSlash(new URL(value).origin);
+}
+
+function isLocalHostname(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function getRegistrableDomain(hostname: string) {
+  if (isLocalHostname(hostname)) {
+    return hostname;
+  }
+
+  const parts = hostname.split(".").filter(Boolean);
+
+  if (parts.length < 2) {
+    return hostname;
+  }
+
+  return parts.slice(-2).join(".");
+}
+
+function isCrossSite(appHostname: string, apiHostname: string) {
+  return getRegistrableDomain(appHostname) !== getRegistrableDomain(apiHostname);
+}
+
+function isValidCookieDomain(domain: string) {
+  return /^[A-Za-z0-9.-]+$/.test(domain);
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const appRootDir = path.resolve(__dirname, "../..");
+
+function readEnvFile(filename: string) {
+  const filePath = path.join(appRootDir, filename);
+
+  if (!existsSync(filePath)) {
+    return {};
+  }
+
+  return parseDotenv(readFileSync(filePath));
+}
+
+function resolveRuntimeEnv() {
+  const candidate = process.env.NODE_ENV ?? process.env.APP_ENV ?? "development";
+
+  if (candidate === "production" || candidate === "test") {
+    return candidate;
+  }
+
+  return "development";
+}
+
+function loadFileEnv() {
+  const runtimeEnv = resolveRuntimeEnv();
+  const hasLocalFiles = existsSync(path.join(appRootDir, ".env")) || existsSync(path.join(appRootDir, ".env.local"));
+
+  const developmentFallback = runtimeEnv === "development" && !hasLocalFiles
+    ? readEnvFile(".env.example")
+    : {};
+
+  const modeEnv = runtimeEnv === "production"
+    ? readEnvFile(".env.production")
+    : runtimeEnv === "test"
+      ? readEnvFile(".env.test")
+      : readEnvFile(".env.local");
+
+  return {
+    ...developmentFallback,
+    ...readEnvFile(".env"),
+    ...modeEnv,
+  };
+}
+
 const envSchema = z.object({
+  APP_ENV: z.enum(["development", "test", "production"]).optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  APP_DEBUG: booleanFromEnv.default(false),
   PORT: z.coerce.number().int().positive().default(4000),
   HOST: z.string().default("0.0.0.0"),
   APP_URL: optionalUrlFromEnv,
   API_URL: optionalUrlFromEnv,
+  CORS_ALLOWED_ORIGINS: optionalUrlArrayFromEnv,
   DATABASE_URL: z.string().min(1),
   SESSION_COOKIE_NAME: z.string().default("izledger_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
@@ -62,8 +164,22 @@ const envSchema = z.object({
   STORAGE_FORCE_PATH_STYLE: booleanFromEnv.default(true),
   STORAGE_SIGNED_READS: booleanFromEnv.default(true),
   STORAGE_SIGNED_READ_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  ECONOMIC_CALENDAR_PROVIDER_URL: z.string().url().default("https://nfs.faireconomy.media/ff_calendar_thisweek.json"),
+  ECONOMIC_CALENDAR_PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().default(7000),
+  ECONOMIC_CALENDAR_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 }).superRefine((data, ctx) => {
+  const appUrl = data.APP_URL ? new URL(data.APP_URL) : null;
+  const apiUrl = data.API_URL ? new URL(data.API_URL) : null;
+
+  if (data.NODE_ENV === "production" && data.APP_DEBUG) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["APP_DEBUG"],
+      message: "APP_DEBUG must be false when NODE_ENV=production",
+    });
+  }
+
   if (data.NODE_ENV === "production" && !data.APP_URL) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -96,11 +212,84 @@ const envSchema = z.object({
     });
   }
 
-  if (data.NODE_ENV === "production" && !data.COOKIE_DOMAIN) {
+  if (data.COOKIE_DOMAIN) {
+    const normalizedCookieDomain = data.COOKIE_DOMAIN.replace(/^\./, "");
+
+    if (!isValidCookieDomain(normalizedCookieDomain)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["COOKIE_DOMAIN"],
+        message: "COOKIE_DOMAIN must be a bare domain name without a protocol or path",
+      });
+    }
+
+    if (data.NODE_ENV === "production" && isLocalHostname(normalizedCookieDomain)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["COOKIE_DOMAIN"],
+        message: "COOKIE_DOMAIN cannot target localhost in production",
+      });
+    }
+
+    if (apiUrl && normalizedCookieDomain !== apiUrl.hostname && !apiUrl.hostname.endsWith(`.${normalizedCookieDomain}`)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["COOKIE_DOMAIN"],
+        message: "COOKIE_DOMAIN must match the API host or one of its parent domains",
+      });
+    }
+  }
+
+  if (data.NODE_ENV === "production") {
+    for (const [key, url] of [["APP_URL", appUrl], ["API_URL", apiUrl]] as const) {
+      if (!url) {
+        continue;
+      }
+
+      if (url.protocol !== "https:") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} must use https in production`,
+        });
+      }
+
+      if (isLocalHostname(url.hostname)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} cannot use localhost in production`,
+        });
+      }
+    }
+
+    for (const origin of data.CORS_ALLOWED_ORIGINS) {
+      const parsedOrigin = new URL(origin);
+
+      if (parsedOrigin.protocol !== "https:") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["CORS_ALLOWED_ORIGINS"],
+          message: "CORS_ALLOWED_ORIGINS must use https in production",
+        });
+      }
+
+      if (isLocalHostname(parsedOrigin.hostname)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["CORS_ALLOWED_ORIGINS"],
+          message: "CORS_ALLOWED_ORIGINS cannot include localhost in production",
+        });
+      }
+    }
+  }
+
+  if (data.NODE_ENV === "production" && appUrl && apiUrl && isCrossSite(appUrl.hostname, apiUrl.hostname)
+    && data.SESSION_COOKIE_SAME_SITE !== "none") {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["COOKIE_DOMAIN"],
-      message: "COOKIE_DOMAIN is required when NODE_ENV=production",
+      path: ["SESSION_COOKIE_SAME_SITE"],
+      message: "SESSION_COOKIE_SAME_SITE must be none when APP_URL and API_URL are on different sites",
     });
   }
 
@@ -133,20 +322,32 @@ const envSchema = z.object({
   }
 });
 
-const parsed = envSchema.safeParse({
+const fileEnv = loadFileEnv();
+const rawEnv = {
+  ...fileEnv,
   ...process.env,
-  APP_URL: process.env.APP_URL ?? process.env.FRONTEND_URL ?? process.env.FRONTEND_ORIGIN,
-  API_URL: process.env.API_URL,
-  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN ?? process.env.SESSION_COOKIE_DOMAIN,
-});
+  NODE_ENV: process.env.NODE_ENV ?? process.env.APP_ENV ?? fileEnv.NODE_ENV ?? fileEnv.APP_ENV ?? "development",
+  APP_ENV: process.env.APP_ENV ?? process.env.NODE_ENV ?? fileEnv.APP_ENV ?? fileEnv.NODE_ENV,
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN ?? process.env.SESSION_COOKIE_DOMAIN ?? fileEnv.COOKIE_DOMAIN,
+};
+
+const parsed = envSchema.safeParse(rawEnv);
 
 if (!parsed.success) {
   console.error("Invalid backend environment variables:", parsed.error.flatten().fieldErrors);
   throw new Error("Invalid backend environment variables");
 }
 
+const normalizedAllowedOrigins = parsed.data.CORS_ALLOWED_ORIGINS.length > 0
+  ? parsed.data.CORS_ALLOWED_ORIGINS.map(normalizeOrigin)
+  : parsed.data.APP_URL
+    ? [normalizeOrigin(parsed.data.APP_URL)]
+    : [];
+
 export const env = {
   ...parsed.data,
-  FRONTEND_URL: parsed.data.APP_URL,
+  APP_URL: parsed.data.APP_URL ? normalizeOrigin(parsed.data.APP_URL) : undefined,
+  API_URL: parsed.data.API_URL ? normalizeOrigin(parsed.data.API_URL) : undefined,
+  CORS_ALLOWED_ORIGINS: normalizedAllowedOrigins,
   SESSION_COOKIE_DOMAIN: parsed.data.COOKIE_DOMAIN,
 } as const;

@@ -1,11 +1,38 @@
 import React, { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TradeFormDialog } from "./TradeFormDialog";
 import type { Account, SetupDefinition, Trade } from "@/types";
 
 const screenshotServiceMocks = vi.hoisted(() => ({
   uploadTradeScreenshot: vi.fn(),
+}));
+
+const economicCalendarMocks = vi.hoisted(() => ({
+  getEconomicCalendarList: vi.fn(),
+}));
+
+const reactQueryMocks = vi.hoisted(() => ({
+  useQuery: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
+
+  return {
+    ...actual,
+    useQuery: reactQueryMocks.useQuery,
+  };
+});
+
+vi.mock("@/features/auth/auth-context", () => ({
+  useAuth: () => ({
+    user: {
+      id: "user-1",
+      username: "trader",
+    },
+  }),
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -48,6 +75,10 @@ vi.mock("@/features/screenshots/components/ScreenshotUpload", () => ({
 
 vi.mock("@/services/api/screenshots", () => ({
   uploadTradeScreenshot: screenshotServiceMocks.uploadTradeScreenshot,
+}));
+
+vi.mock("@/services/api/economic-calendar", () => ({
+  getEconomicCalendarList: economicCalendarMocks.getEconomicCalendarList,
 }));
 
 vi.mock("@/components/ui/select", async () => {
@@ -179,13 +210,57 @@ function getReadonlyField(label: string) {
   return section as HTMLElement;
 }
 
+function renderWithProviders(ui: React.ReactElement) {
+  return render(ui);
+}
+
 describe("TradeFormDialog", () => {
   beforeEach(() => {
     screenshotServiceMocks.uploadTradeScreenshot.mockReset();
+    economicCalendarMocks.getEconomicCalendarList.mockReset();
+    economicCalendarMocks.getEconomicCalendarList.mockResolvedValue({
+      fetchedAtUtc: new Date().toISOString(),
+      providerStatus: "live",
+      cacheStatus: "miss",
+      range: {
+        startDate: "2026-03-25",
+        endDate: "2026-03-25",
+      },
+      filters: {
+        range: "today",
+        currencies: [],
+        impacts: [],
+        instrument: null,
+        relevantOnly: false,
+      },
+      items: [],
+    });
+    reactQueryMocks.useQuery.mockReturnValue({
+      data: {
+        fetchedAtUtc: new Date().toISOString(),
+        providerStatus: "live",
+        cacheStatus: "miss",
+        range: {
+          startDate: "2026-03-25",
+          endDate: "2026-03-25",
+        },
+        filters: {
+          range: "today",
+          currencies: [],
+          impacts: [],
+          instrument: null,
+          relevantOnly: false,
+        },
+        items: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
   });
 
   it("derives direction from entry and stop loss and blocks equal prices", async () => {
-    render(<Harness />);
+    renderWithProviders(<Harness />);
 
     expect(within(getReadonlyField("Direction")).getByText("Auto")).toBeInTheDocument();
 
@@ -211,7 +286,7 @@ describe("TradeFormDialog", () => {
   });
 
   it("derives the result badge from profit and disables save until PnL is valid", async () => {
-    render(<Harness />);
+    renderWithProviders(<Harness />);
 
     expect(within(getReadonlyField("Result")).getByText("Auto")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Trade" })).toBeDisabled();
@@ -249,7 +324,7 @@ describe("TradeFormDialog", () => {
 
   it("submits the recomputed result from profit", async () => {
     const saveImpl = vi.fn();
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });
     fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "3010" } });
@@ -264,6 +339,71 @@ describe("TradeFormDialog", () => {
         result: "Loss",
       }));
     });
+  });
+
+  it("shows a non-blocking warning when a relevant high-impact event is near", async () => {
+    const eventTime = new Date(Date.now() + 10 * 60_000);
+
+    reactQueryMocks.useQuery.mockReturnValue({
+      data: {
+        fetchedAtUtc: new Date().toISOString(),
+        providerStatus: "live",
+        cacheStatus: "miss",
+        range: {
+          startDate: "2026-03-25",
+          endDate: "2026-03-25",
+        },
+        filters: {
+          range: "today",
+          currencies: ["USD"],
+          impacts: ["high"],
+          instrument: "XAUUSD",
+          relevantOnly: true,
+        },
+        items: [
+          {
+            id: "event-1",
+            providerEventId: "provider-1",
+            title: "CPI y/y",
+            country: "USD",
+            currency: "USD",
+            impactLevel: "high",
+            eventTimeUtc: eventTime.toISOString(),
+            previousValue: "3.0%",
+            forecastValue: "3.1%",
+            actualValue: null,
+            revisedValue: null,
+            status: "upcoming",
+            category: "inflation",
+            sourceProvider: "fair-economy",
+            lastUpdatedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            relevance: {
+              relevant: true,
+              reason: "Major US macro and Fed releases can move XAUUSD through USD and rate expectations.",
+            },
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderWithProviders(<Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Relevant high-impact event/i)).toBeInTheDocument();
+      expect(screen.getByText(/CPI y\/y/i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });
+    fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "2990" } });
+    fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "3020" } });
+    fireEvent.change(getProfitInput(), { target: { value: "50" } });
+
+    expect(screen.getByRole("button", { name: "Save Trade" })).not.toBeDisabled();
   });
 
   it("keeps an archived account available when editing a historical trade", async () => {
@@ -297,7 +437,7 @@ describe("TradeFormDialog", () => {
       },
     };
 
-    render(<Harness editTrade={archivedTrade} />);
+    renderWithProviders(<Harness editTrade={archivedTrade} />);
 
     expect(screen.getByText("Archived accounts stay available here only so historical trades can still be edited safely.")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Legacy Account (archived)" })).toBeInTheDocument();
@@ -335,7 +475,7 @@ describe("TradeFormDialog", () => {
       createdAt: "2026-03-21T10:00:00.000Z",
     });
 
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.change(getInputByLabel("Entry"), { target: { value: "100" } });
     fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "99" } });
@@ -383,7 +523,7 @@ describe("TradeFormDialog", () => {
     const saveImpl = vi.fn().mockResolvedValue(createdTrade);
     screenshotServiceMocks.uploadTradeScreenshot.mockRejectedValue(new Error("The screenshot file could not be uploaded. Please try again."));
 
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.change(getInputByLabel("Entry"), { target: { value: "100" } });
     fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "99" } });
