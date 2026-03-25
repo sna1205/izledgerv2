@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
+import { FEATURES } from "@/config/features";
 import { PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -35,6 +36,7 @@ import { listTrades } from "@/services/api/trades";
 import { privateQueryKey } from "@/services/query-client";
 import { withMinimumDelay } from "@/utils/loading";
 import { getPageErrorState } from "@/utils/page-errors";
+import EconomicCalendarComingSoonPage from "@/pages/EconomicCalendarComingSoonPage";
 import {
   getEconomicEventRelevanceList,
   getLocalDateKey,
@@ -46,7 +48,7 @@ import {
 
 const RECENT_INSTRUMENT_LIMIT = 24;
 
-export default function EconomicCalendar() {
+function EconomicCalendarLivePage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
@@ -275,4 +277,16 @@ export default function EconomicCalendar() {
       </div>
     </PageShell>
   );
+}
+
+export default function EconomicCalendar() {
+  if (FEATURES.economicCalendar === "hidden") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (FEATURES.economicCalendar === "development") {
+    return <EconomicCalendarComingSoonPage />;
+  }
+
+  return <EconomicCalendarLivePage />;
 }

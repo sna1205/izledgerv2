@@ -7,6 +7,12 @@ import EconomicCalendarEventDetail from "@/pages/EconomicCalendarEventDetail";
 import { ApiError } from "@/services/api/client";
 import type { EconomicCalendarEvent } from "@/types";
 
+vi.mock("@/config/features", () => ({
+  FEATURES: {
+    economicCalendar: "live",
+  },
+}));
+
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {

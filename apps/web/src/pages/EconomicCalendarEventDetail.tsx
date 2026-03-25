@@ -1,10 +1,11 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Clock3, Globe2 } from "lucide-react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
 import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
+import { FEATURES } from "@/config/features";
 import { PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -38,6 +39,7 @@ import { listTrades } from "@/services/api/trades";
 import { privateQueryKey } from "@/services/query-client";
 import { withMinimumDelay } from "@/utils/loading";
 import { ApiError } from "@/services/api/client";
+import EconomicCalendarComingSoonPage from "@/pages/EconomicCalendarComingSoonPage";
 import type { EconomicCalendarEvent } from "@/types";
 
 const RECENT_INSTRUMENT_LIMIT = 24;
@@ -89,7 +91,7 @@ function ContentMetric({
   );
 }
 
-export default function EconomicCalendarEventDetail() {
+function EconomicCalendarEventDetailLivePage() {
   const { user } = useAuth();
   const { eventId = "" } = useParams<{ eventId: string }>();
   const location = useLocation();
@@ -375,4 +377,16 @@ export default function EconomicCalendarEventDetail() {
       </div>
     </PageShell>
   );
+}
+
+export default function EconomicCalendarEventDetail() {
+  if (FEATURES.economicCalendar === "hidden") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (FEATURES.economicCalendar === "development") {
+    return <EconomicCalendarComingSoonPage />;
+  }
+
+  return <EconomicCalendarEventDetailLivePage />;
 }

@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { FEATURES } from "@/config/features";
 import { useAuth } from "@/features/auth/auth-context";
 
 const baseItems = [
@@ -31,6 +32,9 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { user } = useAuth();
   const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
+  const items = FEATURES.economicCalendar === "live"
+    ? baseItems
+    : baseItems.filter((item) => item.url !== "/economic-calendar");
 
   return (
     <Sidebar collapsible="icon">
@@ -53,7 +57,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {baseItems.map((item) => (
+              {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
