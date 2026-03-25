@@ -7,7 +7,7 @@ process.env.LOG_LEVEL = "silent";
 process.env.APP_URL ??= "https://app.izledger.xyz";
 process.env.API_URL ??= "https://api.izledger.xyz";
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
-process.env.SESSION_COOKIE_SAME_SITE ??= "lax";
+process.env.SESSION_COOKIE_SAME_SITE ??= "none";
 process.env.SESSION_COOKIE_SECURE ??= "true";
 process.env.COOKIE_DOMAIN ??= ".izledger.xyz";
 
@@ -46,7 +46,7 @@ test("register/login issue an HTTP-only session cookie and logout clears it", as
       : registerResponse.headers["set-cookie"];
 
     assert.ok(registerCookieHeader?.includes("HttpOnly"));
-    assert.ok(registerCookieHeader?.includes("SameSite=Lax"));
+    assert.ok(registerCookieHeader?.includes("SameSite=None"));
     assert.ok(registerCookieHeader?.includes("Secure"));
     assert.ok(registerCookieHeader?.includes("Path=/"));
     assert.ok(registerCookieHeader?.includes("Domain=.izledger.xyz"));
@@ -66,7 +66,7 @@ test("register/login issue an HTTP-only session cookie and logout clears it", as
       : logoutResponse.headers["set-cookie"];
 
     assert.ok(logoutCookieHeader?.includes("HttpOnly"));
-    assert.ok(logoutCookieHeader?.includes("SameSite=Lax"));
+    assert.ok(logoutCookieHeader?.includes("SameSite=None"));
     assert.ok(logoutCookieHeader?.includes("Secure"));
     assert.ok(logoutCookieHeader?.includes("Domain=.izledger.xyz"));
     assert.ok(

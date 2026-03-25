@@ -175,7 +175,7 @@ This ensures build-time packages like TypeScript and `@types/node` are available
 - On Render, keep runtime boot clean with `npm run start:server` and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
 - If your Postgres provider offers pooled and direct URLs, use the pooled URL in `DATABASE_URL` and the direct URL in `DIRECT_URL`.
 - Local development should keep `COOKIE_DOMAIN` blank and `SESSION_COOKIE_SECURE=false` so `http://localhost` works without special handling.
-- Production should use `SESSION_COOKIE_SAME_SITE=lax`, `SESSION_COOKIE_SECURE=true`, and `COOKIE_DOMAIN=.izledger.xyz` for `https://app.izledger.xyz` and `https://api.izledger.xyz`.
+- Production should use `SESSION_COOKIE_SAME_SITE=none`, `SESSION_COOKIE_SECURE=true`, and `COOKIE_DOMAIN=.izledger.xyz` for `https://app.izledger.xyz` and `https://api.izledger.xyz`.
 - The session token stays in an HTTP-only cookie. It should not be copied to `localStorage` or exposed to client-side JavaScript.
 - If screenshot storage is not ready yet, keep `STORAGE_ENABLED=false`.
 - Cloudflare can be added later for R2 or DNS/CDN, but the API should stay on Render for phase 1.

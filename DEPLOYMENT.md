@@ -116,7 +116,7 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 DIRECT_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME?sslmode=require
 SESSION_COOKIE_NAME=izledger_session
 SESSION_TTL_DAYS=14
-SESSION_COOKIE_SAME_SITE=lax
+SESSION_COOKIE_SAME_SITE=none
 COOKIE_DOMAIN=.izledger.xyz
 SESSION_COOKIE_SECURE=true
 BCRYPT_ROUNDS=12
@@ -139,7 +139,7 @@ Notes:
 
 - `APP_URL`, `API_URL`, and `COOKIE_DOMAIN` are required in production. If any are missing or malformed, `node dist/server.js` exits during startup before the API can listen.
 - Production CORS only allows `https://app.izledger.xyz` and always responds with `Access-Control-Allow-Credentials: true`.
-- For `https://app.izledger.xyz` calling `https://api.izledger.xyz`, use `SESSION_COOKIE_SAME_SITE=lax`, `SESSION_COOKIE_SECURE=true`, `COOKIE_DOMAIN=.izledger.xyz`, and `Path=/`.
+- For `https://app.izledger.xyz` calling `https://api.izledger.xyz`, use `SESSION_COOKIE_SAME_SITE=none`, `SESSION_COOKIE_SECURE=true`, `COOKIE_DOMAIN=.izledger.xyz`, and `Path=/`.
 - Local development should keep `APP_URL=http://localhost:5173`, `API_URL=http://localhost:4000`, `COOKIE_DOMAIN=` blank, and `SESSION_COOKIE_SECURE=false`.
 - If your Postgres provider offers pooled and direct connection strings, prefer pooled for `DATABASE_URL` and direct for `DIRECT_URL`.
 - If staging storage is not ready yet, keep `STORAGE_ENABLED=false` until the staging upload checklist passes.
@@ -197,7 +197,7 @@ Verify all of the following against the real staging domains:
 
 1. Register succeeds and sets an HTTP-only cookie.
 2. Login succeeds and reuses the same cookie configuration.
-3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, `SameSite=Lax`, and `Domain=.izledger.xyz`.
+3. `Set-Cookie` includes `HttpOnly`, `Secure`, `Path=/`, `SameSite=None`, and `Domain=.izledger.xyz`.
 4. Authenticated API calls succeed from `https://app.izledger.xyz` with `Access-Control-Allow-Credentials: true`.
 5. Requests from a non-allowed origin fail CORS.
 6. Logout clears the session cookie and revokes the stored session.
