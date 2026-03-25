@@ -1,4 +1,4 @@
-import { LayoutDashboard, Table2, BarChart3, Calculator, Landmark, Tags, FileText, Settings as SettingsIcon } from "lucide-react";
+import { LayoutDashboard, Table2, BarChart3, Calculator, Landmark, Tags, FileText, CalendarDays, Settings as SettingsIcon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -19,6 +19,7 @@ const baseItems = [
   { title: "Accounts", url: "/accounts", icon: Landmark },
   { title: "Setups", url: "/setups", icon: Tags },
   { title: "Reviews", url: "/reviews", icon: FileText },
+  { title: "Economic Calendar", url: "/economic-calendar", icon: CalendarDays },
   { title: "Trades", url: "/trades", icon: Table2 },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Lot Calculator", url: "/calculator", icon: Calculator },

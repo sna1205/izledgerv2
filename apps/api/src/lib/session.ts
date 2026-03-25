@@ -26,16 +26,13 @@ export function hashSessionToken(token: string) {
 }
 
 export function getSessionCookieLogContext() {
-  const domain = env.NODE_ENV === "production" ? env.COOKIE_DOMAIN ?? null : null;
-  const secure = env.NODE_ENV === "production" ? true : env.SESSION_COOKIE_SECURE;
-
   return {
     name: env.SESSION_COOKIE_NAME,
     path: "/",
     httpOnly: true,
     sameSite: env.SESSION_COOKIE_SAME_SITE,
-    secure,
-    domain,
+    secure: env.SESSION_COOKIE_SECURE,
+    domain: env.COOKIE_DOMAIN ?? null,
     maxAgeSeconds: getSessionCookieMaxAgeSeconds(),
   };
 }
@@ -48,7 +45,7 @@ export function getSessionCookieOptions() {
     httpOnly: cookieContext.httpOnly,
     sameSite: cookieContext.sameSite,
     secure: cookieContext.secure,
-    domain: env.NODE_ENV === "production" ? env.COOKIE_DOMAIN : undefined,
+    domain: env.COOKIE_DOMAIN,
     maxAge: cookieContext.maxAgeSeconds,
   };
 }

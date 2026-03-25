@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AppShellSkeleton } from "@/components/skeletons/AppShellSkeleton";
@@ -18,20 +19,23 @@ import { ProtectedRoute } from "@/features/auth/components/ProtectedRoute";
 import { PublicOnlyRoute } from "@/features/auth/components/PublicOnlyRoute";
 import { AuthProvider, useAuth } from "@/features/auth/auth-context";
 import { createAppQueryClient } from "@/services/query-client";
-import Landing from "./pages/Landing";
-import Dashboard from "./pages/Dashboard";
-import Trades from "./pages/Trades";
-import TradeDetail from "./pages/TradeDetail";
-import Analytics from "./pages/Analytics";
-import Accounts from "./pages/Accounts";
-import Setups from "./pages/Setups";
-import Reviews from "./pages/Reviews";
-import LotCalculator from "./pages/LotCalculator";
-import Login from "./pages/Login";
-import NotFound from "./pages/NotFound";
-import Register from "./pages/Register";
-import Settings from "./pages/Settings";
-import SharedTradePage from "./pages/SharedTradePage";
+
+const Landing = lazy(() => import("./pages/Landing"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Trades = lazy(() => import("./pages/Trades"));
+const TradeDetail = lazy(() => import("./pages/TradeDetail"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const Accounts = lazy(() => import("./pages/Accounts"));
+const Setups = lazy(() => import("./pages/Setups"));
+const Reviews = lazy(() => import("./pages/Reviews"));
+const EconomicCalendar = lazy(() => import("./pages/EconomicCalendar"));
+const EconomicCalendarEventDetail = lazy(() => import("./pages/EconomicCalendarEventDetail"));
+const LotCalculator = lazy(() => import("./pages/LotCalculator"));
+const Login = lazy(() => import("./pages/Login"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Register = lazy(() => import("./pages/Register"));
+const Settings = lazy(() => import("./pages/Settings"));
+const SharedTradePage = lazy(() => import("./pages/SharedTradePage"));
 
 const queryClient = createAppQueryClient();
 
@@ -78,6 +82,13 @@ function getProtectedBootFallback(pathname: string) {
     };
   }
 
+  if (pathname.startsWith("/economic-calendar")) {
+    return {
+      pageTitleWidth: "w-40",
+      content: <DashboardSkeleton />,
+    };
+  }
+
   return {
     pageTitleWidth: "w-24",
     content: <DashboardSkeleton />,
@@ -94,6 +105,7 @@ function AppRoutes() {
     pathname.startsWith("/accounts") ||
     pathname.startsWith("/setups") ||
     pathname.startsWith("/reviews") ||
+    pathname.startsWith("/economic-calendar") ||
     pathname.startsWith("/trades") ||
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/calculator") ||
@@ -114,29 +126,43 @@ function AppRoutes() {
     );
   }
 
+  const routeFallback = isAuthRoute
+    ? <AuthPageSkeleton />
+    : isProtectedRoute
+      ? (
+          <AppShellSkeleton pageTitleWidth={getProtectedBootFallback(pathname).pageTitleWidth}>
+            {getProtectedBootFallback(pathname).content}
+          </AppShellSkeleton>
+        )
+      : null;
+
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/shared/trade/:shareId" element={<SharedTradePage />} />
-      <Route element={<PublicOnlyRoute />}>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-      </Route>
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/accounts" element={<Accounts />} />
-          <Route path="/setups" element={<Setups />} />
-          <Route path="/reviews" element={<Reviews />} />
-          <Route path="/trades" element={<Trades />} />
-          <Route path="/trades/:id" element={<TradeDetail />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/calculator" element={<LotCalculator />} />
-          <Route path="/settings" element={<Settings />} />
+    <Suspense fallback={routeFallback}>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/shared/trade/:shareId" element={<SharedTradePage />} />
+        <Route element={<PublicOnlyRoute />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
         </Route>
-      </Route>
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/setups" element={<Setups />} />
+            <Route path="/reviews" element={<Reviews />} />
+            <Route path="/economic-calendar" element={<EconomicCalendar />} />
+            <Route path="/economic-calendar/:eventId" element={<EconomicCalendarEventDetail />} />
+            <Route path="/trades" element={<Trades />} />
+            <Route path="/trades/:id" element={<TradeDetail />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/calculator" element={<LotCalculator />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
 

@@ -4,12 +4,12 @@ import test from "node:test";
 process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
 process.env.LOG_LEVEL = "silent";
-process.env.APP_URL ??= "https://app.izledger.xyz";
-process.env.API_URL ??= "https://api.izledger.xyz";
+process.env.APP_URL ??= "https://app.example.com";
+process.env.API_URL ??= "https://api.example.com";
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
-process.env.SESSION_COOKIE_SAME_SITE ??= "lax";
+process.env.SESSION_COOKIE_SAME_SITE ??= "none";
 process.env.SESSION_COOKIE_SECURE ??= "true";
-process.env.COOKIE_DOMAIN ??= ".izledger.xyz";
+process.env.COOKIE_DOMAIN ??= ".example.com";
 
 const [{ buildApp }, { prisma }] = await Promise.all([
   import("../src/app.js"),
@@ -46,10 +46,10 @@ test("register/login issue an HTTP-only session cookie and logout clears it", as
       : registerResponse.headers["set-cookie"];
 
     assert.ok(registerCookieHeader?.includes("HttpOnly"));
-    assert.ok(registerCookieHeader?.includes("SameSite=Lax"));
+    assert.ok(registerCookieHeader?.includes("SameSite=None"));
     assert.ok(registerCookieHeader?.includes("Secure"));
     assert.ok(registerCookieHeader?.includes("Path=/"));
-    assert.ok(registerCookieHeader?.includes("Domain=.izledger.xyz"));
+    assert.ok(registerCookieHeader?.includes("Domain=.example.com"));
 
     const logoutResponse = await app.inject({
       method: "POST",
@@ -66,9 +66,9 @@ test("register/login issue an HTTP-only session cookie and logout clears it", as
       : logoutResponse.headers["set-cookie"];
 
     assert.ok(logoutCookieHeader?.includes("HttpOnly"));
-    assert.ok(logoutCookieHeader?.includes("SameSite=Lax"));
+    assert.ok(logoutCookieHeader?.includes("SameSite=None"));
     assert.ok(logoutCookieHeader?.includes("Secure"));
-    assert.ok(logoutCookieHeader?.includes("Domain=.izledger.xyz"));
+    assert.ok(logoutCookieHeader?.includes("Domain=.example.com"));
     assert.ok(
       logoutCookieHeader?.includes("Max-Age=0") || logoutCookieHeader?.includes("Expires="),
       "Expected logout to clear the session cookie.",
@@ -92,13 +92,13 @@ test("cors allows the production frontend origin and credentials", async () => {
       method: "OPTIONS",
       url: "/auth/login",
       headers: {
-        origin: "https://app.izledger.xyz",
+        origin: "https://app.example.com",
         "access-control-request-method": "POST",
       },
     });
 
     assert.equal(response.statusCode, 204);
-    assert.equal(response.headers["access-control-allow-origin"], "https://app.izledger.xyz");
+    assert.equal(response.headers["access-control-allow-origin"], "https://app.example.com");
     assert.equal(response.headers["access-control-allow-credentials"], "true");
   } finally {
     await app.close();

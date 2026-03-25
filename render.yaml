@@ -18,15 +18,17 @@ services:
       - key: DIRECT_URL
         sync: false
       - key: APP_URL
-        value: https://app.izledger.xyz
+        sync: false
       - key: API_URL
-        value: https://api.izledger.xyz
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
       - key: SESSION_COOKIE_SAME_SITE
         value: lax
       - key: SESSION_COOKIE_SECURE
         value: true
       - key: COOKIE_DOMAIN
-        value: .izledger.xyz
+        sync: false
       - key: STORAGE_ENABLED
         value: false
       - key: STORAGE_BUCKET

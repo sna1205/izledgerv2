@@ -1,3 +1,4 @@
-export * from "./types/domain";
-export * from "./constants/setup-colors";
-export * from "./constants/instruments";
+export * from "./types/domain.js";
+export * from "./economic-calendar-live.js";
+export * from "./constants/setup-colors.js";
+export * from "./constants/instruments.js";

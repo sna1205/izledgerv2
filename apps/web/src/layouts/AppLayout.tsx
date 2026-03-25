@@ -5,6 +5,8 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/features/auth/auth-context";
+import { HighImpactNewsAlertManager } from "@/features/economic-calendar/components/HighImpactNewsAlertManager";
+import { EconomicCalendarLivePollingManager } from "@/features/economic-calendar/components/EconomicCalendarLivePollingManager";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -22,10 +24,14 @@ export function AppLayout() {
   const location = useLocation();
   const { user } = useAuth();
   const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
-  const pageTitle = pageTitles[location.pathname] || "IZLedger";
+  const pageTitle = location.pathname.startsWith("/economic-calendar/")
+    ? "Economic Calendar"
+    : pageTitles[location.pathname] || "IZLedger";
 
   return (
     <SidebarProvider>
+      {user ? <HighImpactNewsAlertManager /> : null}
+      {user ? <EconomicCalendarLivePollingManager /> : null}
       <div className="flex min-h-screen w-full bg-transparent">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">

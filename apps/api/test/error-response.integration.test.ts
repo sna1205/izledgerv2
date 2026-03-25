@@ -4,7 +4,7 @@ import test from "node:test";
 process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
 process.env.LOG_LEVEL = "silent";
-process.env.FRONTEND_ORIGIN ??= "http://127.0.0.1:3000";
+process.env.APP_URL ??= "http://127.0.0.1:3000";
 process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5433/izledger_test";
 process.env.AUTH_RATE_LIMIT_MAX = "1";
 process.env.AUTH_RATE_LIMIT_WINDOW_MINUTES = "1";

@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/features/auth/auth-context";
+import { EconomicCalendarContextPanel } from "@/features/economic-calendar/components/EconomicCalendarContextPanel";
 import { TradeReviewSummary } from "@/features/reviews/components/TradeReviewSummary";
+import { getEconomicCalendarList } from "@/services/api/economic-calendar";
 import { ApiError } from "@/services/api/client";
+import { privateQueryKey } from "@/services/query-client";
 import { Review, Trade } from "@/types";
 
 interface TradeReviewDialogProps {
@@ -38,8 +43,18 @@ export function TradeReviewDialog({
   onSave,
   isSaving = false,
 }: TradeReviewDialogProps) {
+  const { user } = useAuth();
   const [form, setForm] = useState(defaultForm);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const economicCalendarQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "economic-calendar", "review-dialog", trade.date, trade.pair),
+    queryFn: () => getEconomicCalendarList({
+      dateFrom: trade.date,
+      dateTo: trade.date,
+      instrument: trade.pair,
+    }),
+    enabled: open,
+  });
 
   const updateForm = <K extends keyof typeof defaultForm>(key: K, value: (typeof defaultForm)[K]) => {
     setSubmitError(null);
@@ -150,6 +165,14 @@ export function TradeReviewDialog({
           ) : null}
 
           <TradeReviewSummary trade={trade} />
+
+          <EconomicCalendarContextPanel
+            title="What was on the macro tape?"
+            description="Use this context to judge whether news flow should have changed your execution, patience, or position sizing."
+            events={economicCalendarQuery.data?.items ?? []}
+            tradeDate={trade.date}
+            instrument={trade.pair}
+          />
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">

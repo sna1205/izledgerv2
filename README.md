@@ -19,8 +19,8 @@ npm install
 2. Create env files:
 
 ```bash
-cp apps/web/.env.example apps/web/.env.local
 cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
 3. Start backend dependencies from `apps/api` if you use the included Docker stack:
@@ -52,7 +52,7 @@ npm run dev
 
 The root dev launcher now:
 
-- creates `apps/api/.env` and `apps/web/.env.local` from their examples when missing
+- creates `apps/api/.env` and `apps/web/.env` from their examples when missing
 - keeps the frontend pointed at the backend automatically
 - falls forward to the next free port if `4000` or `5173` is already in use
 
@@ -63,10 +63,10 @@ Default local app URLs:
 
 ## Required env vars
 
-Frontend in `apps/web/.env.local`:
+Frontend in `apps/web/.env`:
 
 ```bash
-API_URL=http://localhost:4000
+VITE_APP_ENV=local
 VITE_API_BASE_URL=http://localhost:4000
 ```
 
@@ -74,10 +74,13 @@ Backend in `apps/api/.env`:
 
 ```bash
 NODE_ENV=development
+APP_ENV=development
+APP_DEBUG=false
 PORT=4000
 HOST=0.0.0.0
 APP_URL=http://localhost:5173
 API_URL=http://localhost:4000
+CORS_ALLOWED_ORIGINS=http://localhost:5173
 DATABASE_URL=postgresql://...
 DIRECT_URL=
 SESSION_COOKIE_NAME=izledger_session
@@ -98,6 +101,13 @@ STORAGE_PUBLIC_BASE_URL=
 STORAGE_FORCE_PATH_STYLE=true
 STORAGE_SIGNED_READS=true
 STORAGE_SIGNED_READ_TTL_SECONDS=900
+# Use `trading-economics` in production for real historical and future calendar ranges.
+ECONOMIC_CALENDAR_PROVIDER=fair-economy
+ECONOMIC_CALENDAR_PROVIDER_URL=https://nfs.faireconomy.media/ff_calendar_thisweek.json
+ECONOMIC_CALENDAR_TRADING_ECONOMICS_BASE_URL=https://api.tradingeconomics.com
+ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY=
+ECONOMIC_CALENDAR_PROVIDER_TIMEOUT_MS=7000
+ECONOMIC_CALENDAR_CACHE_TTL_SECONDS=300
 LOG_LEVEL=info
 ```
 
@@ -168,14 +178,15 @@ npm install --include=dev && npm run prisma:generate && npm run build
 This ensures build-time packages like TypeScript and `@types/node` are available even when `NODE_ENV=production`.
 ## Production notes
 
-- Set `APP_URL=https://app.izledger.xyz` on the API and use the same origin for production CORS.
-- Set `API_URL=https://api.izledger.xyz` in both deployments, and mirror that value into `VITE_API_BASE_URL` for the Vite frontend build.
+- Set `APP_URL=https://app.example.com` on the API and allow that exact frontend origin in `CORS_ALLOWED_ORIGINS`.
+- Set `API_URL=https://api.example.com` on the API and mirror that value into `VITE_API_BASE_URL` for the Vite frontend build.
 - Set `NODE_ENV=production` on the API.
-- The API will fail during startup in production if `APP_URL`, `API_URL`, or `COOKIE_DOMAIN` is missing or invalid.
+- Set `VITE_APP_ENV=production` for the frontend build.
+- The API will fail during startup in production if `APP_URL`, `API_URL`, or other required security settings are invalid.
 - On Render, keep runtime boot clean with `npm run start:server` and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
 - If your Postgres provider offers pooled and direct URLs, use the pooled URL in `DATABASE_URL` and the direct URL in `DIRECT_URL`.
 - Local development should keep `COOKIE_DOMAIN` blank and `SESSION_COOKIE_SECURE=false` so `http://localhost` works without special handling.
-- Production should use `SESSION_COOKIE_SAME_SITE=lax`, `SESSION_COOKIE_SECURE=true`, and `COOKIE_DOMAIN=.izledger.xyz` for `https://app.izledger.xyz` and `https://api.izledger.xyz`.
+- Production should use `SESSION_COOKIE_SECURE=true`. Keep `SESSION_COOKIE_SAME_SITE=lax` for `https://app.example.com` and `https://api.example.com`, or switch to `none` only if the frontend and backend are on different sites.
 - The session token stays in an HTTP-only cookie. It should not be copied to `localStorage` or exposed to client-side JavaScript.
 - If screenshot storage is not ready yet, keep `STORAGE_ENABLED=false`.
 - Cloudflare can be added later for R2 or DNS/CDN, but the API should stay on Render for phase 1.

@@ -1,9 +1,43 @@
 import React, { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/services/api/client";
 import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
 import type { Review, Trade } from "@/types";
+
+const authContextMocks = vi.hoisted(() => ({
+  useAuth: vi.fn(() => ({
+    user: {
+      id: "user-1",
+      username: "tester",
+    },
+  })),
+}));
+
+vi.mock("@/features/auth/auth-context", () => ({
+  useAuth: authContextMocks.useAuth,
+}));
+
+vi.mock("@/services/api/economic-calendar", () => ({
+  getEconomicCalendarList: vi.fn(async () => ({
+    fetchedAtUtc: new Date().toISOString(),
+    providerStatus: "live",
+    cacheStatus: "miss",
+    range: {
+      startDate: "2026-03-16",
+      endDate: "2026-03-16",
+    },
+    filters: {
+      range: "custom",
+      currencies: [],
+      impacts: [],
+      instrument: "EURUSD",
+      relevantOnly: false,
+    },
+    items: [],
+  })),
+}));
 
 vi.mock("@/features/reviews/components/TradeReviewSummary", () => ({
   TradeReviewSummary: ({ trade }: { trade: Trade }) => <div>{trade.pair}</div>,
@@ -136,12 +170,28 @@ function Harness({
   );
 }
 
+function renderWithProviders(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      {ui}
+    </QueryClientProvider>,
+  );
+}
+
 describe("TradeReviewDialog", () => {
   it("closes only after a successful save", async () => {
     const deferred = createDeferred();
     const saveImpl = vi.fn().mockReturnValue(deferred.promise);
 
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Create Review" }));
 
@@ -160,7 +210,7 @@ describe("TradeReviewDialog", () => {
   it("keeps the dialog open and shows inline validation feedback on server failure", async () => {
     const saveImpl = vi.fn().mockRejectedValue(new ApiError("Execution rating must be between 1 and 5.", 422, "VALIDATION_ERROR"));
 
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Create Review" }));
 
@@ -172,7 +222,7 @@ describe("TradeReviewDialog", () => {
   it("keeps the dialog open and shows inline network feedback on network failure", async () => {
     const saveImpl = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
 
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Create Review" }));
 
@@ -185,7 +235,7 @@ describe("TradeReviewDialog", () => {
       .mockRejectedValueOnce(new ApiError("Validation failed.", 422, "VALIDATION_ERROR"))
       .mockResolvedValueOnce(undefined);
 
-    render(<Harness saveImpl={saveImpl} />);
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Create Review" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Validation failed.");
