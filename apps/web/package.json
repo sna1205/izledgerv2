@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prebuild": "npm run build --workspace @izledger/shared",
     "dev": "vite",
     "start": "vite preview",
     "build": "vite build",
