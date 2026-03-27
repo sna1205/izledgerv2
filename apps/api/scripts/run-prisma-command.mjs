@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { createRequire } from "node:module";
@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
 const require = createRequire(import.meta.url);
 const prismaCliPath = require.resolve("prisma/build/index.js", { paths: [apiRoot] });
+const prismaClientOutputRoot = path.resolve(apiRoot, "..", "..", "node_modules", ".prisma", "client");
 
 function readEnvFile(filename) {
   const filePath = path.join(apiRoot, filename);
@@ -51,6 +52,20 @@ function loadFileEnv() {
   };
 }
 
+function cleanupGeneratedPrismaEngines() {
+  if (!existsSync(prismaClientOutputRoot)) {
+    return;
+  }
+
+  for (const entry of readdirSync(prismaClientOutputRoot)) {
+    if (!/^(libquery_engine-.*\.node|query_engine-.*\.node)(\.tmp\d+)?$/.test(entry)) {
+      continue;
+    }
+
+    rmSync(path.join(prismaClientOutputRoot, entry), { force: true });
+  }
+}
+
 const prismaArgs = process.argv.slice(2);
 
 if (prismaArgs.length === 0) {
@@ -65,6 +80,12 @@ const prismaEnv = {
   NODE_ENV: process.env.NODE_ENV ?? process.env.APP_ENV ?? fileEnv.NODE_ENV ?? fileEnv.APP_ENV ?? "development",
   APP_ENV: process.env.APP_ENV ?? process.env.NODE_ENV ?? fileEnv.APP_ENV ?? fileEnv.NODE_ENV,
 };
+
+if (prismaArgs[0] === "generate") {
+  // Regeneration can fail on this workspace filesystem when Prisma tries to rename over an
+  // existing engine binary, so clear stale generated engines before invoking the CLI.
+  cleanupGeneratedPrismaEngines();
+}
 
 const result = spawnSync(process.execPath, [prismaCliPath, ...prismaArgs], {
   cwd: apiRoot,

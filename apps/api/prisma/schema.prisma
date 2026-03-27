@@ -8,6 +8,346 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                       String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username                 String                   @unique @db.Citext
+  passwordHash             String                   @map("password_hash")
+  createdAt                DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  checklistEnforcementMode ChecklistEnforcementMode @default(soft) @map("checklist_enforcement_mode")
+  accounts                 Account[]
+  checklistRules           ChecklistRule[]
+  reviews                  Review[]
+  sessions                 Session[]
+  setups                   Setup[]
+  tradeChecklistResponses  TradeChecklistResponse[]
+  screenshotUploads        TradeScreenshotUpload[]
+  screenshots              TradeScreenshot[]
+  tradeShares              TradeShare[]
+  trades                   Trade[]
+
+  @@map("users")
+}
+
+model Session {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  tokenHash      String    @unique @map("token_hash")
+  userAgent      String?   @map("user_agent")
+  ipAddress      String?   @map("ip_address")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastAccessedAt DateTime  @default(now()) @map("last_accessed_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Account {
+  id                                         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                                     String          @map("user_id") @db.Uuid
+  name                                       String
+  broker                                     String
+  type                                       AccountType
+  balance                                    Decimal         @db.Decimal(18, 2)
+  currency                                   String
+  isDefault                                  Boolean         @default(false) @map("is_default")
+  createdAt                                  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isArchived                                 Boolean         @default(false) @map("is_archived")
+  user                                       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checklistRules                             ChecklistRule[]
+  trades                                     Trade[]
+  trades_trades_account_id_user_idToaccounts Trade[]         @relation("trades_account_id_user_idToaccounts")
+
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Setup {
+  id                                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                                 String          @map("user_id") @db.Uuid
+  name                                   String
+  description                            String
+  color                                  String
+  isArchived                             Boolean         @default(false) @map("is_archived")
+  createdAt                              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                              DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  nameNormalized                         String          @map("name_normalized")
+  entryLogic                             String?         @map("entry_logic")
+  confirmationLogic                      String?         @map("confirmation_logic")
+  invalidationLogic                      String?         @map("invalidation_logic")
+  notes                                  String?
+  checklistRules                         ChecklistRule[]
+  user                                   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades                                 Trade[]
+  trades_trades_setup_id_user_idTosetups Trade[]         @relation("trades_setup_id_user_idTosetups")
+
+  @@unique([id, userId])
+  @@unique([userId, nameNormalized])
+  @@index([userId, name])
+  @@map("setups")
+}
+
+model Trade {
+  id                                                                           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                                                                       String                   @map("user_id") @db.Uuid
+  accountId                                                                    String                   @map("account_id") @db.Uuid
+  setupId                                                                      String?                  @map("setup_id") @db.Uuid
+  setupNameSnapshot                                                            String?                  @map("setup_name_snapshot")
+  tradeDate                                                                    DateTime                 @map("trade_date") @db.Date
+  pair                                                                         String
+  direction                                                                    TradeDirection
+  entry                                                                        Decimal                  @db.Decimal(18, 8)
+  stopLoss                                                                     Decimal                  @map("stop_loss") @db.Decimal(18, 8)
+  takeProfit                                                                   Decimal                  @map("take_profit") @db.Decimal(18, 8)
+  profit                                                                       Decimal                  @db.Decimal(18, 2)
+  result                                                                       TradeResult
+  session                                                                      TradeSession?
+  emotion                                                                      TradeEmotion?
+  notes                                                                        String                   @default("")
+  createdAt                                                                    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                                                    DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt                                                                    DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  accountCurrencySnapshot                                                      String?                  @map("account_currency_snapshot")
+  quantity                                                                     Decimal?                 @db.Decimal(20, 8)
+  lotSize                                                                      Decimal?                 @map("lot_size") @db.Decimal(20, 8)
+  exitPrice                                                                    Decimal?                 @map("exit_price") @db.Decimal(18, 8)
+  fees                                                                         Decimal?                 @db.Decimal(18, 2)
+  riskAmount                                                                   Decimal?                 @map("risk_amount") @db.Decimal(18, 2)
+  riskPercent                                                                  Decimal?                 @map("risk_percent") @db.Decimal(7, 4)
+  grossPnl                                                                     Decimal?                 @map("gross_pnl") @db.Decimal(18, 2)
+  netPnl                                                                       Decimal?                 @map("net_pnl") @db.Decimal(18, 2)
+  setupColorSnapshot                                                           String?                  @map("setup_color_snapshot")
+  clientRequestId                                                              String?                  @map("client_request_id")
+  openedAt                                                                     DateTime?                @map("opened_at") @db.Timestamptz(3)
+  closedAt                                                                     DateTime?                @map("closed_at") @db.Timestamptz(3)
+  pnlCurrency                                                                  String?                  @map("pnl_currency")
+  fxRateSnapshot                                                               Decimal?                 @map("fx_rate_snapshot") @db.Decimal(18, 8)
+  fxRateSource                                                                 String?                  @map("fx_rate_source")
+  fxRateTimestamp                                                              DateTime?                @map("fx_rate_timestamp") @db.Timestamptz(3)
+  review                                                                       Review?
+  reviews_reviews_trade_id_user_idTotrades                                     Review?                  @relation("reviews_trade_id_user_idTotrades")
+  checklistResponses                                                           TradeChecklistResponse[]
+  trade_checklist_responses_trade_checklist_responses_trade_id_user_idTotrades TradeChecklistResponse[] @relation("trade_checklist_responses_trade_id_user_idTotrades")
+  screenshotUploads                                                            TradeScreenshotUpload[]
+  trade_screenshot_uploads_trade_screenshot_uploads_trade_id_user_idTotrades   TradeScreenshotUpload[]  @relation("trade_screenshot_uploads_trade_id_user_idTotrades")
+  screenshots                                                                  TradeScreenshot[]
+  trade_screenshots_trade_screenshots_trade_id_user_idTotrades                 TradeScreenshot[]        @relation("trade_screenshots_trade_id_user_idTotrades")
+  shares                                                                       TradeShare[]
+  trade_shares_trade_shares_trade_id_user_idTotrades                           TradeShare?              @relation("trade_shares_trade_id_user_idTotrades")
+  account                                                                      Account                  @relation(fields: [accountId], references: [id])
+  accounts_trades_account_id_user_idToaccounts                                 Account                  @relation("trades_account_id_user_idToaccounts", fields: [accountId, userId], references: [id, userId])
+  setup                                                                        Setup?                   @relation(fields: [setupId], references: [id])
+  setups_trades_setup_id_user_idTosetups                                       Setup?                   @relation("trades_setup_id_user_idTosetups", fields: [setupId, userId], references: [id, userId], onDelete: NoAction)
+  user                                                                         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([id, userId])
+  @@index([userId, deletedAt, accountId, tradeDate(sort: Desc)])
+  @@index([userId, deletedAt, setupId, tradeDate(sort: Desc)])
+  @@index([userId, session])
+  @@index([userId, emotion])
+  @@index([userId, result])
+  @@index([userId, openedAt])
+  @@index([userId, closedAt])
+  @@index([userId, deletedAt, tradeDate(sort: Desc), createdAt(sort: Desc)])
+  @@index([userId, deletedAt, pair, tradeDate(sort: Desc)])
+  @@index([accountId, tradeDate(sort: Desc)], map: "trades_account_id_trade_date_desc_idx")
+  @@index([userId, accountCurrencySnapshot, pnlCurrency])
+  @@index([userId, fxRateTimestamp])
+  @@index([userId, tradeDate(sort: Desc)], map: "trades_user_id_trade_date_desc_idx")
+  @@map("trades")
+}
+
+model TradeScreenshotUpload {
+  id                                                       String    @id @default(uuid()) @db.Uuid
+  userId                                                   String    @map("user_id") @db.Uuid
+  tradeId                                                  String    @map("trade_id") @db.Uuid
+  storageKey                                               String    @unique @map("storage_key")
+  fileName                                                 String    @map("file_name")
+  contentType                                              String    @map("content_type")
+  fileSize                                                 Int       @map("file_size")
+  expiresAt                                                DateTime  @map("expires_at") @db.Timestamptz(3)
+  completedAt                                              DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt                                                DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  trade                                                    Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  trades_trade_screenshot_uploads_trade_id_user_idTotrades Trade     @relation("trade_screenshot_uploads_trade_id_user_idTotrades", fields: [tradeId, userId], references: [id, userId], onDelete: Cascade)
+  user                                                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tradeId])
+  @@index([completedAt, expiresAt])
+  @@index([tradeId, createdAt])
+  @@index([expiresAt])
+  @@map("trade_screenshot_uploads")
+}
+
+model TradeScreenshot {
+  id                                                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tradeId                                           String   @map("trade_id") @db.Uuid
+  storageKey                                        String   @map("storage_key")
+  sortOrder                                         Int      @default(0) @map("sort_order")
+  createdAt                                         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  userId                                            String   @map("user_id") @db.Uuid
+  trade                                             Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  trades_trade_screenshots_trade_id_user_idTotrades Trade    @relation("trade_screenshots_trade_id_user_idTotrades", fields: [tradeId, userId], references: [id, userId], onDelete: Cascade)
+  user                                              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, storageKey])
+  @@unique([tradeId, sortOrder])
+  @@index([userId])
+  @@index([tradeId])
+  @@index([userId, tradeId])
+  @@index([tradeId, sortOrder])
+  @@map("trade_screenshots")
+}
+
+model ScreenshotCleanupTask {
+  id             String                  @id @default(uuid()) @db.Uuid
+  dedupeKey      String                  @unique @map("dedupe_key")
+  action         ScreenshotCleanupAction
+  reason         ScreenshotCleanupReason
+  storageKey     String?                 @map("storage_key")
+  screenshotId   String?                 @map("screenshot_id") @db.Uuid
+  uploadId       String?                 @map("upload_id") @db.Uuid
+  userId         String?                 @map("user_id") @db.Uuid
+  tradeId        String?                 @map("trade_id") @db.Uuid
+  attemptCount   Int                     @default(0) @map("attempt_count")
+  nextAttemptAt  DateTime                @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  leaseExpiresAt DateTime?               @map("lease_expires_at") @db.Timestamptz(3)
+  lastError      String?                 @map("last_error")
+  lastAttemptAt  DateTime?               @map("last_attempt_at") @db.Timestamptz(3)
+  completedAt    DateTime?               @map("completed_at") @db.Timestamptz(3)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([completedAt, nextAttemptAt])
+  @@index([action, completedAt, nextAttemptAt])
+  @@index([storageKey])
+  @@map("screenshot_cleanup_tasks")
+}
+
+model TradeShare {
+  id                                           String    @id @default(uuid()) @db.Uuid
+  tradeId                                      String    @map("trade_id") @db.Uuid
+  userId                                       String    @map("user_id") @db.Uuid
+  shareId                                      String    @unique @map("share_id")
+  isActive                                     Boolean   @default(true) @map("is_active")
+  viewCount                                    Int       @default(0) @map("view_count")
+  expiresAt                                    DateTime? @map("expires_at") @db.Timestamptz(3)
+  shareSettings                                Json      @map("share_settings")
+  snapshot                                     Json      @map("snapshot")
+  createdAt                                    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                                    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  trade                                        Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  trades_trade_shares_trade_id_user_idTotrades Trade     @relation("trade_shares_trade_id_user_idTotrades", fields: [tradeId, userId], references: [id, userId], onDelete: Cascade)
+  user                                         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, userId])
+  @@index([userId, tradeId])
+  @@index([shareId, isActive])
+  @@map("trade_shares")
+}
+
+model Review {
+  id                                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                                  String            @map("user_id") @db.Uuid
+  type                                    ReviewType
+  tradeId                                 String?           @unique @map("trade_id") @db.Uuid
+  tradeSnapshot                           Json?             @map("trade_snapshot")
+  reviewDate                              DateTime?         @map("review_date") @db.Date
+  weekStart                               DateTime?         @map("week_start") @db.Date
+  weekEnd                                 DateTime?         @map("week_end") @db.Date
+  wentWell                                String?           @map("went_well")
+  mistakes                                String?
+  followedRules                           ReviewRuleStatus? @map("followed_rules")
+  emotion                                 ReviewEmotion?
+  lessonLearned                           String?           @map("lesson_learned")
+  improvementPlan                         String?           @map("improvement_plan")
+  disciplineScore                         Int?              @map("discipline_score")
+  weeklySummary                           String?           @map("weekly_summary")
+  biggestWin                              String?           @map("biggest_win")
+  biggestMistake                          String?           @map("biggest_mistake")
+  riskManagement                          ReviewRiskStatus? @map("risk_management")
+  nextGoal                                String?           @map("next_goal")
+  weeklyRating                            Int?              @map("weekly_rating")
+  executionRating                         Int?              @map("execution_rating")
+  emotionRating                           Int?              @map("emotion_rating")
+  whatWentWell                            String?           @map("what_went_well")
+  whatWentWrong                           String?           @map("what_went_wrong")
+  mistakesMade                            String?           @map("mistakes_made")
+  improvementForNextTrade                 String?           @map("improvement_for_next_trade")
+  wouldTakeAgain                          Boolean?          @map("would_take_again")
+  createdAt                               DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                               DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dailyScopeDate                          DateTime?         @map("daily_scope_date") @db.Date
+  weeklyScopeStart                        DateTime?         @map("weekly_scope_start") @db.Date
+  trade                                   Trade?            @relation(fields: [tradeId], references: [id])
+  trades_reviews_trade_id_user_idTotrades Trade?            @relation("reviews_trade_id_user_idTotrades", fields: [tradeId, userId], references: [id, userId], onDelete: NoAction)
+  user                                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dailyScopeDate])
+  @@unique([userId, weeklyScopeStart])
+  @@index([userId, reviewDate(sort: Desc)])
+  @@index([userId, weekEnd(sort: Desc)])
+  @@index([userId, type, updatedAt(sort: Desc)], map: "reviews_user_id_type_updated_at_desc_idx")
+  @@map("reviews")
+}
+
+model ChecklistRule {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String                   @map("user_id") @db.Uuid
+  title                   String
+  description             String?
+  isRequired              Boolean                  @default(false) @map("is_required")
+  isActive                Boolean                  @default(true) @map("is_active")
+  sortOrder               Int                      @default(0) @map("sort_order")
+  setupId                 String?                  @map("setup_id") @db.Uuid
+  accountId               String?                  @map("account_id") @db.Uuid
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  scopeType               ChecklistRuleScopeType   @map("scope_type")
+  titleNormalized         String                   @map("title_normalized")
+  account                 Account?                 @relation(fields: [accountId], references: [id], onDelete: NoAction)
+  setup                   Setup?                   @relation(fields: [setupId], references: [id], onDelete: NoAction)
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tradeChecklistResponses TradeChecklistResponse[]
+
+  @@unique([id, userId])
+  @@index([userId, isActive, sortOrder])
+  @@index([userId, scopeType, isActive, sortOrder])
+  @@index([userId, setupId, accountId, isActive])
+  @@index([userId, scopeType, titleNormalized])
+  @@map("checklist_rules")
+}
+
+model TradeChecklistResponse {
+  id                                                        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tradeId                                                   String         @map("trade_id") @db.Uuid
+  checklistRuleId                                           String?        @map("checklist_rule_id") @db.Uuid
+  ruleTitleSnapshot                                         String         @map("rule_title_snapshot")
+  ruleDescriptionSnapshot                                   String?        @map("rule_description_snapshot")
+  isRequiredSnapshot                                        Boolean        @default(false) @map("is_required_snapshot")
+  checked                                                   Boolean        @default(false)
+  note                                                      String?
+  sortOrderSnapshot                                         Int            @default(0) @map("sort_order_snapshot")
+  createdAt                                                 DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                                 DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  userId                                                    String         @map("user_id") @db.Uuid
+  checklistRule                                             ChecklistRule? @relation(fields: [checklistRuleId], references: [id])
+  trade                                                     Trade          @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  trades_trade_checklist_responses_trade_id_user_idTotrades Trade          @relation("trade_checklist_responses_trade_id_user_idTotrades", fields: [tradeId, userId], references: [id, userId], onDelete: Cascade)
+  user                                                      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tradeId])
+  @@index([tradeId, sortOrderSnapshot])
+  @@index([checklistRuleId])
+  @@map("trade_checklist_responses")
+}
+
 enum AccountType {
   Personal
   Funded
@@ -91,327 +431,4 @@ enum ScreenshotCleanupReason {
   expiredUpload
   orphanObject
   danglingReference
-}
-
-model User {
-  id                       String                   @id @default(uuid()) @db.Uuid
-  username                 String                   @unique @db.Citext
-  passwordHash             String                   @map("password_hash")
-  checklistEnforcementMode ChecklistEnforcementMode @default(soft) @map("checklist_enforcement_mode")
-  createdAt                DateTime                 @default(now()) @map("created_at")
-  updatedAt                DateTime                 @updatedAt @map("updated_at")
-  accounts                 Account[]
-  setups                   Setup[]
-  trades                   Trade[]
-  checklistRules           ChecklistRule[]
-  screenshots              TradeScreenshot[]
-  screenshotUploads        TradeScreenshotUpload[]
-  tradeShares              TradeShare[]
-  reviews                  Review[]
-  sessions                 Session[]
-  tradeChecklistResponses  TradeChecklistResponse[]
-
-  @@map("users")
-}
-
-model Session {
-  id             String    @id @default(uuid()) @db.Uuid
-  userId         String    @map("user_id") @db.Uuid
-  tokenHash      String    @unique @map("token_hash")
-  userAgent      String?   @map("user_agent")
-  ipAddress      String?   @map("ip_address")
-  expiresAt      DateTime  @map("expires_at")
-  revokedAt      DateTime? @map("revoked_at")
-  lastAccessedAt DateTime  @default(now()) @map("last_accessed_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("sessions")
-}
-
-model Account {
-  id        String      @id @default(uuid()) @db.Uuid
-  userId    String      @map("user_id") @db.Uuid
-  name      String
-  broker    String
-  type      AccountType
-  balance   Decimal     @db.Decimal(18, 2)
-  currency  String
-  isDefault Boolean     @default(false) @map("is_default")
-  isArchived Boolean    @default(false) @map("is_archived")
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trades    Trade[]
-  checklistRules ChecklistRule[]
-
-  @@unique([id, userId])
-  @@index([userId])
-  @@map("accounts")
-}
-
-model Setup {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  name       String
-  nameNormalized String @map("name_normalized")
-  description String
-  entryLogic String?   @map("entry_logic")
-  confirmationLogic String? @map("confirmation_logic")
-  invalidationLogic String? @map("invalidation_logic")
-  notes      String?
-  color      String
-  isArchived Boolean   @default(false) @map("is_archived")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trades     Trade[]
-  checklistRules ChecklistRule[]
-
-  @@unique([id, userId])
-  @@unique([userId, nameNormalized])
-  @@map("setups")
-}
-
-model Trade {
-  id                String          @id @default(uuid()) @db.Uuid
-  userId            String          @map("user_id") @db.Uuid
-  accountId         String          @map("account_id") @db.Uuid
-  clientRequestId   String?         @map("client_request_id")
-  accountCurrencySnapshot String?   @map("account_currency_snapshot")
-  pnlCurrency       String?         @map("pnl_currency")
-  fxRateSnapshot    Decimal?        @map("fx_rate_snapshot") @db.Decimal(18, 8)
-  fxRateSource      String?         @map("fx_rate_source")
-  fxRateTimestamp   DateTime?       @map("fx_rate_timestamp") @db.Timestamptz(3)
-  setupId           String?         @map("setup_id") @db.Uuid
-  setupNameSnapshot String?         @map("setup_name_snapshot")
-  setupColorSnapshot String?        @map("setup_color_snapshot")
-  tradeDate         DateTime        @map("trade_date") @db.Date
-  pair              String
-  direction         TradeDirection
-  entry             Decimal         @db.Decimal(18, 8)
-  stopLoss          Decimal         @map("stop_loss") @db.Decimal(18, 8)
-  takeProfit        Decimal         @map("take_profit") @db.Decimal(18, 8)
-  quantity          Decimal?        @db.Decimal(20, 8)
-  lotSize           Decimal?        @map("lot_size") @db.Decimal(20, 8)
-  exitPrice         Decimal?        @map("exit_price") @db.Decimal(18, 8)
-  fees              Decimal?        @db.Decimal(18, 2)
-  riskAmount        Decimal?        @map("risk_amount") @db.Decimal(18, 2)
-  riskPercent       Decimal?        @map("risk_percent") @db.Decimal(7, 4)
-  grossPnl          Decimal?        @map("gross_pnl") @db.Decimal(18, 2)
-  netPnl            Decimal?        @map("net_pnl") @db.Decimal(18, 2)
-  profit            Decimal         @db.Decimal(18, 2)
-  result            TradeResult
-  session           TradeSession?
-  emotion           TradeEmotion?
-  notes             String          @default("")
-  openedAt          DateTime?       @map("opened_at") @db.Timestamptz(3)
-  closedAt          DateTime?       @map("closed_at") @db.Timestamptz(3)
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  deletedAt         DateTime?       @map("deleted_at")
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account           Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  setup             Setup?          @relation(fields: [setupId], references: [id], onDelete: SetNull)
-  screenshotUploads TradeScreenshotUpload[]
-  screenshots       TradeScreenshot[]
-  shares            TradeShare[]
-  review            Review?
-  checklistResponses TradeChecklistResponse[]
-
-  @@unique([id, userId])
-  @@index([userId, tradeDate(sort: Desc)])
-  @@index([accountId, tradeDate(sort: Desc)])
-  @@index([userId, deletedAt, accountId, tradeDate(sort: Desc)])
-  @@index([userId, deletedAt, setupId, tradeDate(sort: Desc)])
-  @@index([userId, session])
-  @@index([userId, emotion])
-  @@index([userId, result])
-  @@index([userId, openedAt])
-  @@index([userId, closedAt])
-  @@index([userId, deletedAt, tradeDate(sort: Desc), createdAt(sort: Desc)], map: "trades_user_id_deleted_at_trade_date_created_at_idx")
-  @@index([userId, deletedAt, pair, tradeDate(sort: Desc)], map: "trades_user_id_deleted_at_pair_trade_date_idx")
-  @@map("trades")
-}
-
-model TradeScreenshotUpload {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @map("user_id") @db.Uuid
-  tradeId     String    @map("trade_id") @db.Uuid
-  storageKey  String    @unique @map("storage_key")
-  fileName    String    @map("file_name")
-  contentType String    @map("content_type")
-  fileSize    Int       @map("file_size")
-  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
-  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trade       Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-
-  @@index([userId, tradeId])
-  @@index([completedAt, expiresAt])
-  @@index([tradeId, createdAt])
-  @@index([expiresAt])
-  @@map("trade_screenshot_uploads")
-}
-
-model TradeScreenshot {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  tradeId    String   @map("trade_id") @db.Uuid
-  storageKey String   @map("storage_key")
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([tradeId])
-  @@index([userId, tradeId])
-  @@unique([tradeId, storageKey])
-  @@unique([tradeId, sortOrder])
-  @@index([tradeId, sortOrder])
-  @@map("trade_screenshots")
-}
-
-model ScreenshotCleanupTask {
-  id              String                  @id @default(uuid()) @db.Uuid
-  dedupeKey       String                  @unique @map("dedupe_key")
-  action          ScreenshotCleanupAction
-  reason          ScreenshotCleanupReason
-  storageKey      String?                 @map("storage_key")
-  screenshotId    String?                 @map("screenshot_id") @db.Uuid
-  uploadId        String?                 @map("upload_id") @db.Uuid
-  userId          String?                 @map("user_id") @db.Uuid
-  tradeId         String?                 @map("trade_id") @db.Uuid
-  attemptCount    Int                     @default(0) @map("attempt_count")
-  nextAttemptAt   DateTime                @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
-  leaseExpiresAt  DateTime?               @map("lease_expires_at") @db.Timestamptz(3)
-  lastError       String?                 @map("last_error")
-  lastAttemptAt   DateTime?               @map("last_attempt_at") @db.Timestamptz(3)
-  completedAt     DateTime?               @map("completed_at") @db.Timestamptz(3)
-  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  @@index([completedAt, nextAttemptAt])
-  @@index([action, completedAt, nextAttemptAt])
-  @@index([storageKey])
-  @@map("screenshot_cleanup_tasks")
-}
-
-model TradeShare {
-  id            String   @id @default(uuid()) @db.Uuid
-  tradeId       String   @map("trade_id") @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  shareId       String   @unique @map("share_id")
-  isActive      Boolean  @default(true) @map("is_active")
-  viewCount     Int      @default(0) @map("view_count")
-  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
-  shareSettings Json     @map("share_settings")
-  snapshot      Json     @map("snapshot")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  trade         Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([tradeId, userId])
-  @@index([userId, tradeId])
-  @@index([shareId, isActive])
-  @@map("trade_shares")
-}
-
-model Review {
-  id                      String            @id @default(uuid()) @db.Uuid
-  userId                  String            @map("user_id") @db.Uuid
-  type                    ReviewType
-  tradeId                 String?           @unique @map("trade_id") @db.Uuid
-  tradeSnapshot           Json?             @map("trade_snapshot")
-  reviewDate              DateTime?         @map("review_date") @db.Date
-  dailyScopeDate          DateTime?         @map("daily_scope_date") @db.Date
-  weekStart               DateTime?         @map("week_start") @db.Date
-  weekEnd                 DateTime?         @map("week_end") @db.Date
-  weeklyScopeStart        DateTime?         @map("weekly_scope_start") @db.Date
-  wentWell                String?           @map("went_well")
-  mistakes                String?
-  followedRules           ReviewRuleStatus? @map("followed_rules")
-  emotion                 ReviewEmotion?
-  lessonLearned           String?           @map("lesson_learned")
-  improvementPlan         String?           @map("improvement_plan")
-  disciplineScore         Int?              @map("discipline_score")
-  weeklySummary           String?           @map("weekly_summary")
-  biggestWin              String?           @map("biggest_win")
-  biggestMistake          String?           @map("biggest_mistake")
-  riskManagement          ReviewRiskStatus? @map("risk_management")
-  nextGoal                String?           @map("next_goal")
-  weeklyRating            Int?              @map("weekly_rating")
-  executionRating         Int?              @map("execution_rating")
-  emotionRating           Int?              @map("emotion_rating")
-  whatWentWell            String?           @map("what_went_well")
-  whatWentWrong           String?           @map("what_went_wrong")
-  mistakesMade            String?           @map("mistakes_made")
-  improvementForNextTrade String?           @map("improvement_for_next_trade")
-  wouldTakeAgain          Boolean?          @map("would_take_again")
-  createdAt               DateTime          @default(now()) @map("created_at")
-  updatedAt               DateTime          @updatedAt @map("updated_at")
-  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trade                   Trade?            @relation(fields: [tradeId], references: [id], onDelete: SetNull)
-
-  @@unique([userId, dailyScopeDate])
-  @@unique([userId, weeklyScopeStart])
-  @@index([userId, reviewDate(sort: Desc)])
-  @@index([userId, weekEnd(sort: Desc)])
-  @@index([userId, type, updatedAt(sort: Desc)])
-  @@map("reviews")
-}
-
-model ChecklistRule {
-  id                     String                 @id @default(uuid()) @db.Uuid
-  userId                 String                 @map("user_id") @db.Uuid
-  title                  String
-  titleNormalized        String                 @map("title_normalized")
-  description            String?
-  isRequired             Boolean                @default(false) @map("is_required")
-  isActive               Boolean                @default(true) @map("is_active")
-  sortOrder              Int                    @default(0) @map("sort_order")
-  scopeType              ChecklistRuleScopeType @map("scope_type")
-  setupId                String?                @map("setup_id") @db.Uuid
-  accountId              String?                @map("account_id") @db.Uuid
-  createdAt              DateTime               @default(now()) @map("created_at")
-  updatedAt              DateTime               @updatedAt @map("updated_at")
-  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  setup                  Setup?                 @relation(fields: [setupId], references: [id], onDelete: NoAction)
-  account                Account?               @relation(fields: [accountId], references: [id], onDelete: NoAction)
-  tradeChecklistResponses TradeChecklistResponse[]
-
-  @@unique([id, userId])
-  @@index([userId, isActive, sortOrder])
-  @@index([userId, scopeType, isActive, sortOrder])
-  @@index([userId, setupId, accountId, isActive])
-  @@index([userId, scopeType, titleNormalized], map: "checklist_rules_user_id_scope_type_title_normalized_idx")
-  @@map("checklist_rules")
-}
-
-model TradeChecklistResponse {
-  id                      String        @id @default(uuid()) @db.Uuid
-  tradeId                 String        @map("trade_id") @db.Uuid
-  userId                  String        @map("user_id") @db.Uuid
-  checklistRuleId         String?       @map("checklist_rule_id") @db.Uuid
-  ruleTitleSnapshot       String        @map("rule_title_snapshot")
-  ruleDescriptionSnapshot String?       @map("rule_description_snapshot")
-  isRequiredSnapshot      Boolean       @default(false) @map("is_required_snapshot")
-  checked                 Boolean       @default(false)
-  note                    String?
-  sortOrderSnapshot       Int           @default(0) @map("sort_order_snapshot")
-  createdAt               DateTime      @default(now()) @map("created_at")
-  updatedAt               DateTime      @updatedAt @map("updated_at")
-  trade                   Trade         @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  checklistRule           ChecklistRule? @relation(fields: [checklistRuleId], references: [id], onDelete: SetNull)
-
-  @@index([userId, tradeId])
-  @@index([tradeId, sortOrderSnapshot])
-  @@index([checklistRuleId])
-  @@map("trade_checklist_responses")
 }

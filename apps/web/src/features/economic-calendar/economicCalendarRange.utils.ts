@@ -179,6 +179,7 @@ function shiftEconomicCalendarRangeState(
   state: EconomicCalendarRangeState,
   direction: -1 | 1,
 ) {
+  const rangeLengthDays = differenceUtcCalendarDays(fromDateKey(state.endDate), fromDateKey(state.startDate)) + 1;
   const presetTransitions: Partial<Record<EconomicCalendarRangePreset, Partial<Record<"-1" | "1", EconomicCalendarRangePreset>>>> = {
     yesterday: { 1: "today" },
     today: { "-1": "yesterday", 1: "tomorrow" },
@@ -192,11 +193,15 @@ function shiftEconomicCalendarRangeState(
     const nextPreset = presetTransitions[state.preset]?.[String(direction) as "-1" | "1"];
 
     if (nextPreset) {
-      return createEconomicCalendarPresetRangeState(nextPreset, state);
+      return createEconomicCalendarRangeState({
+        mode: "preset",
+        preset: nextPreset,
+        startDate: shiftEconomicCalendarDateKey(state.startDate, rangeLengthDays * direction),
+        endDate: shiftEconomicCalendarDateKey(state.endDate, rangeLengthDays * direction),
+        timeZone: state.timeZone,
+      });
     }
   }
-
-  const rangeLengthDays = differenceUtcCalendarDays(fromDateKey(state.endDate), fromDateKey(state.startDate)) + 1;
 
   return createEconomicCalendarCustomRangeState(
     shiftEconomicCalendarDateKey(state.startDate, rangeLengthDays * direction),

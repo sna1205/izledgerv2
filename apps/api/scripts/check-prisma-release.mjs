@@ -11,6 +11,10 @@ function fail(message, details = "") {
   process.exit(1);
 }
 
+function text(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
@@ -38,17 +42,17 @@ const dirtyPrismaState = run(
 if (dirtyPrismaState.status !== 0) {
   fail(
     "Unable to inspect Prisma release state with git.",
-    dirtyPrismaState.stderr.trim(),
+    text(dirtyPrismaState.stderr),
   );
 }
 
-if (dirtyPrismaState.stdout.trim()) {
+if (text(dirtyPrismaState.stdout)) {
   fail(
     [
       "Uncommitted Prisma changes detected.",
       "Commit or remove pending schema/migration changes before releasing.",
     ].join("\n"),
-    dirtyPrismaState.stdout.trim(),
+    text(dirtyPrismaState.stdout),
   );
 }
 
@@ -62,7 +66,7 @@ for (const args of [
   if (result.status !== 0) {
     fail(
       `Prisma release check failed while running \`npm ${args.join(" ")}\`.`,
-      [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n"),
+      [text(result.stdout), text(result.stderr)].filter(Boolean).join("\n"),
     );
   }
 }
