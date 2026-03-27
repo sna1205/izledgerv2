@@ -18,6 +18,20 @@ const frontendEnvSchema = z.object({
 
 type FrontendEnvInput = Record<string, string | boolean | undefined>;
 
+function withFrontendEnvDefaults(
+  rawEnv: FrontendEnvInput,
+  options: {
+    mode: string;
+    isBuild: boolean;
+  },
+): FrontendEnvInput {
+  return {
+    ...rawEnv,
+    VITE_APP_ENV: rawEnv.VITE_APP_ENV ?? (options.mode === "production" ? "production" : undefined),
+    VITE_FEATURE_ECONOMIC_CALENDAR: rawEnv.VITE_FEATURE_ECONOMIC_CALENDAR ?? "hidden",
+  };
+}
+
 export function validateFrontendEnv(
   rawEnv: FrontendEnvInput,
   options: {
@@ -25,7 +39,7 @@ export function validateFrontendEnv(
     isBuild: boolean;
   },
 ) {
-  const parsed = frontendEnvSchema.safeParse(rawEnv);
+  const parsed = frontendEnvSchema.safeParse(withFrontendEnvDefaults(rawEnv, options));
 
   if (!parsed.success) {
     return parsed;
