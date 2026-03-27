@@ -159,11 +159,20 @@ npm run build:web:local
 npm run prisma:validate
 npm run prisma:check:migrations
 npm run prisma:check:release
+npm run release:check
+npm run backup:check
+npm run backup:logical
+npm run data:audit
+npm run data:plan
 npm run prisma:generate
 npm run prisma:migrate:dev
 npm run prisma:migrate:deploy
 npm run prisma:studio
 npm run restore:verify
+npm run backup:check --workspace @izledger/api
+npm run backup:logical --workspace @izledger/api
+npm run data:audit --workspace @izledger/api
+npm run data:plan --workspace @izledger/api
 npm run numeric:audit --workspace @izledger/api
 npm run numeric:backfill --workspace @izledger/api
 npm run numeric:validate --workspace @izledger/api
@@ -183,15 +192,14 @@ Deploy with:
 - database on Postgres
 - screenshots/files on S3-compatible object storage
 
-See `DEPLOYMENT.md` for the full step-by-step guide, `docs/backup-and-restore.md` for backup policy and restore verification, `docs/screenshot-storage-reconciliation.md` for screenshot cleanup/reconciliation operations, `docs/numeric-constraint-rollout.md` for staged numeric DB hardening, and `docs/persistence-release-gate.md` for the persistence-critical release gate.
+See `DEPLOYMENT.md` for the full step-by-step guide, `docs/backup-and-restore.md` for backup policy, scheduled logical backups, and restore verification, `docs/screenshot-storage-reconciliation.md` for screenshot cleanup/reconciliation operations, `docs/numeric-constraint-rollout.md` for staged numeric DB hardening, and `docs/persistence-release-gate.md` for the persistence-critical release gate.
 
 ## Persistence Release Gate
 
 Before merging or deploying persistence-affecting changes, run:
 
 ```bash
-npm run prisma:check:release
-npm run check:persistence:release
+npm run release:check
 ```
 
 This gate is intentionally strict. Persistence-critical tests cannot be skipped or marked todo in release.
@@ -199,7 +207,7 @@ This gate is intentionally strict. Persistence-critical tests cannot be skipped 
 For Render builds, use:
 
 ```bash
-npm install --include=dev && npm run prisma:generate && npm run build
+node ./scripts/validate-render-db-config.mjs && npm install --include=dev && npm run prisma:generate && npm run build
 ```
 
 This ensures build-time packages like TypeScript and `@types/node` are available even when `NODE_ENV=production`.
@@ -210,7 +218,7 @@ This ensures build-time packages like TypeScript and `@types/node` are available
 - Set `NODE_ENV=production` on the API.
 - Set `VITE_APP_ENV=production` for the frontend build.
 - The API will fail during startup in production if `APP_URL`, `API_URL`, or other required security settings are invalid.
-- On Render, keep runtime boot clean with `npm run start:server` and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
+- On Render, keep runtime boot clean with `npm run start:server`, validate DB config before build and pre-deploy, and run Prisma migrations in the pre-deploy step with `npm run release:migrate`.
 - If your Postgres provider offers pooled and direct URLs, use the pooled URL in `DATABASE_URL` and the direct URL in `DIRECT_URL`.
 - Local development should keep `COOKIE_DOMAIN` blank and `SESSION_COOKIE_SECURE=false` so `http://localhost` works without special handling.
 - Production should use `SESSION_COOKIE_SECURE=true`. Keep `SESSION_COOKIE_SAME_SITE=lax` for `https://app.example.com` and `https://api.example.com`, or switch to `none` only if the frontend and backend are on different sites.
@@ -228,9 +236,9 @@ Before merging or deploying a Prisma schema change:
 4. Set `PRISMA_MIGRATE_CHECK_SHADOW_DATABASE_URL` to a disposable PostgreSQL database for drift checks.
 5. Run `npm run uniqueness:audit --workspace @izledger/api` before any scope/name uniqueness migration.
 6. If duplicates are reported, review the generated remediation report and run `npm run uniqueness:backfill --workspace @izledger/api -- --apply`.
-7. Run `npm run prisma:check:release`.
+7. Run `npm run release:check`.
 
-That release check fails when Prisma files are uncommitted, schema validation fails, client generation fails, or committed migrations no longer match `schema.prisma`.
+That release check fails when Prisma files are uncommitted, schema validation fails, client generation fails, committed migrations no longer match `schema.prisma`, or persistence-critical integration coverage is not release-safe.
 
 ## Production readiness summary
 

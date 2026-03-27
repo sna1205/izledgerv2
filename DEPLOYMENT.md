@@ -22,11 +22,16 @@ Cloudflare can be considered later for R2 and/or DNS/CDN after production is sta
 ## Safe Deploy Order
 
 1. Validate local parity on a clean Postgres test volume.
-2. Create staging infrastructure and env vars.
-3. Run release migrations in staging.
-4. Verify auth, CRUD, and screenshot flows in staging.
-5. Enable backups, alerts, and monitoring.
-6. Promote the same deploy flow to production.
+2. Create staging infrastructure and env vars, including `PRISMA_MIGRATE_CHECK_SHADOW_DATABASE_URL` for release drift checks outside Render.
+3. Ship additive schema changes first.
+4. Run backfill and audit steps for any new additive columns before tightening constraints.
+5. Run `npm run release:check` on the release commit.
+6. Deploy the new application code.
+7. Run `npm run release:migrate` against the target database in the pre-deploy step.
+8. Verify auth, CRUD, analytics, and screenshot flows in staging or production smoke tests.
+9. Ship constraint-tightening migrations only after additive code and backfills are already proven safe.
+10. Confirm the nightly logical backup workflow is configured and green.
+11. Enable backups, alerts, and monitoring.
 
 ## 1. Local Parity
 
@@ -70,8 +75,8 @@ Render service settings:
 - Root Directory: `apps/api`
 - Runtime: `Node`
 - Region: `singapore`
-- Build Command: `npm install --include=dev && npm run prisma:generate && npm run build`
-- Pre-Deploy Command: `npm run release:migrate`
+- Build Command: `node ./scripts/validate-render-db-config.mjs && npm install --include=dev && npm run prisma:generate && npm run build`
+- Pre-Deploy Command: `node ./scripts/validate-render-db-config.mjs && npm run release:migrate`
 - Start Command: `npm run start:server`
 - Health Check Path: `/health`
 
@@ -150,6 +155,7 @@ Notes:
 - If the frontend and backend are on different sites, switch `SESSION_COOKIE_SAME_SITE=none`.
 - Local development should keep `APP_URL=http://localhost:5173`, `API_URL=http://localhost:4000`, `COOKIE_DOMAIN=` blank, and `SESSION_COOKIE_SECURE=false`.
 - If your Postgres provider offers pooled and direct connection strings, prefer pooled for `DATABASE_URL` and direct for `DIRECT_URL`.
+- Set `PRISMA_MIGRATE_CHECK_SHADOW_DATABASE_URL` to a disposable PostgreSQL database for CI or manual `npm run release:check` runs. Render pre-deploy uses `release:migrate`, not drift diffing, so the shadow database is not required there.
 - If staging storage is not ready yet, keep `STORAGE_ENABLED=false` until the staging upload checklist passes.
 - `fair-economy` is still supported as a limited weekly-feed adapter, but production should use `ECONOMIC_CALENDAR_PROVIDER=trading-economics` with a real backend API key for real historical and future calendar ranges.
 
@@ -180,8 +186,16 @@ npm run prisma:migrate:dev --workspace @izledger/api
 Before merging a schema change:
 
 ```bash
-npm run prisma:check:release --workspace @izledger/api
+npm run release:check --workspace @izledger/api
 ```
+
+That gate fails when:
+
+- Prisma schema or migration files are uncommitted
+- `schema.prisma` fails validation
+- Prisma client generation fails
+- committed migrations do not match `schema.prisma`
+- persistence-critical integration tests fail, skip, cancel, or use todo markers
 
 ### Render pre-deploy
 
@@ -199,6 +213,15 @@ That script:
 - avoids accidental `.env` leakage into the wrong database target
 
 Use reviewed Prisma migrations for staging and production changes; do not rely on schema sync commands there.
+
+Recommended rollout sequence for persistence changes:
+
+1. Merge additive schema and code first.
+2. Deploy additive code.
+3. Run additive migrations.
+4. Run backfill or audit scripts.
+5. Verify application behavior on the new shape.
+6. Ship constraint-tightening migrations in a later deploy after the backfill is confirmed safe.
 
 ## 7. Staging Auth Checklist
 
@@ -263,14 +286,16 @@ Operational notes:
 5. Confirm screenshot bucket versioning is enabled and lifecycle rules are applied.
 6. Confirm the nightly logical backup job is enabled and writing into the backup bucket.
 7. Confirm `npm run restore:verify --workspace @izledger/api` has passed against a restore drill or staging restore target.
-8. Confirm all production env vars are set exactly once and match the intended domains.
-9. Confirm Render is using `preDeployCommand: npm run release:migrate`.
-10. Confirm the API start command is `npm run start:server`.
-11. Deploy the API first and verify `GET /health`.
-12. Deploy the frontend and verify it points to the production API origin.
-13. Register a real production test user and verify login, logout, CRUD, and screenshot upload.
-14. Verify at least one revoked share link returns `410 TRADE_SHARE_REVOKED`.
-15. Capture the release SHA, migration version, and deploy timestamps in your release notes.
+8. Confirm `npm run backup:check --workspace @izledger/api -- --require-restore-drill=true` passes in the release environment when backup credentials are present.
+9. Run `npm run data:audit --workspace @izledger/api -- --write-report=true` against the release target before any manual cleanup window.
+10. Confirm all production env vars are set exactly once and match the intended domains.
+11. Confirm Render is using `preDeployCommand: node ./scripts/validate-render-db-config.mjs && npm run release:migrate`.
+12. Confirm the API start command is `npm run start:server`.
+13. Deploy the API first and verify `GET /health`.
+14. Deploy the frontend and verify it points to the production API origin.
+15. Register a real production test user and verify login, logout, CRUD, and screenshot upload.
+16. Verify at least one revoked share link returns `410 TRADE_SHARE_REVOKED`.
+17. Capture the release SHA, migration version, and deploy timestamps in your release notes.
 
 ## 11. Rollback Checklist
 

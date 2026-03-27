@@ -7,6 +7,7 @@ import { AppError } from "../../utils/errors.js";
 import { safeFileName } from "../../utils/strings.js";
 import { allowedScreenshotContentTypes, maxScreenshotFileSizeBytes, normalizeScreenshotContentType } from "./constants.js";
 import { enqueueScreenshotCleanupTask, tryProcessScreenshotCleanupTaskNow } from "./reconciliation.js";
+import { parseStoredTradeShareSnapshot } from "../trade-shares/storage.js";
 
 const SCREENSHOT_UPLOAD_TOKEN_TTL_MS = 5 * 60 * 1000;
 
@@ -42,6 +43,73 @@ type UploadedScreenshotObject = {
   contentType: string | null;
   contentLength: number | null;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function snapshotContainsStorageKey(snapshot: unknown, storageKey: string) {
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.screenshots)) {
+    return false;
+  }
+
+  return snapshot.screenshots.some((item) => {
+    if (typeof item === "string") {
+      return item === storageKey;
+    }
+
+    return isRecord(item) && item.storageKey === storageKey;
+  });
+}
+
+async function assertScreenshotNotSnapshotLocked(userId: string, tradeId: string, storageKey: string) {
+  const [shares, reviews] = await Promise.all([
+    prisma.tradeShare.findMany({
+      where: {
+        userId,
+        tradeId,
+      },
+      select: {
+        snapshot: true,
+      },
+    }),
+    prisma.review.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        tradeSnapshot: true,
+      },
+    }),
+  ]);
+
+  const shareSnapshotReference = shares.some((share) => {
+    try {
+      const snapshot = parseStoredTradeShareSnapshot(share.snapshot);
+      return snapshotContainsStorageKey(snapshot, storageKey);
+    } catch {
+      return false;
+    }
+  });
+
+  if (shareSnapshotReference) {
+    throw new AppError(
+      409,
+      "SCREENSHOT_SNAPSHOT_LOCKED",
+      "This screenshot is preserved by a shared trade snapshot. Revoke or replace that snapshot before deleting the image.",
+    );
+  }
+
+  const reviewSnapshotReference = reviews.some((review) => snapshotContainsStorageKey(review.tradeSnapshot, storageKey));
+
+  if (reviewSnapshotReference) {
+    throw new AppError(
+      409,
+      "SCREENSHOT_SNAPSHOT_LOCKED",
+      "This screenshot is preserved by a saved review snapshot. Remove the review or replace the image before deleting it.",
+    );
+  }
+}
 
 function createUploadToken(payload: UploadTokenPayload) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -411,6 +479,8 @@ export async function deleteTradeScreenshot(userId: string, tradeId: string, scr
   if (!screenshot) {
     throw new AppError(404, "SCREENSHOT_NOT_FOUND", "Screenshot not found.");
   }
+
+  await assertScreenshotNotSnapshotLocked(userId, tradeId, screenshot.storageKey);
 
   const cleanupTask = await prisma.$transaction(async (tx) => {
     await tx.tradeScreenshot.delete({

@@ -48,6 +48,12 @@ type TradeFormValue = {
   entry: string;
   stopLoss: string;
   takeProfit: string;
+  quantity: string;
+  lotSize: string;
+  exitPrice: string;
+  fees: string;
+  riskAmount: string;
+  riskPercent: string;
   profit: string;
   setupId: string;
   session: TradeSession | "";
@@ -71,6 +77,14 @@ interface TradeFormDialogProps {
     entry: number;
     stopLoss: number;
     takeProfit: number;
+    quantity?: number | null;
+    lotSize?: number | null;
+    exitPrice?: number | null;
+    fees?: number | null;
+    riskAmount?: number | null;
+    riskPercent?: number | null;
+    grossPnl?: number | null;
+    netPnl?: number | null;
     profit: number;
     result: Result;
     setupId?: string | null;
@@ -100,6 +114,12 @@ function buildEmptyForm(accounts: Account[]): TradeFormValue {
     entry: "",
     stopLoss: "",
     takeProfit: "",
+    quantity: "",
+    lotSize: "",
+    exitPrice: "",
+    fees: "",
+    riskAmount: "",
+    riskPercent: "",
     profit: "",
     setupId: "__none",
     session: "London",
@@ -166,6 +186,12 @@ export function TradeFormDialog({
         entry: String(editTrade.entry),
         stopLoss: String(editTrade.stopLoss),
         takeProfit: String(editTrade.takeProfit),
+        quantity: editTrade.quantity === null || editTrade.quantity === undefined ? "" : String(editTrade.quantity),
+        lotSize: editTrade.lotSize === null || editTrade.lotSize === undefined ? "" : String(editTrade.lotSize),
+        exitPrice: editTrade.exitPrice === null || editTrade.exitPrice === undefined ? "" : String(editTrade.exitPrice),
+        fees: editTrade.fees === null || editTrade.fees === undefined ? "" : String(editTrade.fees),
+        riskAmount: editTrade.riskAmount === null || editTrade.riskAmount === undefined ? "" : String(editTrade.riskAmount),
+        riskPercent: editTrade.riskPercent === null || editTrade.riskPercent === undefined ? "" : String(editTrade.riskPercent),
         profit: String(editTrade.profit),
         setupId: editTrade.setupId ?? "__none",
         session: editTrade.session ?? "",
@@ -194,6 +220,12 @@ export function TradeFormDialog({
   const parsedEntry = useMemo(() => parseTradeNumericInput(form.entry), [form.entry]);
   const parsedStopLoss = useMemo(() => parseTradeNumericInput(form.stopLoss), [form.stopLoss]);
   const parsedTakeProfit = useMemo(() => parseTradeNumericInput(form.takeProfit), [form.takeProfit]);
+  const parsedQuantity = useMemo(() => parseTradeNumericInput(form.quantity), [form.quantity]);
+  const parsedLotSize = useMemo(() => parseTradeNumericInput(form.lotSize), [form.lotSize]);
+  const parsedExitPrice = useMemo(() => parseTradeNumericInput(form.exitPrice), [form.exitPrice]);
+  const parsedFees = useMemo(() => parseTradeNumericInput(form.fees), [form.fees]);
+  const parsedRiskAmount = useMemo(() => parseTradeNumericInput(form.riskAmount), [form.riskAmount]);
+  const parsedRiskPercent = useMemo(() => parseTradeNumericInput(form.riskPercent), [form.riskPercent]);
   const derivedDirection = useMemo(
     () => deriveTradeDirectionFromPrices(form.entry, form.stopLoss),
     [form.entry, form.stopLoss],
@@ -233,19 +265,25 @@ export function TradeFormDialog({
   const selectedSetup = selectedSetupId
     ? setups.find((setup) => setup.id === selectedSetupId) ?? null
     : null;
-  const setupChecklistRules = selectedSetup?.preTradeChecklist;
   const checklistRulesQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "checklist-rules", "trade-form", selectedSetupId ?? "__setup-required"),
+    queryKey: privateQueryKey(
+      user.id,
+      "checklist-rules",
+      "trade-form",
+      form.accountId || "__account-required",
+      selectedSetupId ?? "__all-setups",
+    ),
     queryFn: async () => listChecklistRules({
       activeOnly: true,
+      accountId: form.accountId || null,
       setupId: selectedSetupId,
-      scopeMode: "exact",
+      scopeMode: "applicable",
     }),
-    enabled: open && !editTrade && Boolean(selectedSetupId),
+    enabled: open && !editTrade && Boolean(form.accountId),
   });
   const checklistRules = useMemo(
-    () => checklistRulesQuery.data?.items ?? setupChecklistRules ?? [],
-    [checklistRulesQuery.data?.items, setupChecklistRules],
+    () => checklistRulesQuery.data?.items ?? [],
+    [checklistRulesQuery.data?.items],
   );
   const checklistMode: ChecklistEnforcementMode = user.checklistEnforcementMode ?? "soft";
   const checklistErrorMessage = checklistRules.length === 0 && checklistRulesQuery.error instanceof ApiError
@@ -279,20 +317,28 @@ export function TradeFormDialog({
       entry: parsedEntry,
       stopLoss: parsedStopLoss,
       takeProfit: parsedTakeProfit,
+      quantity: parsedQuantity,
+      lotSize: parsedLotSize,
+      exitPrice: parsedExitPrice,
+      fees: parsedFees,
+      riskAmount: parsedRiskAmount,
+      riskPercent: parsedRiskPercent,
       profit: parsedProfit,
+      netPnl: parsedProfit,
+      grossPnl: parsedProfit !== null && parsedFees !== null ? Number((parsedProfit + parsedFees).toFixed(2)) : null,
       result: derivedResult,
       setupId: form.setupId === "__none" ? null : form.setupId,
       setup: selectedSetup?.name ?? null,
       session: form.session || null,
       emotion: form.emotion || null,
       notes: form.notes.trim(),
-      checklistResponses: selectedSetupId
+      checklistResponses: form.accountId
         ? checklistRules.map((rule) => ({
         checklistRuleId: rule.id,
         checked: checklistSelections[rule.id]?.checked ?? false,
       }))
         : [],
-      checklistScopeMode: selectedSetupId ? "exact" : undefined,
+      checklistScopeMode: form.accountId ? "applicable" : undefined,
     });
 
     const persistedTrade = savedTrade ?? activeTrade;
@@ -495,6 +541,36 @@ export function TradeFormDialog({
             <Input type="number" step="any" value={form.profit} onChange={(event) => setForm((current) => ({ ...current, profit: event.target.value }))} />
           </div>
 
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Exit Price</Label>
+            <Input type="number" step="any" value={form.exitPrice} onChange={(event) => setForm((current) => ({ ...current, exitPrice: event.target.value }))} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Fees</Label>
+            <Input type="number" step="any" value={form.fees} onChange={(event) => setForm((current) => ({ ...current, fees: event.target.value }))} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Quantity</Label>
+            <Input type="number" step="any" value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Lot Size</Label>
+            <Input type="number" step="any" value={form.lotSize} onChange={(event) => setForm((current) => ({ ...current, lotSize: event.target.value }))} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Risk Amount</Label>
+            <Input type="number" step="any" value={form.riskAmount} onChange={(event) => setForm((current) => ({ ...current, riskAmount: event.target.value }))} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Risk %</Label>
+            <Input type="number" step="any" value={form.riskPercent} onChange={(event) => setForm((current) => ({ ...current, riskPercent: event.target.value }))} />
+          </div>
+
           <div className="space-y-2 sm:col-span-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Setup</Label>
             <Select value={form.setupId} onValueChange={(value) => setForm((current) => ({ ...current, setupId: value }))}>
@@ -535,7 +611,7 @@ export function TradeFormDialog({
 
           {!editTrade ? (
             <div className="space-y-2 sm:col-span-2">
-              {selectedSetupId ? (
+              {form.accountId ? (
                 <TradeChecklistCard
                   rules={checklistRules}
                   selections={checklistSelections}
@@ -545,11 +621,23 @@ export function TradeFormDialog({
                   title="Pre-Trade"
                   description={
                     checklistRules.length > 0
-                      ? "Review the active checklist items attached to this setup before saving the trade."
-                      : "This setup does not have an active pre-trade checklist yet."
+                      ? selectedSetupId
+                        ? "Review the active global, account, and setup checklist items before saving the trade."
+                        : "Review the active global and account checklist items before saving the trade. Setup rules appear once you choose a setup."
+                      : selectedSetupId
+                        ? "This account and setup do not have any active checklist items right now."
+                        : "This account does not have any active global or account checklist items right now."
                   }
-                  emptyTitle={`No pre-trade items for ${selectedSetup?.name ?? "this setup"} yet.`}
-                  emptyDescription="Setup-specific discipline lives in Setups and will appear here once items are added."
+                  emptyTitle={
+                    selectedSetupId
+                      ? `No pre-trade items for ${selectedSetup?.name ?? "this setup"} yet.`
+                      : "No account checklist items yet."
+                  }
+                  emptyDescription={
+                    selectedSetupId
+                      ? "Global, account, and setup-specific checklist rules will appear here when they are active."
+                      : "Global and account-specific checklist rules will appear here. Setup-specific items join once you pick a setup."
+                  }
                   onToggle={(ruleId, checked) => setChecklistSelections((current) => ({
                     ...current,
                     [ruleId]: {
@@ -563,9 +651,9 @@ export function TradeFormDialog({
                   selections={{}}
                   checklistMode={checklistMode}
                   title="Pre-Trade"
-                  description="Select a setup to load its active pre-trade checklist before saving this trade."
-                  emptyTitle="No setup selected"
-                  emptyDescription="Setup-specific discipline stays tied to the strategy you choose for this trade."
+                  description="Select an account to load its active checklist rules before saving this trade."
+                  emptyTitle="No account selected"
+                  emptyDescription="Global, account, and setup-specific discipline is loaded from the account and setup you choose for this trade."
                   onToggle={() => undefined}
                 />
               )}

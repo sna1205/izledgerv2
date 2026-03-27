@@ -344,6 +344,20 @@ export async function updateSetup(userId: string, setupId: string, input: {
 
 export async function deleteSetup(userId: string, setupId: string) {
   await getOwnedSetup(userId, setupId);
+  const checklistRuleCount = await prisma.checklistRule.count({
+    where: {
+      userId,
+      setupId,
+    },
+  });
+
+  if (checklistRuleCount > 0) {
+    throw new AppError(
+      409,
+      "SETUP_IN_USE_BY_CHECKLIST_RULES",
+      "Setup cannot be deleted because checklist rules still reference it. Delete or re-scope those rules first, or archive the setup instead.",
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.trade.updateMany({

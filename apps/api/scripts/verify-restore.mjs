@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetBucketVersioningCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { env } from "../src/config/env.ts";
 
 function fail(message, details = "") {
@@ -128,6 +128,10 @@ const storageSampleSize = parseStorageSampleSize(
 );
 const requireApi = parseBoolean(args["require-api"] ?? env.RESTORE_VERIFY_REQUIRE_API, false);
 const requireStorage = parseBoolean(args["require-storage"] ?? env.RESTORE_VERIFY_REQUIRE_STORAGE, false);
+const requireBucketVersioning = parseBoolean(
+  args["require-bucket-versioning"] ?? env.RESTORE_VERIFY_REQUIRE_BUCKET_VERSIONING,
+  false,
+);
 const prisma = new PrismaClient({
   log: ["error"],
 });
@@ -251,6 +255,19 @@ async function verifyScreenshotStorage(screenshotCount) {
   });
 
   const s3 = createStorageClient();
+  const versioning = await s3.send(
+    new GetBucketVersioningCommand({
+      Bucket: env.STORAGE_BUCKET,
+    }),
+  );
+
+  if (requireBucketVersioning && versioning.Status !== "Enabled") {
+    fail(
+      "Restore verification found screenshot storage bucket versioning disabled.",
+      `Bucket ${env.STORAGE_BUCKET} must have versioning enabled for restore safety.`,
+    );
+  }
+
   const missingKeys = [];
   const invalidMappings = [];
 
@@ -289,6 +306,7 @@ async function verifyScreenshotStorage(screenshotCount) {
   }
 
   outputLine(`- checked screenshot rows: ${screenshots.length.toLocaleString("en-US")}`);
+  outputLine(`- screenshot bucket versioning: ${versioning.Status || "not-enabled"}`);
 
   if (invalidMappings.length > 0) {
     fail(

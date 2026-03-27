@@ -1,4 +1,4 @@
-import { ZodType } from "zod";
+import { ZodType, ZodTypeDef } from "zod";
 import { AppError, ErrorDetail } from "./errors.js";
 
 function formatZodIssues(value: {
@@ -10,7 +10,7 @@ function formatZodIssues(value: {
   }));
 }
 
-export function parseOrThrow<T>(schema: ZodType<T>, value: unknown): T {
+export function parseOrThrow<T>(schema: ZodType<T, ZodTypeDef, unknown>, value: unknown): T {
   const parsed = schema.safeParse(value);
 
   if (!parsed.success) {

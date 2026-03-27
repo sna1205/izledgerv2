@@ -144,6 +144,103 @@ test("screenshot delete succeeds even when object cleanup must retry later", asy
   }
 });
 
+test("screenshot delete is blocked when review or share snapshots still reference the image", async () => {
+  await prisma.$connect();
+
+  const username = `sclock${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const password = "Password123!";
+  const { app, account, tradeId, sessionCookie } = await createAuthenticatedTrade(username, password);
+  const storageKey = `users/${account.userId}/trades/${tradeId}/history-lock.png`;
+
+  try {
+    const screenshot = await prisma.tradeScreenshot.create({
+      data: {
+        userId: account.userId,
+        tradeId,
+        storageKey,
+        sortOrder: 0,
+      },
+    });
+
+    const createShareResponse = await app.inject({
+      method: "POST",
+      url: `/trades/${tradeId}/share`,
+      headers: {
+        cookie: sessionCookie,
+      },
+      payload: {
+        settings: {
+          showPnl: true,
+          showAccountName: false,
+          showNotes: true,
+          showScreenshots: true,
+          showExactPrices: true,
+        },
+      },
+    });
+
+    assert.equal(createShareResponse.statusCode, 201);
+
+    await prisma.review.create({
+      data: {
+        userId: account.userId,
+        type: "trade",
+        tradeId,
+        tradeSnapshot: {
+          id: tradeId,
+          date: new Date().toISOString().slice(0, 10),
+          pair: "EURUSD",
+          direction: "Buy",
+          entry: 1.12345,
+          stopLoss: 1.12,
+          takeProfit: 1.13,
+          profit: 15,
+          result: "Win",
+          setup: "",
+          setupColor: null,
+          session: "London",
+          emotion: "Calm",
+          notes: "Snapshot lock coverage",
+          screenshots: [storageKey],
+        },
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/trades/${tradeId}/screenshots/${screenshot.id}`,
+      headers: {
+        cookie: sessionCookie,
+      },
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().error.code, "SCREENSHOT_SNAPSHOT_LOCKED");
+
+    const persistedScreenshot = await prisma.tradeScreenshot.findUnique({
+      where: { id: screenshot.id },
+    });
+
+    assert.ok(persistedScreenshot, "Expected locked screenshots to remain persisted.");
+  } finally {
+    await app.close();
+    await prisma.screenshotCleanupTask.deleteMany({
+      where: {
+        OR: [
+          { userId: account.userId },
+          { storageKey },
+        ],
+      },
+    });
+    await prisma.user.deleteMany({
+      where: {
+        username,
+      },
+    });
+    await prisma.$disconnect();
+  }
+});
+
 test("cleanup queue retries failed object deletions without losing the task", async () => {
   await prisma.$connect();
 

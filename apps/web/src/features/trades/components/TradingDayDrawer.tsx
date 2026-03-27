@@ -7,7 +7,7 @@ import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
 import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
 import {
-  formatCurrencyDisplay,
+  formatMoneyDisplay,
   formatNumberDisplay,
   formatPercentageDisplay,
   type NormalizedCalendarDay,
@@ -32,6 +32,7 @@ export function TradingDayDrawer({
   stats,
   sessions,
   emotions,
+  currency,
 }: {
   day: NormalizedCalendarDay | null;
   trades: Trade[];
@@ -43,6 +44,7 @@ export function TradingDayDrawer({
   stats: DayStat[];
   sessions: string[];
   emotions: string[];
+  currency?: string | null;
 }) {
   return (
     <AnimatePresence>
@@ -88,7 +90,11 @@ export function TradingDayDrawer({
                       <div>
                         <p className="text-label mb-2">PnL</p>
                         <p className={cn("font-mono-price numeric-safe max-w-full text-4xl font-semibold", day.totalProfit > 0 ? "text-success" : day.totalProfit < 0 ? "text-danger" : "text-foreground")}>
-                          {formatCurrencyDisplay(day.totalProfit, { showPlus: true })}
+                          {formatMoneyDisplay(day.totalProfit, {
+                            currency,
+                            fallback: "--",
+                            showPlus: true,
+                          })}
                         </p>
                       </div>
                       <div className="grid gap-1 text-sm text-muted-foreground sm:text-right">
@@ -131,7 +137,7 @@ export function TradingDayDrawer({
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <ProfitDisplay value={trade.profit} />
+                                  <ProfitDisplay value={trade.profit} currency={trade.accountCurrency ?? currency} />
                                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </div>
                               </div>

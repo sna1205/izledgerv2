@@ -4,8 +4,8 @@ services:
     runtime: node
     region: singapore
     rootDir: apps/api
-    buildCommand: npm install --include=dev && npm run prisma:generate && npm run build
-    preDeployCommand: npm run release:migrate
+    buildCommand: node ./scripts/validate-render-db-config.mjs && npm install --include=dev && npm run prisma:generate && npm run build
+    preDeployCommand: node ./scripts/validate-render-db-config.mjs && npm run release:migrate
     startCommand: npm run start:server
     healthCheckPath: /health
     envVars:
@@ -16,6 +16,8 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
+        sync: false
+      - key: PRISMA_MIGRATE_CHECK_SHADOW_DATABASE_URL
         sync: false
       - key: APP_URL
         sync: false

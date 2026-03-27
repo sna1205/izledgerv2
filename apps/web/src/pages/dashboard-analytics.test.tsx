@@ -843,6 +843,124 @@ describe("analytics rendering", () => {
     expect(screen.queryByText("Invalid Date")).not.toBeInTheDocument();
   });
 
+  it("uses the same planned RR averaging rules as the backend when detailed trades are available", async () => {
+    apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
+      summary: {
+        totalTrades: 2,
+        wins: 1,
+        losses: 1,
+        breakevens: 0,
+        totalProfit: 40,
+        totalGross: 120,
+        totalLoss: -80,
+        winRate: 50,
+        avgRR: 0,
+        avgPlannedRR: 0,
+        avgRealizedR: null,
+        displayCurrency: "USD",
+        isMixedCurrency: false,
+        currencyTotals: [{ currency: "USD", totalProfit: 40 }],
+      },
+      winLoss: [],
+      setupPerformance: [],
+      sessionPerformance: [],
+      emotionPerformance: [],
+      pairPerformance: [],
+      accountPerformance: [],
+    });
+    apiMocks.getAnalyticsCalendar.mockResolvedValue({
+      month: "2026-03",
+      summary: {
+        totalTrades: 2,
+        totalProfit: 40,
+        winRate: 50,
+        displayCurrency: "USD",
+        isMixedCurrency: false,
+        currencyTotals: [{ currency: "USD", totalProfit: 40 }],
+      },
+      days: [],
+      weeks: [],
+    });
+    apiMocks.listTrades.mockResolvedValue({
+      items: [
+        {
+          id: "trade-1",
+          date: "2026-03-15",
+          pair: "EURUSD",
+          accountId: "account-1",
+          accountCurrency: "USD",
+          direction: "Buy",
+          entry: 1.1,
+          stopLoss: 1.09,
+          takeProfit: 1.12,
+          profit: 120,
+          netPnl: 120,
+          grossPnl: 120,
+          fees: 0,
+          riskAmount: null,
+          riskPercent: null,
+          quantity: null,
+          lotSize: null,
+          exitPrice: null,
+          result: "Win",
+          setupId: null,
+          setup: "Momentum",
+          setupColor: "#10B981",
+          session: "London",
+          emotion: "Focused",
+          notes: "",
+          screenshots: [],
+          createdAt: "2026-03-15T10:00:00.000Z",
+          updatedAt: "2026-03-15T10:00:00.000Z",
+        },
+        {
+          id: "trade-2",
+          date: "2026-03-16",
+          pair: "GBPUSD",
+          accountId: "account-1",
+          accountCurrency: "USD",
+          direction: "Buy",
+          entry: 1.25,
+          stopLoss: 1.25,
+          takeProfit: 1.27,
+          profit: -80,
+          netPnl: -80,
+          grossPnl: -80,
+          fees: 0,
+          riskAmount: null,
+          riskPercent: null,
+          quantity: null,
+          lotSize: null,
+          exitPrice: null,
+          result: "Loss",
+          setupId: null,
+          setup: "Breakout",
+          setupColor: "#F59E0B",
+          session: "New York",
+          emotion: "Calm",
+          notes: "",
+          screenshots: [],
+          createdAt: "2026-03-16T10:00:00.000Z",
+          updatedAt: "2026-03-16T10:00:00.000Z",
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 100,
+        total: 2,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+
+    renderPage(<Analytics />);
+
+    await screen.findByText("Performance Score");
+    expect(screen.getByText("A heuristic blend of win rate, planned RR, consistency, and drawdown control.")).toBeInTheDocument();
+    expect(screen.getByText("1:2.00")).toBeInTheDocument();
+  });
+
   it("shows a loading state while analytics requests are slow", async () => {
     const breakdownsDeferred = createDeferred<unknown>();
     const calendarDeferred = createDeferred<unknown>();

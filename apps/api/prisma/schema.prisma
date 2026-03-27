@@ -73,6 +73,13 @@ enum ChecklistEnforcementMode {
   strict
 }
 
+enum ChecklistRuleScopeType {
+  global
+  account
+  setup
+  account_setup
+}
+
 enum ScreenshotCleanupAction {
   deleteObject
   deleteExpiredUploadRecord
@@ -102,6 +109,7 @@ model User {
   tradeShares              TradeShare[]
   reviews                  Review[]
   sessions                 Session[]
+  tradeChecklistResponses  TradeChecklistResponse[]
 
   @@map("users")
 }
@@ -139,6 +147,7 @@ model Account {
   trades    Trade[]
   checklistRules ChecklistRule[]
 
+  @@unique([id, userId])
   @@index([userId])
   @@map("accounts")
 }
@@ -161,6 +170,7 @@ model Setup {
   trades     Trade[]
   checklistRules ChecklistRule[]
 
+  @@unique([id, userId])
   @@unique([userId, nameNormalized])
   @@map("setups")
 }
@@ -169,19 +179,36 @@ model Trade {
   id                String          @id @default(uuid()) @db.Uuid
   userId            String          @map("user_id") @db.Uuid
   accountId         String          @map("account_id") @db.Uuid
+  clientRequestId   String?         @map("client_request_id")
+  accountCurrencySnapshot String?   @map("account_currency_snapshot")
+  pnlCurrency       String?         @map("pnl_currency")
+  fxRateSnapshot    Decimal?        @map("fx_rate_snapshot") @db.Decimal(18, 8)
+  fxRateSource      String?         @map("fx_rate_source")
+  fxRateTimestamp   DateTime?       @map("fx_rate_timestamp") @db.Timestamptz(3)
   setupId           String?         @map("setup_id") @db.Uuid
   setupNameSnapshot String?         @map("setup_name_snapshot")
+  setupColorSnapshot String?        @map("setup_color_snapshot")
   tradeDate         DateTime        @map("trade_date") @db.Date
   pair              String
   direction         TradeDirection
   entry             Decimal         @db.Decimal(18, 8)
   stopLoss          Decimal         @map("stop_loss") @db.Decimal(18, 8)
   takeProfit        Decimal         @map("take_profit") @db.Decimal(18, 8)
+  quantity          Decimal?        @db.Decimal(20, 8)
+  lotSize           Decimal?        @map("lot_size") @db.Decimal(20, 8)
+  exitPrice         Decimal?        @map("exit_price") @db.Decimal(18, 8)
+  fees              Decimal?        @db.Decimal(18, 2)
+  riskAmount        Decimal?        @map("risk_amount") @db.Decimal(18, 2)
+  riskPercent       Decimal?        @map("risk_percent") @db.Decimal(7, 4)
+  grossPnl          Decimal?        @map("gross_pnl") @db.Decimal(18, 2)
+  netPnl            Decimal?        @map("net_pnl") @db.Decimal(18, 2)
   profit            Decimal         @db.Decimal(18, 2)
   result            TradeResult
   session           TradeSession?
   emotion           TradeEmotion?
   notes             String          @default("")
+  openedAt          DateTime?       @map("opened_at") @db.Timestamptz(3)
+  closedAt          DateTime?       @map("closed_at") @db.Timestamptz(3)
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
   deletedAt         DateTime?       @map("deleted_at")
@@ -194,11 +221,18 @@ model Trade {
   review            Review?
   checklistResponses TradeChecklistResponse[]
 
+  @@unique([id, userId])
   @@index([userId, tradeDate(sort: Desc)])
   @@index([accountId, tradeDate(sort: Desc)])
+  @@index([userId, deletedAt, accountId, tradeDate(sort: Desc)])
+  @@index([userId, deletedAt, setupId, tradeDate(sort: Desc)])
   @@index([userId, session])
   @@index([userId, emotion])
   @@index([userId, result])
+  @@index([userId, openedAt])
+  @@index([userId, closedAt])
+  @@index([userId, deletedAt, tradeDate(sort: Desc), createdAt(sort: Desc)], map: "trades_user_id_deleted_at_trade_date_created_at_idx")
+  @@index([userId, deletedAt, pair, tradeDate(sort: Desc)], map: "trades_user_id_deleted_at_pair_trade_date_idx")
   @@map("trades")
 }
 
@@ -210,13 +244,14 @@ model TradeScreenshotUpload {
   fileName    String    @map("file_name")
   contentType String    @map("content_type")
   fileSize    Int       @map("file_size")
-  expiresAt   DateTime  @map("expires_at")
-  completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   trade       Trade     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   @@index([userId, tradeId])
+  @@index([completedAt, expiresAt])
   @@index([tradeId, createdAt])
   @@index([expiresAt])
   @@map("trade_screenshot_uploads")
@@ -235,6 +270,8 @@ model TradeScreenshot {
   @@index([userId])
   @@index([tradeId])
   @@index([userId, tradeId])
+  @@unique([tradeId, storageKey])
+  @@unique([tradeId, sortOrder])
   @@index([tradeId, sortOrder])
   @@map("trade_screenshots")
 }
@@ -250,13 +287,13 @@ model ScreenshotCleanupTask {
   userId          String?                 @map("user_id") @db.Uuid
   tradeId         String?                 @map("trade_id") @db.Uuid
   attemptCount    Int                     @default(0) @map("attempt_count")
-  nextAttemptAt   DateTime                @default(now()) @map("next_attempt_at")
-  leaseExpiresAt  DateTime?               @map("lease_expires_at")
+  nextAttemptAt   DateTime                @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  leaseExpiresAt  DateTime?               @map("lease_expires_at") @db.Timestamptz(3)
   lastError       String?                 @map("last_error")
-  lastAttemptAt   DateTime?               @map("last_attempt_at")
-  completedAt     DateTime?               @map("completed_at")
-  createdAt       DateTime                @default(now()) @map("created_at")
-  updatedAt       DateTime                @updatedAt @map("updated_at")
+  lastAttemptAt   DateTime?               @map("last_attempt_at") @db.Timestamptz(3)
+  completedAt     DateTime?               @map("completed_at") @db.Timestamptz(3)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([completedAt, nextAttemptAt])
   @@index([action, completedAt, nextAttemptAt])
@@ -271,11 +308,11 @@ model TradeShare {
   shareId       String   @unique @map("share_id")
   isActive      Boolean  @default(true) @map("is_active")
   viewCount     Int      @default(0) @map("view_count")
-  expiresAt     DateTime? @map("expires_at")
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
   shareSettings Json     @map("share_settings")
   snapshot      Json     @map("snapshot")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   trade         Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -323,35 +360,43 @@ model Review {
 
   @@unique([userId, dailyScopeDate])
   @@unique([userId, weeklyScopeStart])
+  @@index([userId, reviewDate(sort: Desc)])
+  @@index([userId, weekEnd(sort: Desc)])
   @@index([userId, type, updatedAt(sort: Desc)])
   @@map("reviews")
 }
 
 model ChecklistRule {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  title       String
-  description String?
-  isRequired  Boolean  @default(false) @map("is_required")
-  isActive    Boolean  @default(true) @map("is_active")
-  sortOrder   Int      @default(0) @map("sort_order")
-  setupId     String?  @map("setup_id") @db.Uuid
-  accountId   String?  @map("account_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  setup       Setup?   @relation(fields: [setupId], references: [id], onDelete: SetNull)
-  account     Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  id                     String                 @id @default(uuid()) @db.Uuid
+  userId                 String                 @map("user_id") @db.Uuid
+  title                  String
+  titleNormalized        String                 @map("title_normalized")
+  description            String?
+  isRequired             Boolean                @default(false) @map("is_required")
+  isActive               Boolean                @default(true) @map("is_active")
+  sortOrder              Int                    @default(0) @map("sort_order")
+  scopeType              ChecklistRuleScopeType @map("scope_type")
+  setupId                String?                @map("setup_id") @db.Uuid
+  accountId              String?                @map("account_id") @db.Uuid
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  setup                  Setup?                 @relation(fields: [setupId], references: [id], onDelete: NoAction)
+  account                Account?               @relation(fields: [accountId], references: [id], onDelete: NoAction)
   tradeChecklistResponses TradeChecklistResponse[]
 
+  @@unique([id, userId])
   @@index([userId, isActive, sortOrder])
+  @@index([userId, scopeType, isActive, sortOrder])
   @@index([userId, setupId, accountId, isActive])
+  @@index([userId, scopeType, titleNormalized], map: "checklist_rules_user_id_scope_type_title_normalized_idx")
   @@map("checklist_rules")
 }
 
 model TradeChecklistResponse {
   id                      String        @id @default(uuid()) @db.Uuid
   tradeId                 String        @map("trade_id") @db.Uuid
+  userId                  String        @map("user_id") @db.Uuid
   checklistRuleId         String?       @map("checklist_rule_id") @db.Uuid
   ruleTitleSnapshot       String        @map("rule_title_snapshot")
   ruleDescriptionSnapshot String?       @map("rule_description_snapshot")
@@ -362,8 +407,10 @@ model TradeChecklistResponse {
   createdAt               DateTime      @default(now()) @map("created_at")
   updatedAt               DateTime      @updatedAt @map("updated_at")
   trade                   Trade         @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   checklistRule           ChecklistRule? @relation(fields: [checklistRuleId], references: [id], onDelete: SetNull)
 
+  @@index([userId, tradeId])
   @@index([tradeId, sortOrderSnapshot])
   @@index([checklistRuleId])
   @@map("trade_checklist_responses")

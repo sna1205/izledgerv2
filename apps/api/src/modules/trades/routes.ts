@@ -19,7 +19,7 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   app.post("/", { preHandler: authenticate }, async (request, reply) => {
     const body = parseOrThrow(createTradeSchema, request.body);
-    const trade = await createTrade(request.auth!.userId, {
+    const result = await createTrade(request.auth!.userId, {
       ...body,
       notes: body.notes ?? "",
       checklistResponses: (body.checklistResponses ?? []).map((response) => ({
@@ -28,7 +28,7 @@ export async function tradeRoutes(app: FastifyInstance) {
         note: response.note ?? null,
       })),
     });
-    reply.status(201).send({ trade });
+    reply.status(result.created ? 201 : 200).send({ trade: result.trade });
   });
 
   app.get("/:id", { preHandler: authenticate }, async (request) => {

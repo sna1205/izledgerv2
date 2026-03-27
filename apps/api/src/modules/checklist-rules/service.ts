@@ -1,4 +1,4 @@
-import { ChecklistEnforcementMode, Prisma } from "@prisma/client";
+import { ChecklistEnforcementMode, ChecklistRuleScopeType, Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/errors.js";
 
@@ -34,6 +34,7 @@ function toChecklistRuleDto(rule: ChecklistRuleRecord) {
     isRequired: rule.isRequired,
     isActive: rule.isActive,
     sortOrder: rule.sortOrder,
+    scopeType: rule.scopeType,
     setupId: rule.setupId,
     accountId: rule.accountId,
     createdAt: rule.createdAt.toISOString(),
@@ -56,6 +57,29 @@ function toChecklistRuleDto(rule: ChecklistRuleRecord) {
 function normalizeChecklistNote(value?: string | null) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function normalizeChecklistRuleTitle(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function deriveChecklistRuleScopeType(input: {
+  setupId?: string | null;
+  accountId?: string | null;
+}) {
+  if (input.setupId && input.accountId) {
+    return ChecklistRuleScopeType.account_setup;
+  }
+
+  if (input.setupId) {
+    return ChecklistRuleScopeType.setup;
+  }
+
+  if (input.accountId) {
+    return ChecklistRuleScopeType.account;
+  }
+
+  return ChecklistRuleScopeType.global;
 }
 
 async function ensureOwnedAccount(tx: Prisma.TransactionClient | typeof prisma, userId: string, accountId: string) {
@@ -121,6 +145,40 @@ async function getOwnedChecklistRule(userId: string, ruleId: string) {
   }
 
   return rule;
+}
+
+async function findChecklistRuleConflict(
+  tx: Prisma.TransactionClient | typeof prisma,
+  userId: string,
+  input: {
+    setupId?: string | null;
+    accountId?: string | null;
+    titleNormalized: string;
+    excludeRuleId?: string;
+  },
+) {
+  return tx.checklistRule.findFirst({
+    where: {
+      userId,
+      titleNormalized: input.titleNormalized,
+      ...buildExactChecklistScopeWhere({
+        setupId: input.setupId,
+        accountId: input.accountId,
+      }),
+      id: input.excludeRuleId
+        ? {
+            not: input.excludeRuleId,
+          }
+        : undefined,
+    },
+    select: {
+      id: true,
+    },
+  });
+}
+
+function toChecklistRuleDuplicateError() {
+  return new AppError(409, "CHECKLIST_RULE_TITLE_TAKEN", "Checklist rule titles must be unique within the same scope.");
 }
 
 function buildChecklistScopeWhere(scope: {
@@ -236,20 +294,43 @@ export async function createChecklistRule(userId: string, input: {
   accountId?: string | null;
 }) {
   await validateRuleScope(prisma, userId, input);
-
-  const rule = await prisma.checklistRule.create({
-    data: {
-      userId,
-      title: input.title.trim(),
-      description: normalizeChecklistNote(input.description),
-      isRequired: input.isRequired,
-      isActive: input.isActive,
-      sortOrder: await getNextSortOrder(userId),
-      setupId: input.setupId ?? null,
-      accountId: input.accountId ?? null,
-    },
-    include: checklistRuleInclude,
+  const title = input.title.trim();
+  const titleNormalized = normalizeChecklistRuleTitle(title);
+  const existingRule = await findChecklistRuleConflict(prisma, userId, {
+    setupId: input.setupId,
+    accountId: input.accountId,
+    titleNormalized,
   });
+
+  if (existingRule) {
+    throw toChecklistRuleDuplicateError();
+  }
+
+  let rule: ChecklistRuleRecord;
+
+  try {
+    rule = await prisma.checklistRule.create({
+      data: {
+        userId,
+        title,
+        titleNormalized,
+        description: normalizeChecklistNote(input.description),
+        isRequired: input.isRequired,
+        isActive: input.isActive,
+        sortOrder: await getNextSortOrder(userId),
+        scopeType: deriveChecklistRuleScopeType(input),
+        setupId: input.setupId ?? null,
+        accountId: input.accountId ?? null,
+      },
+      include: checklistRuleInclude,
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw toChecklistRuleDuplicateError();
+    }
+
+    throw error;
+  }
 
   return toChecklistRuleDto(rule);
 }
@@ -264,21 +345,45 @@ export async function updateChecklistRule(userId: string, ruleId: string, input:
 }) {
   await getOwnedChecklistRule(userId, ruleId);
   await validateRuleScope(prisma, userId, input);
-
-  const rule = await prisma.checklistRule.update({
-    where: {
-      id: ruleId,
-    },
-    data: {
-      title: input.title.trim(),
-      description: normalizeChecklistNote(input.description),
-      isRequired: input.isRequired,
-      isActive: input.isActive,
-      setupId: input.setupId ?? null,
-      accountId: input.accountId ?? null,
-    },
-    include: checklistRuleInclude,
+  const title = input.title.trim();
+  const titleNormalized = normalizeChecklistRuleTitle(title);
+  const existingRule = await findChecklistRuleConflict(prisma, userId, {
+    setupId: input.setupId,
+    accountId: input.accountId,
+    titleNormalized,
+    excludeRuleId: ruleId,
   });
+
+  if (existingRule) {
+    throw toChecklistRuleDuplicateError();
+  }
+
+  let rule: ChecklistRuleRecord;
+
+  try {
+    rule = await prisma.checklistRule.update({
+      where: {
+        id: ruleId,
+      },
+      data: {
+        title,
+        titleNormalized,
+        description: normalizeChecklistNote(input.description),
+        isRequired: input.isRequired,
+        isActive: input.isActive,
+        scopeType: deriveChecklistRuleScopeType(input),
+        setupId: input.setupId ?? null,
+        accountId: input.accountId ?? null,
+      },
+      include: checklistRuleInclude,
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw toChecklistRuleDuplicateError();
+    }
+
+    throw error;
+  }
 
   return toChecklistRuleDto(rule);
 }
@@ -394,16 +499,6 @@ export async function createTradeChecklistSnapshots(
     scopeMode?: "applicable" | "exact";
   },
 ) {
-  const effectiveScope = params.scopeMode === "exact" && params.setupId
-    ? {
-        setupId: params.setupId,
-        accountId: null,
-      }
-    : {
-        accountId: params.accountId,
-        setupId: params.setupId,
-      };
-
   const [user, applicableRules] = await Promise.all([
     tx.user.findUnique({
       where: {
@@ -413,8 +508,11 @@ export async function createTradeChecklistSnapshots(
         checklistEnforcementMode: true,
       },
     }),
-    getApplicableChecklistRules(tx, userId, effectiveScope, {
-      scopeMode: params.scopeMode,
+    getApplicableChecklistRules(tx, userId, {
+      accountId: params.accountId,
+      setupId: params.setupId,
+    }, {
+      scopeMode: "applicable",
     }),
   ]);
 
@@ -446,6 +544,7 @@ export async function createTradeChecklistSnapshots(
 
     return {
       tradeId,
+      userId,
       checklistRuleId: rule.id,
       ruleTitleSnapshot: rule.title,
       ruleDescriptionSnapshot: rule.description,

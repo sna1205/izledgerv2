@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { BarChart3 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCurrencyDisplay, formatNumberDisplay, formatPercentageDisplay, type NormalizedCalendarDay } from "@/utils/analytics-rendering";
+import { formatMoneyDisplay, formatNumberDisplay, formatPercentageDisplay, type NormalizedCalendarDay } from "@/utils/analytics-rendering";
 import { cn } from "@/utils/class-names";
 
 function getDayTone(day: NormalizedCalendarDay) {
@@ -24,10 +24,12 @@ export function CalendarCell({
   day,
   selected,
   onClick,
+  currency,
 }: {
   day: NormalizedCalendarDay;
   selected: boolean;
   onClick: () => void;
+  currency?: string | null;
 }) {
   const activeDay = day.tradeCount > 0;
   const today = isToday(day.date);
@@ -69,7 +71,7 @@ export function CalendarCell({
             {activeDay ? (
               <div className="pt-5">
                 <p className="font-mono-price numeric-safe max-w-full text-[15px] font-semibold text-foreground">
-                  {formatCurrencyDisplay(day.totalProfit)}
+                  {formatMoneyDisplay(day.totalProfit, { currency, fallback: "--" })}
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   {formatNumberDisplay(day.tradeCount)} {day.tradeCount === 1 ? "trade" : "trades"}
@@ -88,7 +90,7 @@ export function CalendarCell({
           <div className="grid gap-1 text-muted-foreground">
             {day.tradeCount > 0 ? (
               <>
-                <p>PnL: {formatCurrencyDisplay(day.totalProfit)}</p>
+                <p>PnL: {formatMoneyDisplay(day.totalProfit, { currency, fallback: "--" })}</p>
                 <p>Trades: {formatNumberDisplay(day.tradeCount)}</p>
                 <p>Win rate: {formatPercentageDisplay(day.winRate)}</p>
               </>

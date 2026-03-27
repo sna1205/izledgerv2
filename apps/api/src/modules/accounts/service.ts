@@ -242,14 +242,30 @@ export async function updateAccount(userId: string, accountId: string, input: {
 
 export async function deleteAccount(userId: string, accountId: string) {
   const account = await getOwnedAccount(userId, accountId);
-  const tradeCount = await prisma.trade.count({
-    where: {
-      accountId,
-    },
-  });
+  const [tradeCount, checklistRuleCount] = await Promise.all([
+    prisma.trade.count({
+      where: {
+        accountId,
+      },
+    }),
+    prisma.checklistRule.count({
+      where: {
+        userId,
+        accountId,
+      },
+    }),
+  ]);
 
   if (tradeCount > 0) {
     throw new AppError(409, "ACCOUNT_IN_USE", "Account cannot be deleted because trades still reference it. Archive the account instead.");
+  }
+
+  if (checklistRuleCount > 0) {
+    throw new AppError(
+      409,
+      "ACCOUNT_IN_USE_BY_CHECKLIST_RULES",
+      "Account cannot be deleted because checklist rules still reference it. Delete or re-scope those rules first, or archive the account instead.",
+    );
   }
 
   try {

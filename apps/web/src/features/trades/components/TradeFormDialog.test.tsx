@@ -182,6 +182,7 @@ const setups: SetupDefinition[] = [
         isRequired: true,
         isActive: true,
         sortOrder: 0,
+        scopeType: "setup",
         setupId: "setup-1",
         accountId: null,
         createdAt: "2026-03-21T10:00:00.000Z",
@@ -307,6 +308,7 @@ describe("TradeFormDialog", () => {
             isRequired: true,
             isActive: true,
             sortOrder: 0,
+            scopeType: "setup",
             setupId: "setup-1",
             accountId: null,
             createdAt: "2026-03-21T10:00:00.000Z",
@@ -346,8 +348,8 @@ describe("TradeFormDialog", () => {
     renderWithProviders(<Harness />);
 
     expect(screen.getByText("Pre-Trade")).toBeInTheDocument();
-    expect(screen.getByText("No setup selected")).toBeInTheDocument();
-    expect(screen.getByText("Setup-specific discipline stays tied to the strategy you choose for this trade.")).toBeInTheDocument();
+    expect(screen.getByText("No account checklist items yet.")).toBeInTheDocument();
+    expect(screen.getByText("Global and account-specific checklist rules will appear here. Setup-specific items join once you pick a setup.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage in Setups" })).not.toBeInTheDocument();
   });
 
@@ -356,9 +358,9 @@ describe("TradeFormDialog", () => {
 
     fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-2" } });
 
-    expect(screen.getByText("This setup does not have an active pre-trade checklist yet.")).toBeInTheDocument();
+    expect(screen.getByText("This account and setup do not have any active checklist items right now.")).toBeInTheDocument();
     expect(screen.getByText("No pre-trade items for Liquidity yet.")).toBeInTheDocument();
-    expect(screen.getByText("Setup-specific discipline lives in Setups and will appear here once items are added.")).toBeInTheDocument();
+    expect(screen.getByText("Global, account, and setup-specific checklist rules will appear here when they are active.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage in Setups" })).not.toBeInTheDocument();
   });
 
@@ -390,6 +392,7 @@ describe("TradeFormDialog", () => {
             isRequired: true,
             isActive: true,
             sortOrder: 0,
+            scopeType: "setup",
             setupId: "setup-1",
             accountId: null,
             createdAt: "2026-03-21T10:00:00.000Z",
@@ -441,6 +444,37 @@ describe("TradeFormDialog", () => {
     await waitFor(() => {
       expect(screen.getByText("Sweep and reclaim")).toBeInTheDocument();
       expect(screen.getByText("Confirm the liquidity sweep is reclaimed before entry.")).toBeInTheDocument();
+    });
+  });
+
+  it("requests applicable checklist rules using both the account and setup scope", async () => {
+    checklistRuleMocks.listChecklistRules.mockResolvedValue({ items: [] });
+
+    renderWithProviders(<Harness />);
+
+    fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-1" } });
+
+    let checklistQueryOptions:
+      | { queryKey?: unknown[]; queryFn?: () => Promise<unknown> }
+      | undefined;
+
+    await waitFor(() => {
+      checklistQueryOptions = [...reactQueryMocks.useQuery.mock.calls]
+        .map(([options]) => options as { queryKey?: unknown[]; queryFn?: () => Promise<unknown> })
+        .reverse()
+        .find((options) => JSON.stringify(options.queryKey ?? []).includes("\"checklist-rules\""));
+
+      expect(JSON.stringify(checklistQueryOptions?.queryKey ?? [])).toContain("\"account-1\"");
+      expect(JSON.stringify(checklistQueryOptions?.queryKey ?? [])).toContain("\"setup-1\"");
+    });
+
+    await checklistQueryOptions?.queryFn?.();
+
+    expect(checklistRuleMocks.listChecklistRules).toHaveBeenCalledWith({
+      activeOnly: true,
+      accountId: "account-1",
+      setupId: "setup-1",
+      scopeMode: "applicable",
     });
   });
 
@@ -526,6 +560,39 @@ describe("TradeFormDialog", () => {
     });
   });
 
+  it("submits optional trade fact fields without breaking the legacy profit flow", async () => {
+    const saveImpl = vi.fn();
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
+
+    fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });
+    fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "3010" } });
+    fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "2980" } });
+    fireEvent.change(getInputByLabel("Exit Price"), { target: { value: "2988" } });
+    fireEvent.change(getInputByLabel("Fees"), { target: { value: "5.25" } });
+    fireEvent.change(getInputByLabel("Quantity"), { target: { value: "2.5" } });
+    fireEvent.change(getInputByLabel("Lot Size"), { target: { value: "0.25" } });
+    fireEvent.change(getInputByLabel("Risk Amount"), { target: { value: "50" } });
+    fireEvent.change(getInputByLabel("Risk %"), { target: { value: "1" } });
+    fireEvent.change(getProfitInput(), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Trade" }));
+
+    await waitFor(() => {
+      expect(saveImpl).toHaveBeenCalledWith(expect.objectContaining({
+        direction: "Sell",
+        profit: 120,
+        netPnl: 120,
+        grossPnl: 125.25,
+        fees: 5.25,
+        quantity: 2.5,
+        lotSize: 0.25,
+        exitPrice: 2988,
+        riskAmount: 50,
+        riskPercent: 1,
+        result: "Win",
+      }));
+    });
+  });
+
   it("shows a non-blocking warning when a relevant high-impact event is near", async () => {
     const eventTime = new Date(Date.now() + 10 * 60_000);
 
@@ -580,7 +647,7 @@ describe("TradeFormDialog", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Relevant high-impact event/i)).toBeInTheDocument();
-      expect(screen.getByText(/CPI y\/y/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/CPI y\/y/i).length).toBeGreaterThan(0);
     });
 
     fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });

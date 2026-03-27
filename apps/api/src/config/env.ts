@@ -184,6 +184,7 @@ const envSchema = z.object({
   RESTORE_VERIFY_STORAGE_SAMPLE_SIZE: optionalStringFromEnv,
   RESTORE_VERIFY_REQUIRE_API: booleanFromEnv.default(false),
   RESTORE_VERIFY_REQUIRE_STORAGE: booleanFromEnv.default(false),
+  RESTORE_VERIFY_REQUIRE_BUCKET_VERSIONING: booleanFromEnv.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 }).superRefine((data, ctx) => {
   const appUrl = data.APP_URL ? new URL(data.APP_URL) : null;

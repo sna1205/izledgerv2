@@ -126,7 +126,7 @@ async function buildTradeSnapshot(userId: string, tradeId: string) {
     profit: toNumber(trade.profit),
     result: trade.result,
     setup: trade.setupNameSnapshot ?? "",
-    setupColor: trade.setup?.color ?? null,
+    setupColor: trade.setupColorSnapshot ?? trade.setup?.color ?? null,
     session: sessionFromDb(trade.session),
     emotion: trade.emotion,
     notes: trade.notes,
@@ -155,11 +155,22 @@ export async function hydrateTradeSnapshot(snapshot: Prisma.JsonValue | null) {
 
   const screenshots = await Promise.all(
     screenshotsValue.map(async (item) => {
-      if (typeof item !== "string" || isHttpUrl(item)) {
+      if (typeof item === "string") {
+        if (isHttpUrl(item)) {
+          return item;
+        }
+
+        return getReadUrl(item);
+      }
+
+      if (!isRecord(item) || typeof item.storageKey !== "string" || !item.storageKey.trim()) {
         return item;
       }
 
-      return getReadUrl(item);
+      return {
+        ...item,
+        url: await getReadUrl(item.storageKey),
+      };
     }),
   );
 

@@ -1,5 +1,5 @@
 import { Prisma, TradeSession } from "@prisma/client";
-import type { TradeDirectionValue, TradeResultValue } from "../../config/domain.js";
+import type { TradeResultValue } from "../../config/domain.js";
 import { toNumber } from "../../utils/decimal.js";
 import { prisma } from "../../lib/prisma.js";
 import { getReadUrl } from "../../lib/storage.js";
@@ -12,6 +12,196 @@ import { deriveTradeResultFromProfit } from "./result.js";
 
 function normalizeTradePair(value: string) {
   return value.trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function normalizeClientRequestId(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function normalizeCurrencyCode(value: string | null | undefined) {
+  const normalized = value?.trim().toUpperCase();
+  return normalized ? normalized : null;
+}
+
+function toNullableNumber(value: Prisma.Decimal | string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return toNumber(value);
+}
+
+function roundMoney(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function roundPercent(value: number) {
+  return Number(value.toFixed(4));
+}
+
+function calculatePlannedRiskReward(input: {
+  entry: number;
+  stopLoss: number;
+  takeProfit: number;
+  direction: "Buy" | "Sell";
+}) {
+  const risk = input.direction === "Buy"
+    ? input.entry - input.stopLoss
+    : input.stopLoss - input.entry;
+  const reward = input.direction === "Buy"
+    ? input.takeProfit - input.entry
+    : input.entry - input.takeProfit;
+
+  if (risk <= 0) {
+    return null;
+  }
+
+  return Number(Math.max(0, reward / risk).toFixed(4));
+}
+
+function calculateRealizedR(netPnl: number, riskAmount?: number | null) {
+  if (!riskAmount || riskAmount <= 0) {
+    return null;
+  }
+
+  return Number((netPnl / riskAmount).toFixed(4));
+}
+
+function getTradeDateStart(date: string) {
+  return new Date(`${date}T00:00:00.000Z`);
+}
+
+function resolveTradeLifecycleTimestamps(input: {
+  date?: string;
+  openedAt?: Date;
+  closedAt?: Date;
+}, existing?: {
+  tradeDate: Date;
+  openedAt: Date | null;
+  closedAt: Date | null;
+}) {
+  const tradeDateStart = input.date
+    ? getTradeDateStart(input.date)
+    : existing
+      ? new Date(`${existing.tradeDate.toISOString().slice(0, 10)}T00:00:00.000Z`)
+      : new Date();
+  const openedAt = input.openedAt ?? existing?.openedAt ?? tradeDateStart;
+  const closedAt = input.closedAt ?? existing?.closedAt ?? openedAt;
+
+  if (closedAt.getTime() < openedAt.getTime()) {
+    throw new AppError(400, "TRADE_LIFECYCLE_INVALID", "Closed time must be on or after opened time.");
+  }
+
+  return {
+    openedAt,
+    closedAt,
+  };
+}
+
+function buildTradeFxSnapshot(accountCurrency: string | null | undefined, lifecycle: {
+  openedAt: Date;
+  closedAt: Date;
+}) {
+  const normalizedAccountCurrency = normalizeCurrencyCode(accountCurrency);
+
+  if (!normalizedAccountCurrency) {
+    return {
+      accountCurrencySnapshot: null,
+      pnlCurrency: null,
+      fxRateSnapshot: null,
+      fxRateSource: null,
+      fxRateTimestamp: null,
+    };
+  }
+
+  return {
+    accountCurrencySnapshot: normalizedAccountCurrency,
+    pnlCurrency: normalizedAccountCurrency,
+    fxRateSnapshot: 1,
+    fxRateSource: "account_currency_snapshot",
+    fxRateTimestamp: lifecycle.closedAt,
+  };
+}
+
+function resolveTradeFinancials(input: {
+  quantity?: number | null;
+  lotSize?: number | null;
+  exitPrice?: number | null;
+  fees?: number | null;
+  riskAmount?: number | null;
+  riskPercent?: number | null;
+  profit?: number;
+}, existing?: {
+  quantity: number | null;
+  lotSize: number | null;
+  exitPrice: number | null;
+  fees: number | null;
+  riskAmount: number | null;
+  riskPercent: number | null;
+  grossPnl: number | null;
+  netPnl: number | null;
+  profit: number;
+}, accountBalance?: number | null, options?: {
+  recalculateRiskPercentFromStoredAmount?: boolean;
+}) {
+  const resolvedNetPnl = input.profit ?? existing?.netPnl ?? existing?.profit;
+
+  if (resolvedNetPnl === undefined) {
+    throw new AppError(400, "TRADE_NET_PNL_REQUIRED", "Profit is required.");
+  }
+
+  const resolvedFees = input.fees !== undefined ? input.fees : existing?.fees ?? null;
+  const canonicalNetPnl = roundMoney(resolvedNetPnl);
+  const resolvedGrossPnl = resolvedFees !== null ? roundMoney(canonicalNetPnl + resolvedFees) : null;
+  const riskFieldsTouched = input.riskAmount !== undefined || input.riskPercent !== undefined;
+
+  let resolvedRiskAmount: number | null;
+  let resolvedRiskPercent: number | null;
+
+  if (input.riskAmount === null || (input.riskAmount === undefined && input.riskPercent === null)) {
+    resolvedRiskAmount = null;
+    resolvedRiskPercent = null;
+  } else if (input.riskAmount !== undefined && input.riskAmount !== null) {
+    resolvedRiskAmount = input.riskAmount;
+    resolvedRiskPercent = accountBalance && accountBalance > 0
+      ? roundPercent((resolvedRiskAmount / accountBalance) * 100)
+      : null;
+  } else if (input.riskPercent !== undefined && input.riskPercent !== null) {
+    if (!accountBalance || accountBalance <= 0) {
+      throw new AppError(
+        400,
+        "TRADE_RISK_AMOUNT_REQUIRED",
+        "Risk amount is required when the selected account balance is zero or unavailable.",
+      );
+    }
+
+    resolvedRiskAmount = roundMoney(accountBalance * (input.riskPercent / 100));
+    resolvedRiskPercent = roundPercent((resolvedRiskAmount / accountBalance) * 100);
+  } else if (riskFieldsTouched) {
+    resolvedRiskAmount = null;
+    resolvedRiskPercent = null;
+  } else if (options?.recalculateRiskPercentFromStoredAmount && existing?.riskAmount !== null && existing?.riskAmount !== undefined) {
+    resolvedRiskAmount = existing.riskAmount;
+    resolvedRiskPercent = accountBalance && accountBalance > 0
+      ? roundPercent((resolvedRiskAmount / accountBalance) * 100)
+      : null;
+  } else {
+    resolvedRiskAmount = existing?.riskAmount ?? null;
+    resolvedRiskPercent = existing?.riskPercent ?? null;
+  }
+
+  return {
+    quantity: input.quantity !== undefined ? input.quantity : existing?.quantity ?? null,
+    lotSize: input.lotSize !== undefined ? input.lotSize : existing?.lotSize ?? null,
+    exitPrice: input.exitPrice !== undefined ? input.exitPrice : existing?.exitPrice ?? null,
+    fees: resolvedFees,
+    riskAmount: resolvedRiskAmount,
+    riskPercent: resolvedRiskPercent,
+    grossPnl: resolvedGrossPnl,
+    netPnl: canonicalNetPnl,
+    profit: canonicalNetPnl,
+  };
 }
 
 const tradeListInclude = Prisma.validator<Prisma.TradeInclude>()({
@@ -55,6 +245,7 @@ async function resolveSetup(userId: string, input: {
     return {
       setupId: setup.id,
       setupNameSnapshot: setup.name,
+      setupColorSnapshot: setup.color,
     };
   }
 
@@ -72,12 +263,14 @@ async function resolveSetup(userId: string, input: {
     return {
       setupId: matchedSetup?.id ?? null,
       setupNameSnapshot: matchedSetup?.name ?? input.setup.trim(),
+      setupColorSnapshot: matchedSetup?.color ?? null,
     };
   }
 
   return {
     setupId: null,
     setupNameSnapshot: null,
+    setupColorSnapshot: null,
   };
 }
 
@@ -103,6 +296,14 @@ async function ensureOwnedAccount(userId: string, accountId: string, options?: {
 }
 
 async function toTradeDto(trade: TradeListRecord | TradeDetailRecord) {
+  const netPnl = toNullableNumber(trade.netPnl) ?? toNumber(trade.profit);
+  const riskAmount = toNullableNumber(trade.riskAmount);
+  const plannedRR = calculatePlannedRiskReward({
+    entry: toNumber(trade.entry),
+    stopLoss: toNumber(trade.stopLoss),
+    takeProfit: toNumber(trade.takeProfit),
+    direction: trade.direction,
+  });
   const screenshotAssets = await Promise.all(
     trade.screenshots.map(async (screenshot) => ({
       id: screenshot.id,
@@ -117,19 +318,37 @@ async function toTradeDto(trade: TradeListRecord | TradeDetailRecord) {
     id: trade.id,
     date: trade.tradeDate.toISOString().slice(0, 10),
     accountId: trade.accountId,
+    clientRequestId: trade.clientRequestId,
+    accountCurrency: normalizeCurrencyCode(trade.accountCurrencySnapshot),
     pair: normalizeTradePair(trade.pair),
     direction: trade.direction,
     entry: toNumber(trade.entry),
     stopLoss: toNumber(trade.stopLoss),
     takeProfit: toNumber(trade.takeProfit),
-    profit: toNumber(trade.profit),
+    quantity: toNullableNumber(trade.quantity),
+    lotSize: toNullableNumber(trade.lotSize),
+    exitPrice: toNullableNumber(trade.exitPrice),
+    fees: toNullableNumber(trade.fees),
+    riskAmount,
+    riskPercent: toNullableNumber(trade.riskPercent),
+    grossPnl: toNullableNumber(trade.grossPnl),
+    netPnl,
+    pnlCurrency: normalizeCurrencyCode(trade.pnlCurrency),
+    fxRateSnapshot: toNullableNumber(trade.fxRateSnapshot),
+    fxRateSource: trade.fxRateSource ?? null,
+    fxRateTimestamp: trade.fxRateTimestamp?.toISOString() ?? null,
+    plannedRR,
+    realizedR: calculateRealizedR(netPnl, riskAmount),
+    profit: netPnl,
     result: trade.result,
     setupId: trade.setupId,
     setup: trade.setupNameSnapshot ?? "",
-    setupColor: trade.setup?.color ?? null,
+    setupColor: trade.setupColorSnapshot ?? trade.setup?.color ?? null,
     session: sessionFromDb(trade.session),
     emotion: trade.emotion,
     notes: trade.notes,
+    openedAt: trade.openedAt?.toISOString() ?? null,
+    closedAt: trade.closedAt?.toISOString() ?? null,
     screenshots: screenshotAssets.map((asset) => asset.url),
     screenshotAssets,
     checklistResponses:
@@ -218,6 +437,20 @@ async function getOwnedTrade(userId: string, tradeId: string) {
   return trade;
 }
 
+async function findActiveTradeByClientRequestId(userId: string, clientRequestId: string) {
+  return prisma.trade.findFirst({
+    where: {
+      userId,
+      clientRequestId,
+      deletedAt: null,
+    },
+    include: tradeDetailInclude,
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+}
+
 export async function listTrades(userId: string, query: {
   accountId?: string;
   setupId?: string;
@@ -237,7 +470,12 @@ export async function listTrades(userId: string, query: {
   const where = buildTradeWhere(userId, query);
   const orderBy =
     query.sortBy === "date"
-      ? { tradeDate: query.sortOrder }
+      ? [
+          { tradeDate: query.sortOrder },
+          { closedAt: query.sortOrder },
+          { openedAt: query.sortOrder },
+          { createdAt: query.sortOrder },
+        ]
       : query.sortBy === "createdAt"
         ? { createdAt: query.sortOrder }
         : query.sortBy === "profit"
@@ -269,100 +507,170 @@ export async function getTrade(userId: string, tradeId: string) {
 export async function createTrade(userId: string, input: {
   date: string;
   accountId: string;
+  clientRequestId?: string | null;
   pair: string;
-  direction?: TradeDirectionValue;
   entry: number;
   stopLoss: number;
   takeProfit: number;
+  quantity?: number | null;
+  lotSize?: number | null;
+  exitPrice?: number | null;
+  fees?: number | null;
+  riskAmount?: number | null;
+  riskPercent?: number | null;
   profit: number;
-  result?: TradeResultValue;
   setupId?: string | null;
   setup?: string | null;
   session?: "Asia" | "London" | "New York" | null;
   emotion?: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated" | null;
   notes: string;
+  openedAt?: Date;
+  closedAt?: Date;
   checklistResponses?: ChecklistResponseInput[];
   checklistScopeMode?: "applicable" | "exact";
 }) {
-  await ensureOwnedAccount(userId, input.accountId);
+  const normalizedClientRequestId = normalizeClientRequestId(input.clientRequestId);
+
+  if (normalizedClientRequestId) {
+    const existingTrade = await findActiveTradeByClientRequestId(userId, normalizedClientRequestId);
+
+    if (existingTrade) {
+      return {
+        trade: await toTradeDto(existingTrade),
+        created: false,
+      };
+    }
+  }
+
+  const account = await ensureOwnedAccount(userId, input.accountId);
   const setup = await resolveSetup(userId, {
     setupId: input.setupId,
     setup: input.setup,
   });
+  const financials = resolveTradeFinancials(input, undefined, toNumber(account.balance));
   const derivedDirection = deriveTradeDirection(input.entry, input.stopLoss);
-  const derivedResult = deriveTradeResultFromProfit(input.profit);
+  const derivedResult = deriveTradeResultFromProfit(financials.profit);
+  const lifecycle = resolveTradeLifecycleTimestamps(input);
+  const fxSnapshot = buildTradeFxSnapshot(account.currency, lifecycle);
 
   if (derivedDirection === null) {
     throw new AppError(400, "INVALID_TRADE_DIRECTION", "Stop Loss must be above or below Entry to determine trade direction.");
   }
 
-  const trade = await prisma.$transaction(async (tx) => {
-    const createdTrade = await tx.trade.create({
-      data: {
-        userId,
+  try {
+    const trade = await prisma.$transaction(async (tx) => {
+      const createdTrade = await tx.trade.create({
+        data: {
+          userId,
+          accountId: input.accountId,
+          clientRequestId: normalizedClientRequestId,
+          accountCurrencySnapshot: fxSnapshot.accountCurrencySnapshot,
+          pnlCurrency: fxSnapshot.pnlCurrency,
+          fxRateSnapshot: fxSnapshot.fxRateSnapshot,
+          fxRateSource: fxSnapshot.fxRateSource,
+          fxRateTimestamp: fxSnapshot.fxRateTimestamp,
+          tradeDate: getTradeDateStart(input.date),
+          pair: normalizeTradePair(input.pair),
+          direction: derivedDirection,
+          entry: input.entry,
+          stopLoss: input.stopLoss,
+          takeProfit: input.takeProfit,
+          quantity: financials.quantity,
+          lotSize: financials.lotSize,
+          exitPrice: financials.exitPrice,
+          fees: financials.fees,
+          riskAmount: financials.riskAmount,
+          riskPercent: financials.riskPercent,
+          grossPnl: financials.grossPnl,
+          netPnl: financials.netPnl,
+          profit: financials.profit,
+          result: derivedResult,
+          setupId: setup.setupId,
+          setupNameSnapshot: setup.setupNameSnapshot,
+          setupColorSnapshot: setup.setupColorSnapshot,
+          openedAt: lifecycle.openedAt,
+          closedAt: lifecycle.closedAt,
+          session: (sessionToDb(input.session) as TradeSession | null | undefined) ?? null,
+          emotion: input.emotion ?? null,
+          notes: input.notes,
+        },
+      });
+
+      await createTradeChecklistSnapshots(tx, userId, createdTrade.id, {
         accountId: input.accountId,
-        tradeDate: new Date(`${input.date}T00:00:00.000Z`),
-        pair: normalizeTradePair(input.pair),
-        direction: derivedDirection,
-        entry: input.entry,
-        stopLoss: input.stopLoss,
-        takeProfit: input.takeProfit,
-        profit: input.profit,
-        result: derivedResult,
         setupId: setup.setupId,
-        setupNameSnapshot: setup.setupNameSnapshot,
-        session: (sessionToDb(input.session) as TradeSession | null | undefined) ?? null,
-        emotion: input.emotion ?? null,
-        notes: input.notes,
-      },
+        checklistResponses: input.checklistResponses,
+        scopeMode: input.checklistScopeMode,
+      });
+
+      const tradeWithRelations = await tx.trade.findUnique({
+        where: {
+          id: createdTrade.id,
+        },
+        include: tradeDetailInclude,
+      });
+
+      if (!tradeWithRelations) {
+        throw new AppError(404, "TRADE_NOT_FOUND", "Trade not found.");
+      }
+
+      return tradeWithRelations;
     });
 
-    await createTradeChecklistSnapshots(tx, userId, createdTrade.id, {
-      accountId: input.accountId,
-      setupId: setup.setupId,
-      checklistResponses: input.checklistResponses,
-      scopeMode: input.checklistScopeMode,
-    });
+    return {
+      trade: await toTradeDto(trade),
+      created: true,
+    };
+  } catch (error) {
+    if (normalizedClientRequestId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existingTrade = await findActiveTradeByClientRequestId(userId, normalizedClientRequestId);
 
-    const tradeWithRelations = await tx.trade.findUnique({
-      where: {
-        id: createdTrade.id,
-      },
-      include: tradeDetailInclude,
-    });
-
-    if (!tradeWithRelations) {
-      throw new AppError(404, "TRADE_NOT_FOUND", "Trade not found.");
+      if (existingTrade) {
+        return {
+          trade: await toTradeDto(existingTrade),
+          created: false,
+        };
+      }
     }
 
-    return tradeWithRelations;
-  });
-
-  return toTradeDto(trade);
+    throw error;
+  }
 }
 
 export async function updateTrade(userId: string, tradeId: string, input: {
   date?: string;
   accountId?: string;
   pair?: string;
-  direction?: TradeDirectionValue;
   entry?: number;
   stopLoss?: number;
   takeProfit?: number;
+  quantity?: number | null;
+  lotSize?: number | null;
+  exitPrice?: number | null;
+  fees?: number | null;
+  riskAmount?: number | null;
+  riskPercent?: number | null;
   profit?: number;
-  result?: TradeResultValue;
   setupId?: string | null;
   setup?: string | null;
   session?: "Asia" | "London" | "New York" | null;
   emotion?: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated" | null;
   notes?: string;
+  openedAt?: Date;
+  closedAt?: Date;
 }) {
   const existingTrade = await getOwnedTrade(userId, tradeId);
+  let nextAccountCurrencySnapshot: string | undefined;
+  let nextAccountBalance = toNumber(existingTrade.account.balance);
+  let nextAccountCurrency = existingTrade.accountCurrencySnapshot ?? existingTrade.account.currency;
 
   if (input.accountId) {
-    await ensureOwnedAccount(userId, input.accountId, {
+    const account = await ensureOwnedAccount(userId, input.accountId, {
       allowArchived: input.accountId === existingTrade.accountId,
     });
+    nextAccountCurrencySnapshot = account.currency;
+    nextAccountBalance = toNumber(account.balance);
+    nextAccountCurrency = account.currency;
   }
 
   const setup =
@@ -373,12 +681,33 @@ export async function updateTrade(userId: string, tradeId: string, input: {
         })
       : null;
   const nextDirection =
-    input.entry !== undefined || input.stopLoss !== undefined || input.direction !== undefined
+    input.entry !== undefined || input.stopLoss !== undefined
       ? deriveTradeDirection(input.entry ?? toNumber(existingTrade.entry), input.stopLoss ?? toNumber(existingTrade.stopLoss))
       : undefined;
+  const existingFinancials = {
+    quantity: toNullableNumber(existingTrade.quantity),
+    lotSize: toNullableNumber(existingTrade.lotSize),
+    exitPrice: toNullableNumber(existingTrade.exitPrice),
+    fees: toNullableNumber(existingTrade.fees),
+    riskAmount: toNullableNumber(existingTrade.riskAmount),
+    riskPercent: toNullableNumber(existingTrade.riskPercent),
+    grossPnl: toNullableNumber(existingTrade.grossPnl),
+    netPnl: toNullableNumber(existingTrade.netPnl),
+    profit: toNumber(existingTrade.profit),
+  };
+  const nextFinancials = resolveTradeFinancials(input, existingFinancials, nextAccountBalance, {
+    recalculateRiskPercentFromStoredAmount: input.accountId !== undefined,
+  });
+  const nextLifecycle = resolveTradeLifecycleTimestamps(input, {
+    tradeDate: existingTrade.tradeDate,
+    openedAt: existingTrade.openedAt,
+    closedAt: existingTrade.closedAt,
+  });
+  const nextFxSnapshot = buildTradeFxSnapshot(nextAccountCurrencySnapshot ?? nextAccountCurrency, nextLifecycle);
   const nextResult =
-    input.profit !== undefined || input.result !== undefined
-      ? deriveTradeResultFromProfit(input.profit ?? toNumber(existingTrade.profit))
+    input.profit !== undefined
+    || input.fees !== undefined
+      ? deriveTradeResultFromProfit(nextFinancials.profit)
       : undefined;
 
   if (nextDirection === null) {
@@ -388,17 +717,33 @@ export async function updateTrade(userId: string, tradeId: string, input: {
   const trade = await prisma.trade.update({
     where: { id: tradeId },
     data: {
-      tradeDate: input.date ? new Date(`${input.date}T00:00:00.000Z`) : undefined,
+      tradeDate: input.date ? getTradeDateStart(input.date) : undefined,
       accountId: input.accountId,
+      accountCurrencySnapshot: nextFxSnapshot.accountCurrencySnapshot,
+      pnlCurrency: nextFxSnapshot.pnlCurrency,
+      fxRateSnapshot: nextFxSnapshot.fxRateSnapshot,
+      fxRateSource: nextFxSnapshot.fxRateSource,
+      fxRateTimestamp: nextFxSnapshot.fxRateTimestamp,
       pair: input.pair === undefined ? undefined : normalizeTradePair(input.pair),
       direction: nextDirection,
       entry: input.entry,
       stopLoss: input.stopLoss,
       takeProfit: input.takeProfit,
-      profit: input.profit,
+      quantity: nextFinancials.quantity,
+      lotSize: nextFinancials.lotSize,
+      exitPrice: nextFinancials.exitPrice,
+      fees: nextFinancials.fees,
+      riskAmount: nextFinancials.riskAmount,
+      riskPercent: nextFinancials.riskPercent,
+      grossPnl: nextFinancials.grossPnl,
+      netPnl: nextFinancials.netPnl,
+      profit: nextFinancials.profit,
       result: nextResult,
       setupId: setup ? setup.setupId : undefined,
       setupNameSnapshot: setup ? setup.setupNameSnapshot : undefined,
+      setupColorSnapshot: setup ? setup.setupColorSnapshot : undefined,
+      openedAt: nextLifecycle.openedAt,
+      closedAt: nextLifecycle.closedAt,
       session:
         input.session === undefined
           ? undefined

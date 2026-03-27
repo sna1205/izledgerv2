@@ -36,7 +36,11 @@ import {
   getAccountApiErrorMessage,
   validateAccountForm,
 } from "@/utils/account-validation";
-import { formatCurrencyDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
+import {
+  formatCurrencyTotalsDisplay,
+  formatMoneyDisplay,
+  formatPercentageDisplay,
+} from "@/utils/analytics-rendering";
 import { getPageErrorState } from "@/utils/page-errors";
 import { withMinimumDelay } from "@/utils/loading";
 import { privateQueryKey } from "@/services/query-client";
@@ -130,7 +134,17 @@ export default function Accounts() {
 
   const accounts = accountsQuery.data ?? [];
   const accountPerformance = useMemo(
-    () => Object.fromEntries((breakdownsQuery.data?.accountPerformance ?? []).map((row) => [row.accountId, row])),
+    () => {
+      const grouped = new Map<string, NonNullable<typeof breakdownsQuery.data>["accountPerformance"]>();
+
+      for (const row of breakdownsQuery.data?.accountPerformance ?? []) {
+        const existing = grouped.get(row.accountId) ?? [];
+        existing.push(row);
+        grouped.set(row.accountId, existing);
+      }
+
+      return grouped;
+    },
     [breakdownsQuery.data?.accountPerformance],
   );
 
@@ -204,7 +218,39 @@ export default function Accounts() {
   });
 
   const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
-  const totalPnl = breakdownsQuery.data?.summary.totalProfit ?? 0;
+  const balanceTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+
+    for (const account of accounts) {
+      totals.set(account.currency, (totals.get(account.currency) ?? 0) + account.balance);
+    }
+
+    return Array.from(totals.entries()).map(([currency, balance]) => ({
+      currency,
+      totalProfit: balance,
+    }));
+  }, [accounts]);
+  const totalPnlSummary = breakdownsQuery.data?.summary;
+  const combinedBalanceIsMixed = balanceTotals.length > 1;
+  const combinedBalanceValue = combinedBalanceIsMixed
+    ? "Mixed"
+    : formatMoneyDisplay(totalBalance, {
+        currency: balanceTotals[0]?.currency ?? "USD",
+        showPlus: false,
+        fallback: "--",
+      });
+  const combinedBalanceSubtext = combinedBalanceIsMixed
+    ? formatCurrencyTotalsDisplay(balanceTotals, "No balances yet")
+    : balanceTotals[0]?.currency ?? undefined;
+  const totalPnlValue = totalPnlSummary?.isMixedCurrency
+    ? "Mixed"
+    : formatMoneyDisplay(totalPnlSummary?.totalProfit ?? 0, {
+        currency: totalPnlSummary?.displayCurrency,
+        fallback: "--",
+      });
+  const totalPnlSubtext = totalPnlSummary?.isMixedCurrency
+    ? formatCurrencyTotalsDisplay(totalPnlSummary.currencyTotals, "Select an account to view one-currency PnL.")
+    : totalPnlSummary?.displayCurrency ?? undefined;
 
   useUnauthorizedSessionGuard(accountsQuery.error, breakdownsQuery.error);
 
@@ -275,11 +321,12 @@ export default function Accounts() {
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <StatCard label="Total Accounts" value={String(accounts.length)} icon={Wallet} />
-        <StatCard label="Combined Balance" value={formatCurrencyDisplay(totalBalance, { showPlus: false })} icon={Landmark} />
+        <StatCard label="Combined Balance" value={combinedBalanceValue} subtext={combinedBalanceSubtext} icon={Landmark} />
         <StatCard
           label="Total PnL"
-          value={formatCurrencyDisplay(totalPnl)}
-          tone={totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "default"}
+          value={totalPnlValue}
+          subtext={totalPnlSubtext}
+          tone={!totalPnlSummary?.isMixedCurrency && (totalPnlSummary?.totalProfit ?? 0) > 0 ? "positive" : !totalPnlSummary?.isMixedCurrency && (totalPnlSummary?.totalProfit ?? 0) < 0 ? "negative" : "default"}
           icon={Trophy}
         />
       </div>
@@ -299,7 +346,23 @@ export default function Accounts() {
       ) : (
         <div className="grid gap-6 xl:grid-cols-2">
           {accounts.map((account) => {
-            const performance = accountPerformance[account.id];
+            const performanceRows = accountPerformance.get(account.id) ?? [];
+            const primaryPerformance = performanceRows[0];
+            const performanceValue = performanceRows.length > 1
+              ? "Mixed"
+              : formatMoneyDisplay(primaryPerformance?.profit ?? 0, {
+                  currency: primaryPerformance?.currency ?? account.currency,
+                  fallback: `${account.currency} 0.00`,
+                });
+            const performanceSubtext = performanceRows.length > 1
+              ? formatCurrencyTotalsDisplay(
+                  performanceRows.map((row) => ({
+                    currency: row.currency ?? account.currency,
+                    totalProfit: row.profit,
+                  })),
+                  "No PnL yet",
+                )
+              : (primaryPerformance?.currency ?? account.currency);
             const iconData = getAccountIcon(account.type);
             const Icon = iconData.icon;
 
@@ -355,17 +418,18 @@ export default function Accounts() {
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="surface-muted px-4 py-4">
                       <p className="text-label mb-2">Trades</p>
-                      <p className="text-lg font-semibold text-foreground">{formatNumberSafe(performance?.trades)}</p>
+                      <p className="text-lg font-semibold text-foreground">{formatNumberSafe(primaryPerformance?.trades)}</p>
                     </div>
                     <div className="surface-muted px-4 py-4">
                       <p className="text-label mb-2">PnL</p>
-                      <p className={cn("font-mono-price numeric-safe max-w-full text-lg font-semibold", getProfitTone(performance?.profit ?? 0))}>
-                        {formatCurrencyDisplay(performance?.profit ?? 0)}
+                      <p className={cn("font-mono-price numeric-safe max-w-full text-lg font-semibold", performanceRows.length > 1 ? "text-foreground" : getProfitTone(primaryPerformance?.profit ?? 0))}>
+                        {performanceValue}
                       </p>
+                      <p className="mt-2 text-xs text-muted-foreground">{performanceSubtext}</p>
                     </div>
                     <div className="surface-muted px-4 py-4">
                       <p className="text-label mb-2">Win Rate</p>
-                      <p className="text-lg font-semibold text-foreground">{formatPercentageDisplay(performance?.winRate ?? 0)}</p>
+                      <p className="text-lg font-semibold text-foreground">{formatPercentageDisplay(primaryPerformance?.winRate ?? 0)}</p>
                     </div>
                   </div>
 

@@ -6,7 +6,7 @@ import { DataBadge } from "@/components/DataBadge";
 import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
 import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
-import { formatCurrencyDisplay, formatNumberDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
+import { formatMoneyDisplay, formatNumberDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
 import type { Trade } from "@/types";
 
 type DrawerStat = {
@@ -22,6 +22,7 @@ export function BreakdownDrawer({
   stats,
   trades,
   loading,
+  currency,
   onClose,
   onTradeClick,
   onViewAllTrades,
@@ -32,6 +33,7 @@ export function BreakdownDrawer({
   stats: DrawerStat[];
   trades: Trade[];
   loading: boolean;
+  currency?: string | null;
   onClose: () => void;
   onTradeClick: (tradeId: string) => void;
   onViewAllTrades: () => void;
@@ -124,7 +126,7 @@ export function BreakdownDrawer({
                               {trade.emotion ? <TagChip label={trade.emotion} kind="emotion" /> : null}
                             </div>
                           </div>
-                          <ProfitDisplay value={trade.profit} />
+                          <ProfitDisplay value={trade.profit} currency={trade.accountCurrency ?? currency} />
                         </div>
                       </button>
                     ))}
@@ -146,7 +148,7 @@ export function BreakdownDrawer({
   );
 }
 
-export function buildBreakdownDrawerStats(trades: Trade[]): DrawerStat[] {
+export function buildBreakdownDrawerStats(trades: Trade[], currency?: string | null): DrawerStat[] {
   const totalTrades = trades.length;
   const totalProfit = trades.reduce((sum, trade) => sum + trade.profit, 0);
   const wins = trades.filter((trade) => trade.result === "Win").length;
@@ -154,9 +156,12 @@ export function buildBreakdownDrawerStats(trades: Trade[]): DrawerStat[] {
   const worstTrade = trades.reduce<Trade | null>((worst, trade) => (worst === null || trade.profit < worst.profit ? trade : worst), null);
 
   return [
-    { label: "Net PnL", value: formatCurrencyDisplay(totalProfit), tone: totalProfit > 0 ? "success" : totalProfit < 0 ? "danger" : "default" },
+    { label: "Net PnL", value: formatMoneyDisplay(totalProfit, { currency, fallback: "--" }), tone: totalProfit > 0 ? "success" : totalProfit < 0 ? "danger" : "default" },
     { label: "Win Rate", value: totalTrades > 0 ? formatPercentageDisplay((wins / totalTrades) * 100) : "0.0%" },
     { label: "Trades", value: formatNumberDisplay(totalTrades) },
-    { label: "Best / Worst", value: `${formatCurrencyDisplay(bestTrade?.profit ?? 0)} / ${formatCurrencyDisplay(worstTrade?.profit ?? 0)}` },
+    {
+      label: "Best / Worst",
+      value: `${formatMoneyDisplay(bestTrade?.profit ?? 0, { currency, fallback: "--" })} / ${formatMoneyDisplay(worstTrade?.profit ?? 0, { currency, fallback: "--" })}`,
+    },
   ];
 }

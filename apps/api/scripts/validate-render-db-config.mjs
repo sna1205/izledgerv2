@@ -4,7 +4,8 @@ function parseConnectionUrl(value) {
   }
 
   try {
-    return new URL(value);
+    const parsed = new URL(value);
+    return ["postgres:", "postgresql:"].includes(parsed.protocol) ? parsed : null;
   } catch {
     return null;
   }
@@ -100,3 +101,15 @@ if (isNeonPooler(databaseUrl) && !process.env.DIRECT_URL) {
     ].join("\n"),
   );
 }
+
+process.stdout.write(
+  [
+    "Render database configuration looks valid.",
+    "- DATABASE_URL is present and uses a PostgreSQL connection string",
+    `- DATABASE_URL sslmode=require is ${hasRequiredSsl(databaseUrl) ? "set" : "missing"}`,
+    directUrl
+      ? "- DIRECT_URL is present and uses a PostgreSQL connection string"
+      : "- DIRECT_URL is not set; prisma migrate deploy will use DATABASE_URL",
+  ].join("\n"),
+);
+process.stdout.write("\n");

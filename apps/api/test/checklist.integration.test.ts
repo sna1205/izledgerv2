@@ -36,7 +36,7 @@ function buildTradePayload(accountId: string, date: string, checklistResponses: 
     setupId,
     notes: "Checklist integration test trade",
     checklistResponses,
-    checklistScopeMode: "exact",
+    checklistScopeMode: "applicable",
   };
 }
 
@@ -86,6 +86,37 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
     assert.equal(createRequiredRuleResponse.statusCode, 201);
     const requiredRuleId = createRequiredRuleResponse.json().rule.id as string;
 
+    const createAccountRuleResponse = await app.inject({
+      method: "POST",
+      url: "/checklist-rules",
+      headers: { cookie: sessionCookie },
+      payload: {
+        title: "Risk model matches this account",
+        description: "Sizing confirmed against the active account constraints.",
+        isRequired: true,
+        isActive: true,
+        accountId: account.id,
+      },
+    });
+
+    assert.equal(createAccountRuleResponse.statusCode, 201);
+    const accountRuleId = createAccountRuleResponse.json().rule.id as string;
+
+    const createGlobalRuleResponse = await app.inject({
+      method: "POST",
+      url: "/checklist-rules",
+      headers: { cookie: sessionCookie },
+      payload: {
+        title: "Journal intent is written down",
+        description: "Reason for taking the trade is documented before entry.",
+        isRequired: true,
+        isActive: true,
+      },
+    });
+
+    assert.equal(createGlobalRuleResponse.statusCode, 201);
+    const globalRuleId = createGlobalRuleResponse.json().rule.id as string;
+
     const createOptionalRuleResponse = await app.inject({
       method: "POST",
       url: "/checklist-rules",
@@ -96,11 +127,29 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
         isRequired: false,
         isActive: true,
         setupId,
+        accountId: account.id,
       },
     });
 
     assert.equal(createOptionalRuleResponse.statusCode, 201);
     const optionalRuleId = createOptionalRuleResponse.json().rule.id as string;
+
+    const applicableRulesResponse = await app.inject({
+      method: "GET",
+      url: `/checklist-rules?activeOnly=true&accountId=${account.id}&setupId=${setupId}&scopeMode=applicable`,
+      headers: { cookie: sessionCookie },
+    });
+
+    assert.equal(applicableRulesResponse.statusCode, 200);
+    assert.deepEqual(
+      (applicableRulesResponse.json().items as Array<{ title: string }>).map((rule) => rule.title),
+      [
+        "Confirmed higher timeframe bias",
+        "Risk model matches this account",
+        "Journal intent is written down",
+        "Captured chart markup",
+      ],
+    );
 
     const setupsResponse = await app.inject({
       method: "GET",
@@ -129,6 +178,8 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
       url: "/trades",
       headers: { cookie: sessionCookie },
       payload: buildTradePayload(account.id, "2026-03-20", [
+        { checklistRuleId: globalRuleId, checked: true },
+        { checklistRuleId: accountRuleId, checked: true },
         { checklistRuleId: requiredRuleId, checked: false },
         { checklistRuleId: optionalRuleId, checked: true },
       ], setupId),
@@ -146,12 +197,16 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
       },
     });
 
-    assert.equal(softSnapshots.length, 2);
+    assert.equal(softSnapshots.length, 4);
     assert.equal(softSnapshots[0]?.ruleTitleSnapshot, "Confirmed higher timeframe bias");
-    assert.equal(softSnapshots[0]?.isRequiredSnapshot, true);
     assert.equal(softSnapshots[0]?.checked, false);
-    assert.equal(softSnapshots[1]?.ruleTitleSnapshot, "Captured chart markup");
+    assert.equal(softSnapshots[1]?.ruleTitleSnapshot, "Risk model matches this account");
+    assert.equal(softSnapshots[1]?.isRequiredSnapshot, true);
     assert.equal(softSnapshots[1]?.checked, true);
+    assert.equal(softSnapshots[2]?.ruleTitleSnapshot, "Journal intent is written down");
+    assert.equal(softSnapshots[2]?.checked, true);
+    assert.equal(softSnapshots[3]?.ruleTitleSnapshot, "Captured chart markup");
+    assert.equal(softSnapshots[3]?.checked, true);
 
     const strictPreferenceResponse = await app.inject({
       method: "PATCH",
@@ -170,6 +225,8 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
       url: "/trades",
       headers: { cookie: sessionCookie },
       payload: buildTradePayload(account.id, "2026-03-21", [
+        { checklistRuleId: globalRuleId, checked: true },
+        { checklistRuleId: accountRuleId, checked: true },
         { checklistRuleId: requiredRuleId, checked: false },
         { checklistRuleId: optionalRuleId, checked: true },
       ], setupId),
@@ -183,6 +240,8 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
       url: "/trades",
       headers: { cookie: sessionCookie },
       payload: buildTradePayload(account.id, "2026-03-22", [
+        { checklistRuleId: globalRuleId, checked: true },
+        { checklistRuleId: accountRuleId, checked: true },
         { checklistRuleId: requiredRuleId, checked: true },
         { checklistRuleId: optionalRuleId, checked: false },
       ], setupId),
@@ -227,13 +286,117 @@ test("pre-trade checklist rules are enforced, snapshotted, and preserved histori
       checked: boolean;
     }>;
 
-    assert.equal(checklistResponses.length, 2);
+    assert.equal(checklistResponses.length, 4);
     assert.equal(checklistResponses[0]?.ruleTitleSnapshot, "Confirmed higher timeframe bias");
     assert.equal(checklistResponses[0]?.isRequiredSnapshot, true);
     assert.equal(checklistResponses[0]?.checked, true);
-    assert.equal(checklistResponses[1]?.ruleTitleSnapshot, "Captured chart markup");
-    assert.equal(checklistResponses[1]?.checked, false);
-    assert.equal(checklistResponses[1]?.checklistRuleId, null);
+    assert.equal(checklistResponses[1]?.ruleTitleSnapshot, "Risk model matches this account");
+    assert.equal(checklistResponses[1]?.checked, true);
+    assert.equal(checklistResponses[2]?.ruleTitleSnapshot, "Journal intent is written down");
+    assert.equal(checklistResponses[2]?.checked, true);
+    assert.equal(checklistResponses[3]?.ruleTitleSnapshot, "Captured chart markup");
+    assert.equal(checklistResponses[3]?.checked, false);
+    assert.equal(checklistResponses[3]?.checklistRuleId, null);
+  } finally {
+    await app.close();
+    await prisma.user.deleteMany({
+      where: { username },
+    });
+    await prisma.$disconnect();
+  }
+});
+
+test("setup and account deletion are blocked while checklist rules still reference their scope", async () => {
+  await prisma.$connect();
+
+  const username = `clscope${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const password = "Password123!";
+  const app = await buildApp();
+
+  try {
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { username, password },
+    });
+
+    assert.equal(registerResponse.statusCode, 201);
+    const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
+    const primaryAccount = await createAccountViaApi(app, sessionCookie);
+    const secondaryAccount = await createAccountViaApi(app, sessionCookie, {
+      name: "Rules Account",
+      isDefault: false,
+    });
+
+    const createSetupResponse = await app.inject({
+      method: "POST",
+      url: "/setups",
+      headers: { cookie: sessionCookie },
+      payload: {
+        name: "Checklist Scope Guard",
+        description: "Setup used to verify safe delete behavior.",
+      },
+    });
+
+    assert.equal(createSetupResponse.statusCode, 201);
+    const setupId = createSetupResponse.json().setup.id as string;
+
+    const createSetupRuleResponse = await app.inject({
+      method: "POST",
+      url: "/checklist-rules",
+      headers: { cookie: sessionCookie },
+      payload: {
+        title: "Setup still referenced",
+        isRequired: true,
+        isActive: true,
+        setupId,
+      },
+    });
+
+    assert.equal(createSetupRuleResponse.statusCode, 201);
+
+    const createAccountRuleResponse = await app.inject({
+      method: "POST",
+      url: "/checklist-rules",
+      headers: { cookie: sessionCookie },
+      payload: {
+        title: "Account still referenced",
+        isRequired: true,
+        isActive: true,
+        accountId: secondaryAccount.id,
+      },
+    });
+
+    assert.equal(createAccountRuleResponse.statusCode, 201);
+
+    const deleteSetupResponse = await app.inject({
+      method: "DELETE",
+      url: `/setups/${setupId}`,
+      headers: { cookie: sessionCookie },
+    });
+
+    assert.equal(deleteSetupResponse.statusCode, 409);
+    assert.equal(deleteSetupResponse.json().error.code, "SETUP_IN_USE_BY_CHECKLIST_RULES");
+
+    const deleteAccountResponse = await app.inject({
+      method: "DELETE",
+      url: `/accounts/${secondaryAccount.id}`,
+      headers: { cookie: sessionCookie },
+    });
+
+    assert.equal(deleteAccountResponse.statusCode, 409);
+    assert.equal(deleteAccountResponse.json().error.code, "ACCOUNT_IN_USE_BY_CHECKLIST_RULES");
+
+    const archivePrimaryAccountResponse = await app.inject({
+      method: "PATCH",
+      url: `/accounts/${primaryAccount.id}`,
+      headers: { cookie: sessionCookie },
+      payload: {
+        isArchived: true,
+      },
+    });
+
+    assert.equal(archivePrimaryAccountResponse.statusCode, 200);
   } finally {
     await app.close();
     await prisma.user.deleteMany({

@@ -27,9 +27,10 @@ import { listAccounts } from "@/services/api/accounts";
 import { getDashboardSummary } from "@/services/api/analytics";
 import { resolveAccountFilter, useAccountFilter } from "@/utils/account-filter";
 import {
-  formatCompactCurrencyDisplay,
-  formatCurrencyDisplay,
+  formatCompactMoneyDisplay,
+  formatCurrencyTotalsDisplay,
   formatDateDisplay,
+  formatMoneyDisplay,
   formatPercentageDisplay,
   normalizeDashboardSummaryResponse,
 } from "@/utils/analytics-rendering";
@@ -149,6 +150,19 @@ export default function Dashboard() {
   const recentTrades = dashboard.recentTrades;
   const currentEquity = equityCurve[equityCurve.length - 1]?.equity ?? 0;
   const instrumentUniverse = Array.from(new Set(recentTrades.map((trade) => trade.pair))).slice(0, 6);
+  const totalPnlValue = summary.isMixedCurrency
+    ? "Mixed"
+    : formatMoneyDisplay(summary.totalProfit ?? 0, {
+        currency: summary.displayCurrency,
+        fallback: "--",
+      });
+  const totalPnlSubtext = summary.isMixedCurrency
+    ? formatCurrencyTotalsDisplay(summary.currencyTotals, "Select an account to unlock one-currency PnL.")
+    : summary.displayCurrency ?? undefined;
+  const equityLabel = formatMoneyDisplay(currentEquity, {
+    currency: summary.displayCurrency,
+    fallback: "--",
+  });
 
   return (
     <PageShell size="wide">
@@ -173,8 +187,9 @@ export default function Dashboard() {
         />
         <StatCard
           label="Total PnL"
-          value={formatCurrencyDisplay(summary.totalProfit)}
-          tone={summary.totalProfit > 0 ? "positive" : summary.totalProfit < 0 ? "negative" : "default"}
+          value={totalPnlValue}
+          subtext={totalPnlSubtext}
+          tone={!summary.isMixedCurrency && (summary.totalProfit ?? 0) > 0 ? "positive" : !summary.isMixedCurrency && (summary.totalProfit ?? 0) < 0 ? "negative" : "default"}
           icon={Wallet}
         />
         <StatCard
@@ -192,17 +207,23 @@ export default function Dashboard() {
       <SectionCard>
         <SectionHeader
           title="Equity"
-          action={equityCurve.length > 0 ? (
+          action={!summary.isMixedCurrency && equityCurve.length > 0 ? (
             <div className="surface-muted px-4 py-3 text-right">
               <p className="text-label mb-2">Equity</p>
               <p className={cn("font-mono-price numeric-safe max-w-full text-2xl font-semibold", currentEquity > 0 ? "text-success" : currentEquity < 0 ? "text-danger" : "text-foreground")}>
-                {formatCurrencyDisplay(currentEquity)}
+                {equityLabel}
               </p>
             </div>
           ) : null}
         />
 
-        {equityCurve.length === 0 ? (
+        {summary.isMixedCurrency ? (
+          <div className="mt-6 rounded-3xl border border-border/70 bg-background/75 px-5 py-8 text-sm text-muted-foreground">
+            Equity is hidden for this view because it includes multiple historical trade currencies.
+            {" "}
+            {formatCurrencyTotalsDisplay(summary.currencyTotals, "Select a single account to restore the equity curve.")}
+          </div>
+        ) : equityCurve.length === 0 ? (
           <div className="mt-6">
             <EmptyState
               icon={Activity}
@@ -254,7 +275,7 @@ export default function Dashboard() {
                   fontSize={12}
                   width={56}
                   domain={[equityRange.min, equityRange.max]}
-                  tickFormatter={(value) => formatCompactCurrencyDisplay(value)}
+                  tickFormatter={(value) => formatCompactMoneyDisplay(value, summary.displayCurrency)}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
                 <ChartTooltip
@@ -267,13 +288,16 @@ export default function Dashboard() {
                         <div className="flex min-w-[11rem] items-center justify-between gap-4">
                           <div className="grid gap-1">
                             <span className="text-muted-foreground">Equity</span>
-                            <span className="text-xs text-muted-foreground">{item.payload.pair}</span>
-                          </div>
-                          <span className="font-mono-price font-medium text-foreground">
-                            {formatCurrencyDisplay(value)}
-                          </span>
+                          <span className="text-xs text-muted-foreground">{item.payload.pair}</span>
                         </div>
-                      )}
+                        <span className="font-mono-price font-medium text-foreground">
+                            {formatMoneyDisplay(value, {
+                              currency: summary.displayCurrency,
+                              fallback: "--",
+                            })}
+                        </span>
+                      </div>
+                    )}
                     />
                   )}
                 />
@@ -347,6 +371,7 @@ export default function Dashboard() {
                         <DataBadge tone={trade.direction === "Buy" ? "success" : "danger"}>
                           {trade.direction ?? "Unknown"}
                         </DataBadge>
+                        {trade.accountCurrency ? <DataBadge tone="neutral">{trade.accountCurrency}</DataBadge> : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -356,7 +381,7 @@ export default function Dashboard() {
                       {trade.result ? <ResultBadge result={trade.result} /> : <span className="text-sm text-muted-foreground">Pending</span>}
                     </TableCell>
                     <TableCell className="text-right">
-                      <ProfitDisplay value={trade.profit} />
+                      <ProfitDisplay value={trade.profit} currency={trade.accountCurrency} />
                     </TableCell>
                   </TableRow>
                 ))}

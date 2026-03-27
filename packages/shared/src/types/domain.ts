@@ -8,6 +8,7 @@ export type ReviewRuleStatus = "Yes" | "Partially" | "No";
 export type ReviewRiskStatus = "Yes" | "Partially" | "No";
 export type ReviewEmotion = "Calm" | "Confident" | "Hesitant" | "FOMO" | "Revenge" | "Frustrated";
 export type ChecklistEnforcementMode = "soft" | "strict";
+export type ChecklistRuleScopeType = "global" | "account" | "setup" | "account_setup";
 export type EconomicEventImpact = "holiday" | "low" | "medium" | "high";
 export type EconomicEventStatus = "upcoming" | "pending_release" | "released" | "revised" | "passed" | "holiday";
 export type EconomicEventCategory =
@@ -53,6 +54,7 @@ export interface ChecklistRule {
   isRequired: boolean;
   isActive: boolean;
   sortOrder: number;
+  scopeType: ChecklistRuleScopeType;
   setupId: string | null;
   accountId: string | null;
   createdAt: string;
@@ -79,6 +81,11 @@ export interface TradeChecklistResponse {
   sortOrderSnapshot: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CurrencyProfitTotal {
+  currency: string;
+  totalProfit: number;
 }
 
 export interface ReviewTradeSnapshot {
@@ -158,10 +165,26 @@ export interface Trade {
   date: string;
   pair: string;
   accountId: string;
+  clientRequestId?: string | null;
+  accountCurrency?: string | null;
   direction: Direction;
   entry: number;
   stopLoss: number;
   takeProfit: number;
+  quantity?: number | null;
+  lotSize?: number | null;
+  exitPrice?: number | null;
+  fees?: number | null;
+  riskAmount?: number | null;
+  riskPercent?: number | null;
+  grossPnl?: number | null;
+  netPnl?: number | null;
+  pnlCurrency?: string | null;
+  fxRateSnapshot?: number | null;
+  fxRateSource?: string | null;
+  fxRateTimestamp?: string | null;
+  plannedRR?: number | null;
+  realizedR?: number | null;
   profit: number;
   result: Result;
   setupId: string | null;
@@ -170,6 +193,8 @@ export interface Trade {
   session: TradeSession | null;
   emotion: TradeEmotion | null;
   notes: string;
+  openedAt?: string | null;
+  closedAt?: string | null;
   screenshots: string[];
   createdAt: string;
   updatedAt: string;
@@ -213,6 +238,7 @@ export interface DashboardRecentTrade {
   setupColor?: string | null;
   accountId: string;
   accountName: string;
+  accountCurrency?: string | null;
   createdAt: string;
 }
 
@@ -229,7 +255,10 @@ export interface DashboardSummaryResponse {
     todayTrades: number;
     totalTrades: number;
     winRate: number;
-    totalProfit: number;
+    totalProfit: number | null;
+    displayCurrency: string | null;
+    isMixedCurrency: boolean;
+    currencyTotals: CurrencyProfitTotal[];
   };
   recentTrades: DashboardRecentTrade[];
   equityCurve: DashboardEquityPoint[];
@@ -250,11 +279,17 @@ export interface AnalyticsBreakdownsResponse {
     totalTrades: number;
     wins: number;
     losses: number;
-    totalProfit: number;
-    totalGross: number;
-    totalLoss: number;
+    breakevens: number;
+    totalProfit: number | null;
+    totalGross: number | null;
+    totalLoss: number | null;
     winRate: number;
     avgRR: number;
+    avgPlannedRR: number;
+    avgRealizedR: number | null;
+    displayCurrency: string | null;
+    isMixedCurrency: boolean;
+    currencyTotals: CurrencyProfitTotal[];
   };
   winLoss: Array<{
     key: string;
@@ -266,7 +301,7 @@ export interface AnalyticsBreakdownsResponse {
   sessionPerformance: AnalyticsBreakdownRow[];
   emotionPerformance: AnalyticsBreakdownRow[];
   pairPerformance: AnalyticsBreakdownRow[];
-  accountPerformance: Array<AnalyticsBreakdownRow & { accountId: string }>;
+  accountPerformance: Array<AnalyticsBreakdownRow & { accountId: string; currency: string | null }>;
 }
 
 export interface AnalyticsCalendarDay {
@@ -294,8 +329,11 @@ export interface AnalyticsCalendarResponse {
   month: string;
   summary: {
     totalTrades: number;
-    totalProfit: number;
+    totalProfit: number | null;
     winRate: number;
+    displayCurrency: string | null;
+    isMixedCurrency: boolean;
+    currencyTotals: CurrencyProfitTotal[];
   };
   days: AnalyticsCalendarDay[];
   weeks: AnalyticsCalendarWeek[];
