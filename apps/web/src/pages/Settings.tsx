@@ -3,7 +3,7 @@ import { LogOut, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -64,13 +64,11 @@ export default function Settings() {
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Manage your username, password, and session.</p>
         </div>
 
         <Card className="rounded-2xl">
           <CardHeader>
             <CardTitle className="text-lg">Profile</CardTitle>
-            <CardDescription>Minimal identity settings for the current trading session.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-xl border bg-background/60 px-4 py-4">
@@ -83,7 +81,6 @@ export default function Settings() {
         <Card className="rounded-2xl">
           <CardHeader>
             <CardTitle className="text-lg">Appearance</CardTitle>
-            <CardDescription>Switch between light, dark, and system themes.</CardDescription>
           </CardHeader>
           <CardContent>
             <ThemeToggle showLabel className="w-full justify-between sm:w-auto" />
@@ -93,7 +90,6 @@ export default function Settings() {
         <Card className="rounded-2xl">
           <CardHeader>
             <CardTitle className="text-lg">Change Password</CardTitle>
-            <CardDescription>Update the password you use to access IZLedger.</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleChangePassword}>
@@ -133,12 +129,11 @@ export default function Settings() {
         <Card className="rounded-2xl">
           <CardHeader>
             <CardTitle className="text-lg">Session</CardTitle>
-            <CardDescription>Log out of your current account on this device.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={handleLogout} disabled={isLoggingOut}>
               <LogOut className="h-4 w-4" />
-              {isLoggingOut ? "Logging out..." : "Logout"}
+              {isLoggingOut ? "Logging out..." : "Log out"}
             </Button>
           </CardContent>
         </Card>

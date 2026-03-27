@@ -101,7 +101,7 @@ export function BreakdownDrawer({
                   </div>
                 ) : trades.length === 0 ? (
                   <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-10 text-center text-sm text-muted-foreground dark:bg-white/[0.03]">
-                    No trades
+                    No trades.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -136,7 +136,7 @@ export function BreakdownDrawer({
 
               <div className="border-t border-border/60 px-5 py-5 sm:px-6">
                 <Button className="w-full justify-between" onClick={onViewAllTrades}>
-                  Open trades
+                  Trades
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>

@@ -348,8 +348,9 @@ describe("TradeFormDialog", () => {
     renderWithProviders(<Harness />);
 
     expect(screen.getByText("Pre-Trade")).toBeInTheDocument();
-    expect(screen.getByText("No account checklist items yet.")).toBeInTheDocument();
-    expect(screen.getByText("Global and account-specific checklist rules will appear here. Setup-specific items join once you pick a setup.")).toBeInTheDocument();
+    expect(screen.getByText("No active items for this account.")).toBeInTheDocument();
+    expect(screen.getByText("No account items")).toBeInTheDocument();
+    expect(screen.getByText("Active global and account rules appear here. Setup rules appear after you choose a setup.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage in Setups" })).not.toBeInTheDocument();
   });
 
@@ -358,9 +359,9 @@ describe("TradeFormDialog", () => {
 
     fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-2" } });
 
-    expect(screen.getByText("This account and setup do not have any active checklist items right now.")).toBeInTheDocument();
-    expect(screen.getByText("No pre-trade items for Liquidity yet.")).toBeInTheDocument();
-    expect(screen.getByText("Global, account, and setup-specific checklist rules will appear here when they are active.")).toBeInTheDocument();
+    expect(screen.getByText("No active items for this account and setup.")).toBeInTheDocument();
+    expect(screen.getByText("No items for Liquidity")).toBeInTheDocument();
+    expect(screen.getByText("Active global, account, and setup rules appear here.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage in Setups" })).not.toBeInTheDocument();
   });
 
@@ -691,8 +692,67 @@ describe("TradeFormDialog", () => {
 
     renderWithProviders(<Harness editTrade={archivedTrade} />);
 
-    expect(screen.getByText("Archived accounts stay available here only so historical trades can still be edited safely.")).toBeInTheDocument();
+    expect(screen.getByText("Archived account kept for historical edits.")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Legacy Account (archived)" })).toBeInTheDocument();
+  });
+
+  it("shows and submits pre-trade selections when editing a trade", async () => {
+    const saveImpl = vi.fn();
+    const tradeWithChecklist: Trade = {
+      id: "trade-edit-checklist",
+      date: "2026-03-21",
+      pair: "XAUUSD",
+      accountId: "account-1",
+      direction: "Buy",
+      entry: 3000,
+      stopLoss: 2990,
+      takeProfit: 3020,
+      profit: 100,
+      result: "Win",
+      setupId: "setup-1",
+      setup: "Breakout",
+      session: "London",
+      emotion: "Calm",
+      notes: "",
+      screenshots: [],
+      createdAt: "2026-03-21T10:00:00.000Z",
+      updatedAt: "2026-03-21T10:00:00.000Z",
+      checklistResponses: [
+        {
+          id: "trade-check-1",
+          tradeId: "trade-edit-checklist",
+          checklistRuleId: "rule-1",
+          ruleTitleSnapshot: "Wait for confirmation candle",
+          ruleDescriptionSnapshot: "Do not enter before the candle close confirms the move.",
+          isRequiredSnapshot: true,
+          checked: true,
+          note: null,
+          sortOrderSnapshot: 0,
+          createdAt: "2026-03-21T10:00:00.000Z",
+          updatedAt: "2026-03-21T10:00:00.000Z",
+        },
+      ],
+    };
+
+    renderWithProviders(<Harness editTrade={tradeWithChecklist} saveImpl={saveImpl} />);
+
+    expect(await screen.findByText("Pre-Trade")).toBeInTheDocument();
+    expect(screen.getByText("Wait for confirmation candle")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update Trade" }));
+
+    await waitFor(() => {
+      expect(saveImpl).toHaveBeenCalledWith(expect.objectContaining({
+        checklistResponses: [
+          {
+            checklistRuleId: "rule-1",
+            checked: true,
+          },
+        ],
+        checklistScopeMode: "applicable",
+      }));
+    });
   });
 
   it("uploads queued screenshots after saving a new trade", async () => {

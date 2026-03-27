@@ -149,7 +149,7 @@ function EconomicCalendarEventDetailLivePage() {
   if (detailQuery.isLoading && !detailData) {
     return (
       <PageShell size="wide">
-        <div className="text-sm text-muted-foreground">Loading event details...</div>
+        <div className="text-sm text-muted-foreground">Loading event...</div>
       </PageShell>
     );
   }
@@ -258,15 +258,15 @@ function EconomicCalendarEventDetailLivePage() {
               ) : null}
             </DetailSection>
 
-            <DetailSection title="Trader Breakdown">
+            <DetailSection title="Trading Context">
               <div className="grid gap-3 lg:grid-cols-2">
-                <ContentMetric title="What is this">
+                <ContentMetric title="Overview">
                   <p className="text-muted-foreground">{eventContent.description}</p>
                 </ContentMetric>
                 <ContentMetric title="Why it matters">
                   <p className="text-muted-foreground">{eventContent.whyItMatters}</p>
                 </ContentMetric>
-                <ContentMetric title="How it impacts">
+                <ContentMetric title="Impact">
                   <div className="space-y-2">
                     <p className="text-muted-foreground">
                       <span className="font-medium text-foreground">Bullish:</span> {eventContent.impact.bullish}
@@ -279,7 +279,7 @@ function EconomicCalendarEventDetailLivePage() {
                 <ContentMetric title="Market behavior">
                   <p className="text-muted-foreground">{eventContent.behavior}</p>
                 </ContentMetric>
-                <ContentMetric title="Affected instruments">
+                <ContentMetric title="Instruments">
                   <div className="flex flex-wrap gap-2">
                     {eventContent.instruments.map((item) => (
                       <DataBadge key={item} tone="warning">{item}</DataBadge>
@@ -290,7 +290,7 @@ function EconomicCalendarEventDetailLivePage() {
             </DetailSection>
 
             {sameTimeEvents.length > 0 ? (
-              <DetailSection title="Same Time Releases">
+              <DetailSection title="Same time">
                 <div className="space-y-1">
                   {sameTimeEvents.map((item) => (
                     <Link
@@ -326,12 +326,12 @@ function EconomicCalendarEventDetailLivePage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No watched instruments are currently matched to this release.</p>
+                <p className="text-sm text-muted-foreground">No watched instruments matched.</p>
               )}
             </DetailSection>
 
             {sameSessionEvents.length > 0 ? (
-              <DetailSection title="Same Session Events">
+              <DetailSection title="Same session">
                 <div className="space-y-1">
                   {sameSessionEvents.map((item) => (
                     <Link
@@ -370,7 +370,7 @@ function EconomicCalendarEventDetailLivePage() {
                   </Button>
                 ) : null}
                 <Button variant="ghost" asChild className="justify-start">
-                  <Link to={backPath}>Return to calendar</Link>
+                  <Link to={backPath}>Back to calendar</Link>
                 </Button>
               </div>
             </DetailSection>

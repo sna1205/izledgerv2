@@ -6,112 +6,112 @@ import { useAuth } from "@/features/auth/auth-context";
 import { cn } from "@/utils/class-names";
 
 const heroStats = [
-  { value: "Structured", label: "trade logging built for review" },
-  { value: "Focused", label: "analytics designed for behavior" },
-  { value: "Clear", label: "proof of progress over hype" },
+  { value: "Structured", label: "trade logging" },
+  { value: "Focused", label: "review flow" },
+  { value: "Clear", label: "analytics" },
 ];
 
 const problemPoints = [
-  "Trades get logged, but the lesson behind them gets lost.",
-  "Most journals track numbers without improving decision making.",
-  "Mistakes repeat because review systems are too messy or too shallow.",
+  "Trades get logged, but the lesson gets lost.",
+  "Most journals track numbers without improving decisions.",
+  "Mistakes repeat when review is messy or shallow.",
 ];
 
 const solutionPoints = [
-  "Log trades with setups, session context, emotions, and screenshots.",
-  "Review execution quality and capture the lesson while the trade is still fresh.",
-  "See performance by account, session, setup, emotion, and calendar rhythm.",
+  "Log trades with setup, session, emotion, and screenshots.",
+  "Review execution while the trade is still fresh.",
+  "Track performance by account, setup, session, and time.",
 ];
 
 const features = [
   {
     icon: ClipboardList,
     title: "Trade Logging",
-    description: "Capture pair, direction, setup, session, emotion, screenshots, and result in one clean workflow.",
+    description: "Log the trade and its context in one pass.",
   },
   {
     icon: Sparkles,
-    title: "Trade Detail Review",
-    description: "Turn every execution into a review workspace with notes, screenshots, ratings, and lessons.",
+    title: "Trade Review",
+    description: "Turn each trade into a clear review record.",
   },
   {
     icon: BarChart3,
-    title: "Analytics Dashboard",
-    description: "See win rate, emotion performance, session edges, and setup quality at a glance.",
+    title: "Analytics",
+    description: "See what is working and what is not.",
   },
   {
     icon: CalendarDays,
-    title: "Calendar Review",
-    description: "Track daily PnL, streaks, and weekly rhythm in a journal-first trading calendar.",
+    title: "Calendar",
+    description: "Spot daily and weekly patterns fast.",
   },
   {
     icon: Tags,
-    title: "Setup Tracking",
-    description: "Measure how each trading setup actually performs across conditions and time.",
+    title: "Setups",
+    description: "Track each playbook over time.",
   },
   {
     icon: Landmark,
-    title: "Account Tracking",
-    description: "Separate funded, personal, challenge, and crypto accounts without losing clarity.",
+    title: "Accounts",
+    description: "Keep accounts separate without losing context.",
   },
 ];
 
 const audiences = [
   {
     title: "Day Traders",
-    description: "Stay sharp on execution, review mistakes faster, and keep your process clean under pressure.",
+    description: "Keep execution sharp under pressure.",
   },
   {
     title: "Prop Firm Traders",
-    description: "Track consistency, discipline, and account-level performance with structure that supports rules.",
+    description: "Track consistency with rule-aware structure.",
   },
   {
-    title: "Retail Traders Building Discipline",
-    description: "Replace scattered notes with a system that makes reflection part of the trading routine.",
+    title: "Retail Traders",
+    description: "Replace scattered notes with a cleaner routine.",
   },
   {
-    title: "Review-Driven Performers",
-    description: "Use every trade as feedback, not just another number in a spreadsheet.",
+    title: "Review-Driven Traders",
+    description: "Turn each trade into feedback.",
   },
 ];
 
 const showcaseItems = [
   {
     title: "See the full picture",
-    heading: "A dashboard that turns scattered execution into one clear performance view.",
-    body: "Track your session activity, equity curve, and recent trades without digging through spreadsheets or screenshots. IZLedger gives serious traders an overview that feels operational, not decorative.",
+    heading: "A dashboard that turns execution into one clear view.",
+    body: "Track session activity, equity, and recent trades without digging.",
     image: "/img/Dashboard.png",
     darkImage: "/img/Dashboard-dark.png",
     imageAlt: "IZLedger dashboard overview",
   },
   {
     title: "Log trades without friction",
-    heading: "A premium journal ledger built to scan context, result, and review status in seconds.",
-    body: "Trade logs are organized like a real execution dashboard. Pair, session, setup, emotion, review status, and position context stay visible so traders can move fast without losing detail.",
+    heading: "A ledger built to scan in seconds.",
+    body: "Context, result, and review status stay visible without clutter.",
     image: "/img/Tradelog1.png",
     darkImage: "/img/Tradelog1-dark.png",
     imageAlt: "IZLedger trade log ledger",
   },
   {
     title: "Capture your workflow",
-    heading: "From ledger to screenbook, every trade stays reviewable and visually grounded.",
-    body: "Switch into a screenshot-first view when you want chart context and pattern recognition, not just rows. This makes journaling easier for traders who review visually.",
+    heading: "A screenbook for chart-first review.",
+    body: "Switch from rows to screenshots when visual context matters.",
     image: "/img/Tradelog2.png",
     darkImage: "/img/Tradelog2-dark.png",
     imageAlt: "IZLedger trade screenbook",
   },
   {
     title: "Review trades with context",
-    heading: "Trade detail pages built like execution reports, not flat data sheets.",
-    body: "Bring screenshots, notes, review scores, emotional context, and structured reflection into one premium workspace that helps lessons stick.",
+    heading: "Trade detail built like an execution report.",
+    body: "Screenshots, notes, and review stay in one place.",
     image: "/img/Tradedetail.png",
     darkImage: "/img/Tradedetail-dark.png",
     imageAlt: "IZLedger trade detail review page",
   },
   {
     title: "Track progress over time",
-    heading: "Calendar-based feedback that makes consistency visible day by day.",
-    body: "See profitable days, losing days, inactivity, and weekly rhythm in one glance. The calendar makes behavior patterns obvious before they become expensive.",
+    heading: "Calendar feedback that makes consistency visible.",
+    body: "See profitable days, losing days, and rhythm at a glance.",
     image: "/img/Calendar.png",
     darkImage: "/img/Calendar-dark.png",
     imageAlt: "IZLedger analytics calendar",
@@ -126,14 +126,14 @@ function SectionHeading({
 }: {
   kicker: string;
   title: string;
-  description: string;
+  description?: string;
   center?: boolean;
 }) {
   return (
-    <div className={cn("max-w-3xl space-y-4", center && "mx-auto text-center")}>
+    <div className={cn("max-w-3xl space-y-3", center && "mx-auto text-center")}>
       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary/80">{kicker}</p>
       <h2 className="text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-4xl">{title}</h2>
-      <p className="text-base leading-7 text-muted-foreground sm:text-lg">{description}</p>
+      {description ? <p className="text-base leading-7 text-muted-foreground sm:text-lg">{description}</p> : null}
     </div>
   );
 }
@@ -183,7 +183,6 @@ export default function Landing() {
             </div>
             <div>
               <p className="text-sm font-semibold tracking-tight text-foreground">IZLedger</p>
-              <p className="text-xs text-muted-foreground">Trading journal</p>
             </div>
           </Link>
 
@@ -217,7 +216,7 @@ export default function Landing() {
                 Trade with structure. Review with clarity. Improve with proof.
               </h1>
               <p className="mt-6 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">
-                IZLedger helps serious traders log trades, review mistakes, track performance, and build consistency with a cleaner workflow built around execution quality, not noise.
+                IZLedger helps traders log, review, and improve with a cleaner workflow built around execution quality.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -267,9 +266,9 @@ export default function Landing() {
         <section className="border-y border-border/60 bg-card/45 px-4 py-14 sm:px-6 lg:px-8">
           <div className="mx-auto grid w-full max-w-[1280px] gap-4 md:grid-cols-3">
             {[
-              { title: "Built for serious execution", body: "Structured journaling designed for traders who care about process, not hype." },
-              { title: "Review every mistake", body: "Capture discipline, emotional state, notes, screenshots, and the lesson in one place." },
-              { title: "Measure consistency clearly", body: "See the patterns behind your results across sessions, setups, accounts, and time." },
+              { title: "Built for execution", body: "Structured journaling for traders who care about process." },
+              { title: "Review faster", body: "Keep notes, screenshots, and lessons together." },
+              { title: "Measure clearly", body: "See patterns across setups, sessions, accounts, and time." },
             ].map((item) => (
               <div key={item.title} className="rounded-2xl border border-border/60 bg-background/70 p-5">
                 <p className="text-lg font-semibold tracking-tight text-foreground">{item.title}</p>
@@ -284,8 +283,8 @@ export default function Landing() {
             <div>
               <SectionHeading
                 kicker="The problem"
-                title="Most traders collect trade data without creating better behavior."
-                description="Spreadsheets, screenshots, and scattered notes create activity, but they rarely create improvement. Traders keep repeating mistakes because the review loop is weak."
+                title="Most traders collect data without changing behavior."
+                description="Spreadsheets and scattered notes create activity, not a strong review loop."
               />
             </div>
             <div className="space-y-4">
@@ -302,8 +301,8 @@ export default function Landing() {
           <div className="mx-auto grid w-full max-w-[1280px] gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
             <SectionHeading
               kicker="The solution"
-              title="IZLedger gives traders a review system built for structure, reflection, and measurable improvement."
-              description="Every part of the product is designed to connect execution data with reflection, so the journal becomes a feedback loop that actually changes how you trade."
+              title="IZLedger turns trade history into a review loop."
+              description="Execution data and reflection stay connected, so the journal can change behavior."
             />
 
             <div className="space-y-4">
@@ -321,8 +320,7 @@ export default function Landing() {
           <div className="mx-auto w-full max-w-[1280px]">
             <SectionHeading
               kicker="Core capabilities"
-              title="A premium workflow for logging, reviewing, and improving."
-              description="IZLedger gives traders the structure to move from random trade notes to a serious performance system."
+              title="A cleaner workflow for logging, reviewing, and improving."
               center
             />
 
@@ -348,8 +346,7 @@ export default function Landing() {
           <div className="mx-auto w-full max-w-[1280px]">
             <SectionHeading
               kicker="Product preview"
-              title="Built like a premium trading product, not a generic journal."
-              description="Every screen is designed to reduce friction, raise clarity, and make reflection part of the process."
+              title="Built like a trading product, not a generic journal."
               center
             />
 
@@ -367,7 +364,7 @@ export default function Landing() {
                     <h3 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-foreground">{item.heading}</h3>
                     <p className="mt-4 max-w-xl text-base leading-8 text-muted-foreground">{item.body}</p>
                     <div className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-foreground">
-                      Explore the workflow
+                      Explore
                       <ChevronRight className="h-4 w-4 text-primary" />
                     </div>
                   </div>
@@ -386,16 +383,15 @@ export default function Landing() {
           <div className="mx-auto w-full max-w-[1280px]">
             <SectionHeading
               kicker="How it works"
-              title="A simple loop that turns every trade into useful feedback."
-              description="IZLedger keeps the workflow minimal enough to use every day, but structured enough to actually improve performance."
+              title="A simple loop that turns every trade into feedback."
               center
             />
 
             <div className="mt-12 grid gap-4 md:grid-cols-3">
               {[
-                { step: "01", title: "Log your trades", body: "Capture execution details, screenshots, setups, account, and emotional context immediately." },
-                { step: "02", title: "Review your decisions", body: "Score the trade, document mistakes, and record the lesson while it still feels real." },
-                { step: "03", title: "Improve your consistency", body: "Use dashboards, analytics, and calendar rhythm to spot patterns that matter." },
+                { step: "01", title: "Log trades", body: "Capture the execution and context." },
+                { step: "02", title: "Review decisions", body: "Record mistakes, lessons, and next steps." },
+                { step: "03", title: "Improve consistency", body: "Use analytics to spot the patterns that matter." },
               ].map((item) => (
                 <div key={item.step} className="rounded-3xl border border-border/60 bg-background/70 p-6">
                   <p className="text-sm font-semibold tracking-[0.24em] text-primary">{item.step}</p>
@@ -412,7 +408,6 @@ export default function Landing() {
             <SectionHeading
               kicker="Who it's for"
               title="Designed for traders who want structure, not noise."
-              description="Whether you are trading a funded account, refining an edge, or building discipline from scratch, IZLedger is built to support process."
               center
             />
 
@@ -437,7 +432,7 @@ export default function Landing() {
                     Turn every trade into useful feedback.
                   </h2>
                   <p className="mt-4 max-w-2xl text-base leading-8 text-muted-foreground">
-                    Stop guessing. Start reviewing with structure, context, and proof. IZLedger is built for traders who want measurable improvement in execution and consistency.
+                    Review with structure, context, and proof.
                   </p>
                 </div>
 
@@ -464,11 +459,10 @@ export default function Landing() {
               </div>
               <div>
                 <p className="text-sm font-semibold tracking-tight text-foreground">IZLedger</p>
-                <p className="text-xs text-muted-foreground">Trading journal platform</p>
               </div>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-7 text-muted-foreground">
-              Premium journaling, review, and performance tracking for traders who want clarity, discipline, and measurable improvement.
+              Journaling, review, and analytics for traders who want clarity and discipline.
             </p>
           </div>
 

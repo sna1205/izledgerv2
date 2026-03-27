@@ -197,8 +197,8 @@ function EconomicCalendarLivePage() {
     return getNextImportantEconomicEvent(upcomingEvents, now);
   }, [filteredEvents, now, rangeState, timeZone]);
   const emptyDescription = viewMode === "upcoming"
-    ? `No upcoming macro events matched ${formatRangeLabel(rangeState)} with the current filters.`
-    : `No macro events matched ${formatRangeLabel(rangeState)} with the current filters.`;
+    ? `No upcoming events matched ${formatRangeLabel(rangeState)}.`
+    : `No events matched ${formatRangeLabel(rangeState)}.`;
 
   useUnauthorizedSessionGuard(eventsQuery.error, recentTradesQuery.error);
 
@@ -256,7 +256,7 @@ function EconomicCalendarLivePage() {
         <div className="order-2 space-y-4 lg:order-1">
           {eventsQuery.isLoading && !eventsQuery.data ? (
             <div className="border-b border-border/35 pb-4 text-sm text-muted-foreground">
-              Loading events for the selected period...
+              Loading events...
             </div>
           ) : (
             <EconomicCalendarTimeline

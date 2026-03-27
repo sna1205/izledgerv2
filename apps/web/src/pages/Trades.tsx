@@ -315,17 +315,17 @@ export default function Trades() {
       />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <StatCard label="Trades In View" value={formatNumberDisplay(totalTrades)} icon={LayoutList} />
+        <StatCard label="In View" value={formatNumberDisplay(totalTrades)} icon={LayoutList} />
         <StatCard label="Reviewed" value={formatNumberDisplay(reviewedCount)} icon={Eye} />
         <StatCard
-          label="PnL In View"
+          label="PnL"
           value={formatCurrencyDisplay(totalPnlInView)}
           tone={totalPnlInView > 0 ? "positive" : totalPnlInView < 0 ? "negative" : "default"}
           icon={Images}
         />
       </div>
 
-      <FilterBar meta={<><span className="font-medium text-foreground">{totalTrades}</span>&nbsp;trades in view</>}>
+      <FilterBar meta={<><span className="font-medium text-foreground">{totalTrades}</span>&nbsp;in view</>}>
         <FilterField label="Account">
           <Select value={resolvedAccountFilter} onValueChange={setAccountFilter}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -390,12 +390,12 @@ export default function Trades() {
 
           <div className="mt-4 flex flex-col gap-4 sm:flex-row">
             <div className="w-full sm:w-[180px]">
-              <FilterField label="Sort By">
+              <FilterField label="Sort">
                 <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="date">Trade Date</SelectItem>
-                    <SelectItem value="createdAt">Created At</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="createdAt">Created</SelectItem>
                     <SelectItem value="profit">PnL</SelectItem>
                     <SelectItem value="pair">Pair</SelectItem>
                   </SelectContent>
@@ -421,8 +421,8 @@ export default function Trades() {
                 icon={LayoutList}
                 title={hasActiveFilters ? "No trades match these filters" : "No trades logged yet"}
                 description={hasActiveFilters
-                  ? "Adjust filters and try again."
-                  : "Log a trade to populate this view."}
+                  ? "Try wider filters."
+                  : "Add a trade to get started."}
                 action={!hasActiveFilters ? (
                   <Button onClick={() => navigate("/trades/new")}>
                     <Plus className="h-4 w-4" />
@@ -436,9 +436,9 @@ export default function Trades() {
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead>Date</TableHead>
-                      <TableHead>Pair / Direction</TableHead>
+                      <TableHead>Trade</TableHead>
                       <TableHead>Account</TableHead>
-                      <TableHead>Context</TableHead>
+                      <TableHead>Tags</TableHead>
                       <TableHead>Review</TableHead>
                       <TableHead className="text-right">PnL</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -547,8 +547,8 @@ export default function Trades() {
                 icon={Images}
                 title={hasActiveFilters ? "No trades match these filters" : "Screenbook is empty"}
                 description={hasActiveFilters
-                  ? "Adjust filters and try again."
-                  : "Add screenshots to trades to populate this view."}
+                  ? "Try wider filters."
+                  : "Add screenshots to trades."}
               />
             ) : (
               <SectionCard>
@@ -675,7 +675,7 @@ export default function Trades() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Linked trade reviews remain in Reviews as journal history.
+              This cannot be undone. Linked reviews stay in Reviews.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

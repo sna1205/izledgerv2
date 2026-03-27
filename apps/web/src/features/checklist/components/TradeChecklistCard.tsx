@@ -16,7 +16,7 @@ export function TradeChecklistCard({
   onToggle,
   onCreateRule,
   title = "Pre-Trade Checklist",
-  description = "Review your rules before logging this trade.",
+  description,
   emptyTitle = "No checklist rules yet.",
   emptyDescription = "Create your first rule to bring discipline into each trade entry.",
   createLabel = "Create your first rule",
@@ -49,7 +49,7 @@ export function TradeChecklistCard({
             </div>
             <div>
               <h3 className="text-base font-medium text-foreground">{title}</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+              {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
             </div>
           </div>
         </div>
@@ -57,16 +57,10 @@ export function TradeChecklistCard({
         {!isLoading && rules.length > 0 ? (
           <div className="flex items-center gap-2">
             <DataBadge tone={completedCount === rules.length ? "success" : "neutral"}>
-              {completedCount}
-              {" "}
-              of
-              {" "}
-              {rules.length}
-              {" "}
-              completed
+              {completedCount}/{rules.length}
             </DataBadge>
             <DataBadge tone={checklistMode === "strict" ? "warning" : "primary"}>
-              {checklistMode === "strict" ? "Strict mode" : "Soft mode"}
+              {checklistMode === "strict" ? "Strict" : "Soft"}
             </DataBadge>
           </div>
         ) : null}
@@ -119,8 +113,8 @@ export function TradeChecklistCard({
             <p className="text-sm font-medium">{isStrictBlocked ? "Checklist incomplete" : "Required items still open"}</p>
             <p className="mt-1 text-xs opacity-90">
               {isStrictBlocked
-                ? "You must complete all required rules before saving this trade."
-                : "You can still save in soft mode, but the missed required rules will be recorded."}
+                ? "Complete required items to save."
+                : "You can still save."}
             </p>
           </div>
         </div>

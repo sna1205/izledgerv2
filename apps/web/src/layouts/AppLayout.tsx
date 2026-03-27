@@ -16,6 +16,7 @@ const pageTitles: Record<string, string> = {
   "/reviews": "Reviews",
   "/trades": "Trades",
   "/trades/new": "New Trade",
+  "/trades/edit": "Edit Trade",
   "/analytics": "Analytics",
   "/calculator": "Lot Calculator",
   "/settings": "Settings",
@@ -32,6 +33,8 @@ export function AppLayout() {
     : location.pathname.startsWith("/trades/")
       ? location.pathname === "/trades/new"
         ? "New Trade"
+        : location.pathname.endsWith("/edit")
+          ? "Edit Trade"
         : "Trades"
     : location.pathname.startsWith("/settings")
       ? "Settings"

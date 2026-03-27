@@ -1017,19 +1017,19 @@ export default function Analytics() {
         <div className="grid gap-6 md:grid-cols-3">
           <OverviewMetric label="Trades" value={formatNumberDisplay(effectiveSummary.totalTrades)} />
           <OverviewMetric label="Win Rate" value={formatPercentageDisplay(effectiveSummary.winRate)} />
-          <OverviewMetric label="PnL Scope" value="Mixed currencies" subtext={formatCurrencyTotalsDisplay(currencyTotals, "Select an account to unlock PnL analytics.")} />
+          <OverviewMetric label="Scope" value="Mixed currencies" subtext={formatCurrencyTotalsDisplay(currencyTotals, "Select one account for PnL.")} />
         </div>
 
         <SectionCard className="border-border/60">
           <SectionHeader
-            title="Account Filter Required"
-            description="This view includes multiple historical trade currencies, so profit analytics are intentionally not merged into one number."
+            title="Select one account"
+            description="PnL is hidden in mixed-currency views."
           />
 
           <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="rounded-3xl border border-border/60 bg-background/70 p-5 text-sm text-muted-foreground">
-              Pick a single account to unlock the full overview, breakdown, trend chart, and calendar.
-              The current selection spans:
+              Pick one account to unlock the full view.
+              Current selection:
               {" "}
               {formatCurrencyTotalsDisplay(currencyTotals, "multiple currencies")}
             </div>
@@ -1162,7 +1162,7 @@ export default function Analytics() {
                   <SectionCard className="border-border/60">
                     <SectionHeader
                       title="Performance Score"
-                      description="A heuristic blend of win rate, planned RR, consistency, and drawdown control."
+                      description="Win rate, RR, consistency, and drawdown."
                     />
 
                     <div className="mt-5 space-y-5">

@@ -155,11 +155,7 @@ export function SetupCreatePage() {
   return (
     <PageShell size="wide">
       <PageHeader
-        eyebrow="Trading Playbook"
         title={currentSetup ? currentSetup.name : "New Setup"}
-        description={currentSetup
-          ? "Refine the strategy, keep its visual identity consistent, and manage setup-specific pre-trade discipline in one place."
-          : "Create a cleaner, more durable playbook for trade logging. Capture the strategy first, then layer in pre-trade discipline."}
         actions={(
           <>
             <Button asChild variant="outline">
@@ -171,7 +167,7 @@ export function SetupCreatePage() {
             {activeTab === "strategy" ? (
               <Button onClick={() => void handleSaveStrategy()} disabled={saveMutation.isPending}>
                 <Plus className="h-4 w-4" />
-                {saveMutation.isPending ? "Saving..." : currentSetup ? "Save Strategy" : "Create Setup"}
+                {saveMutation.isPending ? "Saving..." : currentSetup ? "Save" : "Create"}
               </Button>
             ) : null}
           </>
@@ -185,11 +181,8 @@ export function SetupCreatePage() {
               <DataBadge tone={form.isArchived ? "warning" : "primary"}>
                 {form.isArchived ? "Archived" : "Active"}
               </DataBadge>
-              {currentSetup ? <DataBadge tone="neutral">Live setup</DataBadge> : <DataBadge tone="neutral">Draft</DataBadge>}
+              {currentSetup ? <DataBadge tone="neutral">Saved</DataBadge> : <DataBadge tone="neutral">Draft</DataBadge>}
             </div>
-            <p className="text-sm text-muted-foreground">
-              Strategy defines the playbook. Pre-Trade holds the discipline checks reviewed before execution.
-            </p>
           </div>
 
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="w-full lg:w-auto">
@@ -228,7 +221,7 @@ export function SetupCreatePage() {
             </Button>
             {activeTab === "strategy" ? (
               <Button onClick={() => void handleSaveStrategy()} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : currentSetup ? "Save Strategy" : "Create Setup"}
+                {saveMutation.isPending ? "Saving..." : currentSetup ? "Save" : "Create"}
               </Button>
             ) : null}
           </div>

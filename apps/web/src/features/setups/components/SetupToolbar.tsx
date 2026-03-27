@@ -1,4 +1,4 @@
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -27,14 +27,8 @@ export function SetupToolbar({
     <section className="rounded-[30px] border border-border bg-card/85 p-4 shadow-sm sm:p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Library Controls
-            </span>
-            <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{totalSetups}</span> results
-            </span>
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{totalSetups}</span> setups
           </div>
 
           <div className="relative">
@@ -42,7 +36,7 @@ export function SetupToolbar({
             <Input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search playbooks, descriptions, or rules..."
+              placeholder="Search setups"
               className="h-11 rounded-2xl pl-9"
             />
           </div>
@@ -70,7 +64,7 @@ export function SetupToolbar({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="createdAt">Created Date</SelectItem>
+                <SelectItem value="createdAt">Created</SelectItem>
                 <SelectItem value="name">Name</SelectItem>
               </SelectContent>
             </Select>

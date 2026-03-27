@@ -498,6 +498,10 @@ export async function createTradeChecklistSnapshots(
     checklistResponses?: ChecklistResponseInput[];
     scopeMode?: "applicable" | "exact";
   },
+  options?: {
+    replaceExisting?: boolean;
+    skipEnforcement?: boolean;
+  },
 ) {
   const [user, applicableRules] = await Promise.all([
     tx.user.findUnique({
@@ -557,12 +561,21 @@ export async function createTradeChecklistSnapshots(
 
   const incompleteRequiredRules = snapshots.filter((snapshot) => snapshot.isRequiredSnapshot && !snapshot.checked);
 
-  if (user.checklistEnforcementMode === "strict" && incompleteRequiredRules.length > 0) {
+  if (!options?.skipEnforcement && user.checklistEnforcementMode === "strict" && incompleteRequiredRules.length > 0) {
     throw new AppError(
       400,
       "CHECKLIST_INCOMPLETE",
       "You must complete all required checklist rules before saving this trade.",
     );
+  }
+
+  if (options?.replaceExisting) {
+    await tx.tradeChecklistResponse.deleteMany({
+      where: {
+        tradeId,
+        userId,
+      },
+    });
   }
 
   if (snapshots.length > 0) {

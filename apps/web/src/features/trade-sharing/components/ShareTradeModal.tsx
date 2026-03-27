@@ -330,7 +330,7 @@ export function ShareTradeModal({
             <DialogHeader className="text-left">
               <DialogTitle>Share Trade</DialogTitle>
               <DialogDescription>
-                Create a read-only public snapshot or export a polished share card without exposing the rest of the journal.
+                Create a public snapshot or export card without exposing the rest of the journal.
               </DialogDescription>
             </DialogHeader>
 
@@ -357,7 +357,7 @@ export function ShareTradeModal({
                   Link expiration
                 </Label>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Leave this blank to keep the link active until you revoke it manually.
+                  Leave blank to keep the link active until you revoke it.
                 </p>
                 <input
                   id="share-expiration"
@@ -383,7 +383,7 @@ export function ShareTradeModal({
                     <div>
                       <p className="text-sm font-semibold text-foreground">Public share status</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        The link always serves the stored snapshot, never the live trade record.
+                        The link shows the saved snapshot, not the live trade.
                       </p>
                     </div>
                     <span className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", shareStatusTone)}>
@@ -411,7 +411,7 @@ export function ShareTradeModal({
                     ) : (
                       <div className="flex items-start gap-3 text-sm text-muted-foreground">
                         <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
-                      <p>No active public link exists for this trade yet.</p>
+                        <p>No public link yet.</p>
                     </div>
                   )}
                 </div>
@@ -456,7 +456,7 @@ export function ShareTradeModal({
                   ) : (
                     <div className="mt-4 flex items-start gap-3 rounded-xl border bg-card/60 px-4 py-3 text-sm text-muted-foreground">
                       <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-                      <p>Generate a link to start tracking views, revocations, and expiration for this trade.</p>
+                      <p>Generate a link to start tracking views and expiration.</p>
                     </div>
                   )}
                 </div>
@@ -468,11 +468,11 @@ export function ShareTradeModal({
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Button onClick={handleGenerateLink} disabled={isSavingShare}>
                       {isSavingShare ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
-                      {shareRecord?.status === "active" ? "Update public link" : "Generate public link"}
+                      {shareRecord?.status === "active" ? "Update link" : "Generate link"}
                     </Button>
                     <Button variant="outline" onClick={handleCopyLink} disabled={!shareRecord?.publicUrl}>
                       <Copy className="mr-2 h-4 w-4" />
-                      Copy public link
+                      Copy link
                     </Button>
                     <Button
                       variant="outline"
@@ -493,7 +493,7 @@ export function ShareTradeModal({
                     <div>
                       <p className="text-sm font-semibold text-foreground">Export preview</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Download as PNG or copy directly to clipboard.
+                        Download as PNG or copy to clipboard.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-3">
@@ -510,7 +510,7 @@ export function ShareTradeModal({
 
                   {!canCopyImage ? (
                     <p className="mt-3 text-sm text-muted-foreground">
-                      Copy image is not supported in this browser. Please use Download Image instead.
+                      Copy image is not supported in this browser. Use Download Image instead.
                     </p>
                   ) : null}
 

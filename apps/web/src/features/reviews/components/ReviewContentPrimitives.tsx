@@ -23,7 +23,7 @@ interface ReviewTextSectionProps {
 export function ReviewTextSection({
   label,
   value,
-  emptyLabel = "No notes recorded yet.",
+  emptyLabel = "None.",
 }: ReviewTextSectionProps) {
   return (
     <div className="rounded-xl border bg-background/70 p-4">

@@ -1,5 +1,4 @@
 import { Paintbrush, Sparkles } from "lucide-react";
-import { DataBadge } from "@/components/DataBadge";
 import { Input } from "@/components/ui/input";
 
 export function SetupColorPanel({
@@ -20,8 +19,7 @@ export function SetupColorPanel({
           <Paintbrush className="h-4 w-4" />
         </div>
         <div className="space-y-1">
-          <h2 className="text-base font-semibold text-foreground">Color Identity</h2>
-          <p className="text-sm text-muted-foreground">Distinct by default, but still editable when you want a stronger visual system.</p>
+          <h2 className="text-base font-semibold text-foreground">Color</h2>
         </div>
       </div>
 
@@ -35,11 +33,9 @@ export function SetupColorPanel({
             />
             <div className="space-y-1">
               <p className="font-mono-price text-sm font-semibold text-foreground">{formColorLabel}</p>
-              <p className="text-xs text-muted-foreground">Used across cards, trade tags, and saved snapshots.</p>
+              <p className="text-xs text-muted-foreground">Used in setup tags and cards.</p>
             </div>
           </div>
-
-          <DataBadge tone="neutral">Distinct</DataBadge>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-[auto_1fr]">
@@ -59,7 +55,7 @@ export function SetupColorPanel({
           onClick={onRegenerateColor}
         >
           <Sparkles className="h-4 w-4" />
-          Regenerate distinct color
+          New color
         </button>
       </div>
     </div>

@@ -299,6 +299,11 @@ export function useTradeFormController({
     ? setups.find((setup) => setup.id === selectedSetupId) ?? null
     : null;
   const selectedAccount = availableAccountOptions.find((account) => account.value === form.accountId) ?? null;
+  const editTradeChecklistResponseMap = useMemo(() => new Map(
+    (editTrade?.checklistResponses ?? [])
+      .filter((response): response is NonNullable<Trade["checklistResponses"]>[number] & { checklistRuleId: string } => Boolean(response.checklistRuleId))
+      .map((response) => [response.checklistRuleId, response]),
+  ), [editTrade?.checklistResponses]);
 
   const checklistRulesQuery = useQuery({
     queryKey: privateQueryKey(
@@ -314,7 +319,7 @@ export function useTradeFormController({
       setupId: selectedSetupId,
       scopeMode: "applicable",
     }),
-    enabled: isActive && !editTrade && Boolean(form.accountId),
+    enabled: isActive && Boolean(form.accountId),
   });
 
   const checklistRules = useMemo(
@@ -334,7 +339,7 @@ export function useTradeFormController({
   const isChecklistStrictlyBlocked = !editTrade && checklistMode === "strict" && incompleteRequiredChecklistCount > 0;
 
   useEffect(() => {
-    if (!isActive || editTrade || !selectedSetupId) {
+    if (!isActive || !form.accountId) {
       setChecklistSelections({});
       return;
     }
@@ -343,11 +348,11 @@ export function useTradeFormController({
       checklistRules.map((rule) => [
         rule.id,
         {
-          checked: current[rule.id]?.checked ?? false,
+          checked: current[rule.id]?.checked ?? editTradeChecklistResponseMap.get(rule.id)?.checked ?? false,
         },
       ]),
     ));
-  }, [checklistRules, editTrade, isActive, selectedSetupId]);
+  }, [checklistRules, editTradeChecklistResponseMap, form.accountId, isActive]);
 
   const handleScreenshotsChange = (screenshots: TradeScreenshotAsset[]) => {
     if (!activeTrade) {
@@ -403,13 +408,13 @@ export function useTradeFormController({
       session: form.session || null,
       emotion: form.emotion || null,
       notes: form.notes.trim(),
-      checklistResponses: form.accountId
+      checklistResponses: form.accountId && (!editTrade || checklistRules.length > 0)
         ? checklistRules.map((rule) => ({
           checklistRuleId: rule.id,
           checked: checklistSelections[rule.id]?.checked ?? false,
         }))
-        : [],
-      checklistScopeMode: form.accountId ? "applicable" : undefined,
+        : undefined,
+      checklistScopeMode: form.accountId && (!editTrade || checklistRules.length > 0) ? "applicable" : undefined,
     });
 
     const persistedTrade: Trade | null = savedTrade && typeof savedTrade === "object"
@@ -526,8 +531,7 @@ export function TradeCoreFields({
   return (
     <section className="surface space-y-4 p-4 sm:p-5">
       <div>
-        <h2 className="text-lg font-medium text-foreground">Core Fields</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Capture the trade basics first. Direction and result stay derived from the live inputs below.</p>
+        <h2 className="text-lg font-medium text-foreground">Core</h2>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -541,9 +545,9 @@ export function TradeCoreFields({
               ))}
             </SelectContent>
           </Select>
-          {accounts.length === 0 ? <p className="text-xs text-muted-foreground">Create an account before saving trades.</p> : null}
+          {accounts.length === 0 ? <p className="text-xs text-muted-foreground">Add an account before saving.</p> : null}
           {availableAccountOptions.some((account) => account.value === form.accountId && account.isArchived)
-            ? <p className="text-xs text-muted-foreground">Archived accounts stay available here only so historical trades can still be edited safely.</p>
+            ? <p className="text-xs text-muted-foreground">Archived account kept for historical edits.</p>
             : null}
         </FieldContainer>
 
@@ -621,8 +625,7 @@ export function TradeContextFields({
   return (
     <section className="surface space-y-4 p-4 sm:p-5">
       <div>
-        <h2 className="text-lg font-medium text-foreground">Context Fields</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Keep the extended trade facts grouped here so the main entry flow stays lighter.</p>
+        <h2 className="text-lg font-medium text-foreground">Context</h2>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -660,7 +663,7 @@ export function TradeContextFields({
           <FieldContainer>
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Setup</Label>
             <Select value={form.setupId} onValueChange={(value) => updateField("setupId", value)}>
-              <SelectTrigger><SelectValue placeholder="Select setup..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Select setup" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">No setup</SelectItem>
                 {availableSetupOptions.map((setup) => (
@@ -719,8 +722,7 @@ export function TradeJournalSection({
   return (
     <section className="surface space-y-4 p-4 sm:p-5">
       <div>
-        <h2 className="text-lg font-medium text-foreground">Journal</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Capture the discretionary context and notes for this trade.</p>
+        <h2 className="text-lg font-medium text-foreground">Notes</h2>
       </div>
 
       <FieldContainer>
@@ -756,23 +758,18 @@ export function TradeChecklistSection({
   accountId,
   setChecklistSelections,
 }: TradeChecklistSectionProps) {
-  if (editTrade) {
-    return null;
-  }
-
   if (!accountId) {
     return (
       <TradeChecklistCard
         rules={[]}
         selections={{}}
         checklistMode={checklistMode}
-        title="Pre-Trade"
-        description="Select an account to load its active checklist rules before saving this trade."
-        emptyTitle="No account selected"
-        emptyDescription="Global, account, and setup-specific discipline is loaded from the account and setup you choose for this trade."
-        onToggle={() => undefined}
-      />
-    );
+      title="Pre-Trade"
+      emptyTitle="No account selected"
+      emptyDescription="Rules load from the selected account and setup."
+      onToggle={() => undefined}
+    />
+  );
   }
 
   return (
@@ -785,22 +782,26 @@ export function TradeChecklistSection({
       title="Pre-Trade"
       description={
         checklistRules.length > 0
-          ? selectedSetupId
-            ? "Review the active global, account, and setup checklist items before saving the trade."
-            : "Review the active global and account checklist items before saving the trade. Setup rules appear once you choose a setup."
+          ? editTrade
+            ? selectedSetupId
+              ? "Review before update."
+              : "Review before update. Setup rules appear after you choose a setup."
+            : selectedSetupId
+              ? "Review before save."
+              : "Review before save. Setup rules appear after you choose a setup."
           : selectedSetupId
-            ? "This account and setup do not have any active checklist items right now."
-            : "This account does not have any active global or account checklist items right now."
+            ? "No active items for this account and setup."
+            : "No active items for this account."
       }
       emptyTitle={
         selectedSetupId
-          ? `No pre-trade items for ${selectedSetup?.name ?? "this setup"} yet.`
-          : "No account checklist items yet."
+          ? `No items for ${selectedSetup?.name ?? "this setup"}`
+          : "No account items"
       }
       emptyDescription={
         selectedSetupId
-          ? "Global, account, and setup-specific checklist rules will appear here when they are active."
-          : "Global and account-specific checklist rules will appear here. Setup-specific items join once you pick a setup."
+          ? "Active global, account, and setup rules appear here."
+          : "Active global and account rules appear here. Setup rules appear after you choose a setup."
       }
       onToggle={(ruleId, checked) => setChecklistSelections((current) => ({
         ...current,
@@ -829,7 +830,7 @@ export function TradeScreenshotSection({
     <section className="surface space-y-4 p-4 sm:p-5">
       <div>
         <h2 className="text-lg font-medium text-foreground">Screenshots</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Queued files stay local until a new trade is created, then upload in order against the saved trade.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Queued until the trade is saved.</p>
       </div>
 
       <ScreenshotUpload
@@ -872,7 +873,6 @@ export function TradeSummaryPanel({
     <aside className="surface space-y-4 p-4 sm:p-5">
       <div>
         <h2 className="text-lg font-medium text-foreground">Summary</h2>
-        <p className="mt-1 text-xs text-muted-foreground">A compact readout of the current derived state before the trade is saved.</p>
       </div>
 
       <div className="space-y-3">
@@ -895,22 +895,22 @@ export function TradeSummaryPanel({
           </div>
         </div>
         <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">Setup / Session / Emotion</p>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Context</p>
           <p className="mt-1 text-sm font-medium text-foreground">{selectedSetupName ?? "No setup"}</p>
           <p className="mt-1 text-xs text-muted-foreground">{form.session || "No session"} / {form.emotion || "No emotion"}</p>
         </div>
         <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Checklist</p>
           <p className="mt-1 text-sm font-medium text-foreground">
-            {totalChecklistCount > 0 ? `${completedChecklistCount} of ${totalChecklistCount} complete` : "No active checklist items"}
+            {totalChecklistCount > 0 ? `${completedChecklistCount}/${totalChecklistCount} complete` : "No items"}
           </p>
           {requiredChecklistRemaining > 0 ? (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">{requiredChecklistRemaining} required item(s) still open</p>
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">{requiredChecklistRemaining} required open</p>
           ) : null}
         </div>
         <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Screenshots</p>
-          <p className="mt-1 text-sm font-medium text-foreground">{screenshotCount} queued or attached</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{screenshotCount} file{screenshotCount === 1 ? "" : "s"}</p>
         </div>
       </div>
 

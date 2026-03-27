@@ -40,7 +40,18 @@ export async function tradeRoutes(app: FastifyInstance) {
   app.patch("/:id", { preHandler: authenticate }, async (request) => {
     const params = parseOrThrow(tradeParamsSchema, request.params);
     const body = parseOrThrow(updateTradeSchema, request.body);
-    const trade = await updateTrade(request.auth!.userId, params.id, body);
+    const trade = await updateTrade(request.auth!.userId, params.id, {
+      ...body,
+      ...(body.checklistResponses !== undefined
+        ? {
+            checklistResponses: body.checklistResponses.map((response) => ({
+              checklistRuleId: response.checklistRuleId,
+              checked: response.checked ?? false,
+              note: response.note ?? null,
+            })),
+          }
+        : {}),
+    });
     return { trade };
   });
 

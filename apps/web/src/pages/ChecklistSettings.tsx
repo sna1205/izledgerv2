@@ -289,9 +289,7 @@ export default function ChecklistSettings() {
   return (
     <PageShell size="wide">
       <PageHeader
-        eyebrow="Discipline"
         title="Checklist"
-        description="Define the rules you want visible before every new trade."
         actions={(
           <>
             <Button variant="outline" onClick={() => navigate("/settings")}>
@@ -322,20 +320,20 @@ export default function ChecklistSettings() {
       <SectionCard className="space-y-4">
         <SectionHeader
           title="Enforcement"
-          description="Choose whether required rules should warn only or block trade submission."
+          description="Warn or block when required rules stay open."
         />
 
         <div className="grid gap-4 lg:grid-cols-2">
           {[
             {
               value: "soft" as const,
-              title: "Soft mode",
-              description: "Warn when required rules are incomplete, but still allow the trade to be saved.",
+              title: "Soft",
+              description: "Warn, but allow save.",
             },
             {
               value: "strict" as const,
-              title: "Strict mode",
-              description: "Block new trades until every required rule is completed.",
+              title: "Strict",
+              description: "Block save until required rules are complete.",
             },
           ].map((option) => {
             const isActive = user.checklistEnforcementMode === option.value;
@@ -368,15 +366,15 @@ export default function ChecklistSettings() {
       <SectionCard className="space-y-4">
         <SectionHeader
           title="Rules"
-          description="Drag to reorder. Active rules appear in the new trade flow."
+          description="Drag to reorder. Active rules show in new trades."
           action={reorderMutation.isPending ? <p className="text-xs text-muted-foreground">Saving order...</p> : undefined}
         />
 
         {orderedRules.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
-            title="Create your first checklist rule"
-            description="Start with the core decisions you want to verify before every trade."
+            title="No rules yet"
+            description="Add the checks you want before each trade."
             action={(
               <Button
                 onClick={() => {
@@ -387,7 +385,7 @@ export default function ChecklistSettings() {
                 }}
               >
                 <Plus className="h-4 w-4" />
-                Create your first rule
+                Create rule
               </Button>
             )}
           />

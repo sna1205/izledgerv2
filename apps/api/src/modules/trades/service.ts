@@ -658,6 +658,8 @@ export async function updateTrade(userId: string, tradeId: string, input: {
   notes?: string;
   openedAt?: Date;
   closedAt?: Date;
+  checklistResponses?: ChecklistResponseInput[];
+  checklistScopeMode?: "applicable" | "exact";
 }) {
   const existingTrade = await getOwnedTrade(userId, tradeId);
   let nextAccountCurrencySnapshot: string | undefined;
@@ -703,55 +705,75 @@ export async function updateTrade(userId: string, tradeId: string, input: {
     openedAt: existingTrade.openedAt,
     closedAt: existingTrade.closedAt,
   });
+  const nextAccountId = input.accountId ?? existingTrade.accountId;
+  const nextSetupId =
+    input.setupId !== undefined || input.setup !== undefined
+      ? (setup?.setupId ?? null)
+      : existingTrade.setupId;
   const nextFxSnapshot = buildTradeFxSnapshot(nextAccountCurrencySnapshot ?? nextAccountCurrency, nextLifecycle);
   const nextResult =
     input.profit !== undefined
     || input.fees !== undefined
       ? deriveTradeResultFromProfit(nextFinancials.profit)
       : undefined;
+  const shouldReplaceChecklistSnapshots = input.checklistResponses !== undefined || input.checklistScopeMode !== undefined;
 
   if (nextDirection === null) {
     throw new AppError(400, "INVALID_TRADE_DIRECTION", "Stop Loss must be above or below Entry to determine trade direction.");
   }
 
-  const trade = await prisma.trade.update({
-    where: { id: tradeId },
-    data: {
-      tradeDate: input.date ? getTradeDateStart(input.date) : undefined,
-      accountId: input.accountId,
-      accountCurrencySnapshot: nextFxSnapshot.accountCurrencySnapshot,
-      pnlCurrency: nextFxSnapshot.pnlCurrency,
-      fxRateSnapshot: nextFxSnapshot.fxRateSnapshot,
-      fxRateSource: nextFxSnapshot.fxRateSource,
-      fxRateTimestamp: nextFxSnapshot.fxRateTimestamp,
-      pair: input.pair === undefined ? undefined : normalizeTradePair(input.pair),
-      direction: nextDirection,
-      entry: input.entry,
-      stopLoss: input.stopLoss,
-      takeProfit: input.takeProfit,
-      quantity: nextFinancials.quantity,
-      lotSize: nextFinancials.lotSize,
-      exitPrice: nextFinancials.exitPrice,
-      fees: nextFinancials.fees,
-      riskAmount: nextFinancials.riskAmount,
-      riskPercent: nextFinancials.riskPercent,
-      grossPnl: nextFinancials.grossPnl,
-      netPnl: nextFinancials.netPnl,
-      profit: nextFinancials.profit,
-      result: nextResult,
-      setupId: setup ? setup.setupId : undefined,
-      setupNameSnapshot: setup ? setup.setupNameSnapshot : undefined,
-      setupColorSnapshot: setup ? setup.setupColorSnapshot : undefined,
-      openedAt: nextLifecycle.openedAt,
-      closedAt: nextLifecycle.closedAt,
-      session:
-        input.session === undefined
-          ? undefined
-          : ((sessionToDb(input.session) as TradeSession | null | undefined) ?? null),
-      emotion: input.emotion === undefined ? undefined : input.emotion,
-      notes: input.notes,
-    },
-    include: tradeDetailInclude,
+  const trade = await prisma.$transaction(async (tx) => {
+    if (shouldReplaceChecklistSnapshots) {
+      await createTradeChecklistSnapshots(tx, userId, tradeId, {
+        accountId: nextAccountId,
+        setupId: nextSetupId,
+        checklistResponses: input.checklistResponses,
+        scopeMode: input.checklistScopeMode,
+      }, {
+        replaceExisting: true,
+        skipEnforcement: true,
+      });
+    }
+
+    return tx.trade.update({
+      where: { id: tradeId },
+      data: {
+        tradeDate: input.date ? getTradeDateStart(input.date) : undefined,
+        accountId: input.accountId,
+        accountCurrencySnapshot: nextFxSnapshot.accountCurrencySnapshot,
+        pnlCurrency: nextFxSnapshot.pnlCurrency,
+        fxRateSnapshot: nextFxSnapshot.fxRateSnapshot,
+        fxRateSource: nextFxSnapshot.fxRateSource,
+        fxRateTimestamp: nextFxSnapshot.fxRateTimestamp,
+        pair: input.pair === undefined ? undefined : normalizeTradePair(input.pair),
+        direction: nextDirection,
+        entry: input.entry,
+        stopLoss: input.stopLoss,
+        takeProfit: input.takeProfit,
+        quantity: nextFinancials.quantity,
+        lotSize: nextFinancials.lotSize,
+        exitPrice: nextFinancials.exitPrice,
+        fees: nextFinancials.fees,
+        riskAmount: nextFinancials.riskAmount,
+        riskPercent: nextFinancials.riskPercent,
+        grossPnl: nextFinancials.grossPnl,
+        netPnl: nextFinancials.netPnl,
+        profit: nextFinancials.profit,
+        result: nextResult,
+        setupId: setup ? setup.setupId : undefined,
+        setupNameSnapshot: setup ? setup.setupNameSnapshot : undefined,
+        setupColorSnapshot: setup ? setup.setupColorSnapshot : undefined,
+        openedAt: nextLifecycle.openedAt,
+        closedAt: nextLifecycle.closedAt,
+        session:
+          input.session === undefined
+            ? undefined
+            : ((sessionToDb(input.session) as TradeSession | null | undefined) ?? null),
+        emotion: input.emotion === undefined ? undefined : input.emotion,
+        notes: input.notes,
+      },
+      include: tradeDetailInclude,
+    });
   });
 
   return toTradeDto(trade);

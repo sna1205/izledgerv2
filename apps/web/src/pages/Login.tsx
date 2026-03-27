@@ -44,9 +44,8 @@ export default function Login() {
     <AuthPageShell
       eyebrow="IZLedger"
       title="Log in"
-      description="Enter your username and password to access your trading journal."
+      description="Open your journal."
       cardTitle="Welcome back"
-      cardDescription="Fast access for traders who want to get straight to the journal."
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div className="space-y-2">
@@ -58,7 +57,6 @@ export default function Login() {
               setUsername(event.target.value);
               setError("");
             }}
-            placeholder="Your username"
             autoComplete="username"
           />
         </div>
@@ -75,7 +73,6 @@ export default function Login() {
                 setError("");
               }}
               className="pr-12"
-              placeholder="Your password"
               autoComplete="current-password"
             />
             <button
@@ -100,7 +97,7 @@ export default function Login() {
       </form>
 
       <p className="mt-5 text-center text-sm text-muted-foreground">
-        New to IZLedger?{" "}
+        New here?{" "}
         <Link className="font-medium text-foreground underline-offset-4 hover:underline" to="/register">
           Create an account
         </Link>

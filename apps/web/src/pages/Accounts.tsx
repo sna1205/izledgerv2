@@ -335,7 +335,7 @@ export default function Accounts() {
         <EmptyState
           icon={Wallet}
           title="No accounts yet"
-          description="Add an account to start tracking."
+          description="Add an account to get started."
           action={(
             <Button onClick={openCreateModal}>
               <Plus className="h-4 w-4" />

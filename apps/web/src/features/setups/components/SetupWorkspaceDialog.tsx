@@ -81,10 +81,8 @@ export function SetupWorkspaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92svh] w-[calc(100vw-1rem)] max-w-5xl overflow-y-auto rounded-[32px] p-4 sm:w-[calc(100vw-2rem)] sm:p-6">
         <DialogHeader>
-          <DialogTitle>{currentSetup ? currentSetup.name : "Setup Workspace"}</DialogTitle>
-          <DialogDescription>
-            Update the playbook, tune its identity, and manage setup-specific pre-trade discipline without leaving the library.
-          </DialogDescription>
+          <DialogTitle>{currentSetup ? currentSetup.name : "New Setup"}</DialogTitle>
+          <DialogDescription>Manage strategy and pre-trade in one place.</DialogDescription>
         </DialogHeader>
 
         <div className="rounded-[28px] border border-border bg-card/70 p-4 sm:p-5">
@@ -94,11 +92,8 @@ export function SetupWorkspaceDialog({
                 <DataBadge tone={form.isArchived ? "warning" : "primary"}>
                   {form.isArchived ? "Archived" : "Active"}
                 </DataBadge>
-                {currentSetup ? <DataBadge tone="neutral">Live setup</DataBadge> : <DataBadge tone="neutral">Draft</DataBadge>}
+                {currentSetup ? <DataBadge tone="neutral">Saved</DataBadge> : <DataBadge tone="neutral">Draft</DataBadge>}
               </div>
-              <p className="text-sm text-muted-foreground">
-                Strategy captures the playbook thesis. Pre-Trade holds the checks reviewed before execution.
-              </p>
             </div>
 
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="w-full lg:w-auto">
@@ -132,7 +127,7 @@ export function SetupWorkspaceDialog({
           </Button>
           {activeTab === "strategy" ? (
             <Button onClick={() => void handleSaveStrategy()} disabled={isSavingStrategy}>
-              {isSavingStrategy ? "Saving..." : "Save Strategy"}
+              {isSavingStrategy ? "Saving..." : "Save"}
             </Button>
           ) : null}
         </div>

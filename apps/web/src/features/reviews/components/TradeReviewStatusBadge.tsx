@@ -21,14 +21,14 @@ function getTradeReviewStatus(trade: Trade, reviewed: boolean) {
 
   if (ageInDays >= 1) {
     return {
-      label: "Needs Review",
+      label: "Review Due",
       icon: TriangleAlert,
       className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/80 dark:bg-amber-950/90 dark:text-amber-200",
     };
   }
 
   return {
-    label: "Not Reviewed",
+    label: "Open",
     icon: Clock3,
     className: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200",
   };

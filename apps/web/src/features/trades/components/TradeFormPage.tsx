@@ -18,6 +18,7 @@ interface TradeFormPageProps {
   onComplete: (trade: Trade | null) => void;
   accounts: Account[];
   setups: SetupDefinition[];
+  editTrade?: Trade | null;
   isSaving?: boolean;
   onScreenshotsChange?: (trade: Trade) => void;
 }
@@ -28,12 +29,14 @@ export function TradeFormPage({
   onComplete,
   accounts,
   setups,
+  editTrade,
   isSaving = false,
   onScreenshotsChange,
 }: TradeFormPageProps) {
   const controller = useTradeFormController({
     isActive: true,
     onSave,
+    editTrade,
     accounts,
     setups,
     onScreenshotsChange,
@@ -43,8 +46,7 @@ export function TradeFormPage({
   return (
     <PageShell size="wide">
       <PageHeader
-        title="New Trade"
-        description="The create flow is route-backed now, but it keeps the existing trade contract, checklist enforcement, and screenshot upload behavior."
+        title={editTrade ? "Edit Trade" : "New Trade"}
         actions={(
           <TradeActionsBar
             onCancel={onCancel}
@@ -52,7 +54,7 @@ export function TradeFormPage({
             isSaving={isSaving}
             isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
             isDisabled={controller.isSaveBlocked}
-            saveLabel="Save Trade"
+            saveLabel={editTrade ? "Update Trade" : "Save"}
           />
         )}
       />
@@ -60,12 +62,12 @@ export function TradeFormPage({
       {controller.tradeWarning ? (
         <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-foreground">
           <p className="font-medium">
-            Relevant high-impact event {controller.tradeWarning.direction === "upcoming" ? "in " : ""}
+            High-impact event {controller.tradeWarning.direction === "upcoming" ? "in " : ""}
             {controller.tradeWarning.minutesAway}m
             {controller.tradeWarning.direction === "recent" ? " ago" : ""}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {controller.tradeWarning.event.currency} {controller.tradeWarning.event.title} is within the {controller.tradeWarning.thresholdMinutes}m risk window for {controller.form.pair}. {controller.tradeWarning.relevance.reason}
+            {controller.tradeWarning.event.currency} {controller.tradeWarning.event.title} is inside the {controller.tradeWarning.thresholdMinutes}m window for {controller.form.pair}. {controller.tradeWarning.relevance.reason}
           </p>
         </div>
       ) : null}
@@ -117,6 +119,7 @@ export function TradeFormPage({
           />
 
           <TradeChecklistSection
+            editTrade={editTrade}
             selectedSetup={controller.selectedSetup}
             selectedSetupId={controller.form.setupId === "__none" ? null : controller.form.setupId}
             checklistRules={controller.checklistRules}

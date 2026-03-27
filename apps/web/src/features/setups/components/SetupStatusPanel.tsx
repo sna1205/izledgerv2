@@ -16,7 +16,6 @@ export function SetupStatusPanel({
         </div>
         <div className="space-y-1">
           <h2 className="text-base font-semibold text-foreground">Status</h2>
-          <p className="text-sm text-muted-foreground">Keep active playbooks easy to scan while preserving old setup history safely.</p>
         </div>
       </div>
 
@@ -24,7 +23,7 @@ export function SetupStatusPanel({
         <div className="space-y-1">
           <p className="text-sm font-semibold text-foreground">{isArchived ? "Archived" : "Active"}</p>
           <p className="text-xs leading-5 text-muted-foreground">
-            Archived setups remain available on historical trades but fade from your current playbook stack.
+            Archived setups stay on historical trades.
           </p>
         </div>
 

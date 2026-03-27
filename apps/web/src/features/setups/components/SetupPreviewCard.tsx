@@ -57,8 +57,8 @@ export function SetupPreviewCard({
     <div className="rounded-[28px] border border-border bg-card/85 p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-label mb-2">Live Preview</p>
-          <h2 className="text-base font-semibold text-foreground">How this playbook will read in the library</h2>
+          <p className="text-label mb-2">Preview</p>
+          <h2 className="text-base font-semibold text-foreground">Library card</h2>
         </div>
         <DataBadge tone={isArchived ? "warning" : "primary"}>
           {isArchived ? "Archived" : "Active"}
@@ -74,18 +74,12 @@ export function SetupPreviewCard({
         <div className="h-1.5 w-full" style={{ backgroundColor: previewColor }} />
         <div className="space-y-5 p-5">
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/90 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: previewColor }} />
-                Playbook
-              </span>
-            </div>
             <div className="space-y-2">
               <h3 className="text-lg font-semibold text-foreground">
                 {name.trim() || "Untitled Setup"}
               </h3>
               <p className="text-sm leading-6 text-muted-foreground" style={clampStyle}>
-                {description.trim() || "Add a short summary so this setup is instantly recognizable during trade logging and review."}
+                {description.trim() || "No summary yet."}
               </p>
             </div>
           </div>
@@ -107,7 +101,7 @@ export function SetupPreviewCard({
               </div>
             ) : (
               <p className="text-sm leading-6 text-muted-foreground">
-                Entry, confirmation, and invalidation guidance will appear here once the strategy is filled in.
+                No rules yet.
               </p>
             )}
           </div>
@@ -115,7 +109,7 @@ export function SetupPreviewCard({
           <div className="rounded-[24px] border border-dashed border-border/70 bg-card/60 px-4 py-4">
             <p className="text-label mb-2">Notes</p>
             <p className="text-sm leading-6 text-muted-foreground" style={clampStyle}>
-              {notes.trim() || "Optional nuance, reminders, or review context can live here without cluttering the main rules."}
+              {notes.trim() || "No notes."}
             </p>
           </div>
         </div>

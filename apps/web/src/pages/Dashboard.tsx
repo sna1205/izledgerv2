@@ -157,7 +157,7 @@ export default function Dashboard() {
         fallback: "--",
       });
   const totalPnlSubtext = summary.isMixedCurrency
-    ? formatCurrencyTotalsDisplay(summary.currencyTotals, "Select an account to unlock one-currency PnL.")
+    ? formatCurrencyTotalsDisplay(summary.currencyTotals, "Select one account for PnL.")
     : summary.displayCurrency ?? undefined;
   const equityLabel = formatMoneyDisplay(currentEquity, {
     currency: summary.displayCurrency,
@@ -219,9 +219,9 @@ export default function Dashboard() {
 
         {summary.isMixedCurrency ? (
           <div className="mt-6 rounded-3xl border border-border/70 bg-background/75 px-5 py-8 text-sm text-muted-foreground">
-            Equity is hidden for this view because it includes multiple historical trade currencies.
+            Equity is hidden in mixed-currency views.
             {" "}
-            {formatCurrencyTotalsDisplay(summary.currencyTotals, "Select a single account to restore the equity curve.")}
+            {formatCurrencyTotalsDisplay(summary.currencyTotals, "Select one account to restore it.")}
           </div>
         ) : equityCurve.length === 0 ? (
           <div className="mt-6">
@@ -331,7 +331,7 @@ export default function Dashboard() {
             <EmptyState
               icon={Activity}
               title="No recent trades yet"
-              description="Log a trade to populate this table."
+              description="Add a trade to get started."
               action={(
                 <Link
                   to="/trades"
@@ -349,7 +349,7 @@ export default function Dashboard() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Date</TableHead>
-                  <TableHead>Pair / Direction</TableHead>
+                  <TableHead>Trade</TableHead>
                   <TableHead>Setup</TableHead>
                   <TableHead>Outcome</TableHead>
                   <TableHead className="text-right">PnL</TableHead>
@@ -371,7 +371,6 @@ export default function Dashboard() {
                         <DataBadge tone={trade.direction === "Buy" ? "success" : "danger"}>
                           {trade.direction ?? "Unknown"}
                         </DataBadge>
-                        {trade.accountCurrency ? <DataBadge tone="neutral">{trade.accountCurrency}</DataBadge> : null}
                       </div>
                     </TableCell>
                     <TableCell>

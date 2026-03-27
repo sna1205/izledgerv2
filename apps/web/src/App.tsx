@@ -24,6 +24,7 @@ const Landing = lazy(() => import("./pages/Landing"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Trades = lazy(() => import("./pages/Trades"));
 const NewTrade = lazy(() => import("./pages/NewTrade"));
+const EditTrade = lazy(() => import("./pages/EditTrade"));
 const TradeDetail = lazy(() => import("./pages/TradeDetail"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Accounts = lazy(() => import("./pages/Accounts"));
@@ -42,7 +43,7 @@ const SharedTradePage = lazy(() => import("./pages/SharedTradePage"));
 const queryClient = createAppQueryClient();
 
 function getProtectedBootFallback(pathname: string) {
-  if (pathname === "/trades/new") {
+  if (pathname === "/trades/new" || pathname.endsWith("/edit")) {
     return {
       pageTitleWidth: "w-24",
       content: <TradesSkeleton />,
@@ -165,6 +166,7 @@ function AppRoutes() {
             <Route path="/economic-calendar/:eventId" element={<EconomicCalendarEventDetail />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/new" element={<NewTrade />} />
+            <Route path="/trades/:id/edit" element={<EditTrade />} />
             <Route path="/trades/:id" element={<TradeDetail />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/calculator" element={<LotCalculator />} />

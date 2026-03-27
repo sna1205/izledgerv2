@@ -90,10 +90,10 @@ function RuleEditorDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto">
+        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editingRule ? "Edit Pre-Trade Item" : "Add Pre-Trade Item"}</DialogTitle>
-          <DialogDescription>Keep checklist items concise, practical, and specific to this setup.</DialogDescription>
+          <DialogTitle>{editingRule ? "Edit item" : "New item"}</DialogTitle>
+          <DialogDescription>Keep it short and specific.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
@@ -103,18 +103,18 @@ function RuleEditorDialog({
               id="pre-trade-title"
               value={form.title}
               onChange={(event) => onFormChange((current) => ({ ...current, title: event.target.value }))}
-              placeholder="Wait for session sweep confirmation"
+              placeholder="Wait for confirmation"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pre-trade-description">Description</Label>
+            <Label htmlFor="pre-trade-description">Notes</Label>
             <Textarea
               id="pre-trade-description"
               rows={4}
               value={form.description}
               onChange={(event) => onFormChange((current) => ({ ...current, description: event.target.value }))}
-              placeholder="Optional context for when this item matters."
+              placeholder="Optional note."
             />
           </div>
 
@@ -123,7 +123,7 @@ function RuleEditorDialog({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">Required</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Flag missed discipline checks before a trade is saved.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Flag before save.</p>
                 </div>
                 <Switch
                   checked={form.isRequired}
@@ -136,7 +136,7 @@ function RuleEditorDialog({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">Active</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Inactive items stay saved but disappear from new trade checklists.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Hide from new trades when off.</p>
                 </div>
                 <Switch
                   checked={form.isActive}
@@ -300,10 +300,8 @@ export function SetupPreTradeSection({
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/80 text-muted-foreground">
             <ClipboardList className="h-5 w-5" />
           </div>
-          <p className="text-base font-semibold text-foreground">Save setup to unlock its pre-trade checklist</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Strategy details are saved first. Once the setup exists, you can add checklist items that appear whenever this playbook is selected during trade logging.
-          </p>
+          <p className="text-base font-semibold text-foreground">Save setup first</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Save the setup before adding pre-trade items.</p>
         </div>
       </div>
     );
@@ -333,9 +331,9 @@ export function SetupPreTradeSection({
               <ClipboardList className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-foreground">Setup Pre-Trade Checklist</h3>
+              <h3 className="text-base font-semibold text-foreground">Pre-Trade</h3>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Only active items from this setup are shown before a new trade is saved. Keep the list short, specific, and useful under pressure.
+                Active items appear when this setup is selected.
               </p>
             </div>
           </div>
@@ -366,9 +364,7 @@ export function SetupPreTradeSection({
         {!rulesQuery.isLoading && !rulesQuery.error && rules.length === 0 ? (
           <div className="mt-5 rounded-[24px] border border-dashed border-border bg-muted/15 px-5 py-8 text-center">
             <p className="text-sm font-medium text-foreground">No pre-trade items yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add the checks that should appear whenever {setup.name} is selected on a new trade.
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">Add the checks that should appear for {setup.name}.</p>
           </div>
         ) : null}
 
@@ -460,7 +456,7 @@ export function SetupPreTradeSection({
             <AlertDialogTitle>Delete pre-trade item?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget
-                ? `Delete "${deleteTarget.title}" from ${setup.name}. Existing trades keep their saved checklist snapshots.`
+                ? `Delete "${deleteTarget.title}" from ${setup.name}. Existing trades keep their snapshots.`
                 : "Delete this pre-trade item."}
             </AlertDialogDescription>
           </AlertDialogHeader>

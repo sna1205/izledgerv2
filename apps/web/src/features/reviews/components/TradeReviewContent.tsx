@@ -42,8 +42,8 @@ export function TradeReviewContent({ review, orphaned = false }: TradeReviewCont
 
       {tradeDate && instrument ? (
         <EconomicCalendarContextPanel
-          title="Macro context from that day"
-          description="Review whether the surrounding event slate should have changed your plan or expectations."
+          title="Macro context"
+          description="Check whether the event slate should have changed the plan."
           events={economicCalendarQuery.data?.items ?? []}
           tradeDate={tradeDate}
           instrument={instrument}

@@ -199,9 +199,7 @@ export function SetupPage() {
   return (
     <PageShell size="wide">
       <PageHeader
-        eyebrow="Trading Playbooks"
         title="Setups"
-        description="Build a cleaner strategy library, keep each setup visually distinct, and make the right playbook easy to tag during trade logging."
         actions={(
           <Button asChild>
             <Link to="/setups/new">
@@ -239,15 +237,15 @@ export function SetupPage() {
       {totalSetups === 0 ? (
         <EmptyState
           icon={Layers3}
-          title={hasActiveFilters ? "No setups match these filters" : "Create your first setup"}
+          title={hasActiveFilters ? "No setups match" : "No setups yet"}
           description={hasActiveFilters
-            ? "Try a broader search or switch back to all setups."
-            : "Turn repeatable trade ideas into reusable playbooks. Define the strategy once, then tag trades and pre-trade discipline with it."}
+            ? "Try a broader search."
+            : "Create a setup to tag trades and checklist items."}
           action={!hasActiveFilters ? (
             <Button asChild>
               <Link to="/setups/new">
                 <Plus className="h-4 w-4" />
-                Create your first setup
+                New Setup
               </Link>
             </Button>
           ) : null}
