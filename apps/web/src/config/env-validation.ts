@@ -13,7 +13,7 @@ const featureStateSchema = z.enum(["hidden", "development", "live"]);
 const frontendEnvSchema = z.object({
   VITE_API_BASE_URL: z.string().trim().url(),
   VITE_APP_ENV: appEnvSchema,
-  VITE_FEATURE_ECONOMIC_CALENDAR: featureStateSchema,
+  VITE_FEATURE_ECONOMIC_CALENDAR: featureStateSchema.default("hidden"),
 });
 
 type FrontendEnvInput = Record<string, string | boolean | undefined>;
