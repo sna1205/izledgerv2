@@ -15,6 +15,7 @@ const pageTitles: Record<string, string> = {
   "/setups": "Setups",
   "/reviews": "Reviews",
   "/trades": "Trades",
+  "/trades/new": "New Trade",
   "/analytics": "Analytics",
   "/calculator": "Lot Calculator",
   "/settings": "Settings",
@@ -28,6 +29,10 @@ export function AppLayout() {
   const economicCalendarLive = FEATURES.economicCalendar === "live";
   const pageTitle = location.pathname.startsWith("/economic-calendar")
     ? "Economic Calendar"
+    : location.pathname.startsWith("/trades/")
+      ? location.pathname === "/trades/new"
+        ? "New Trade"
+        : "Trades"
     : location.pathname.startsWith("/settings")
       ? "Settings"
     : pageTitles[location.pathname] || "IZLedger";

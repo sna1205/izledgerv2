@@ -23,10 +23,12 @@ import { createAppQueryClient } from "@/services/query-client";
 const Landing = lazy(() => import("./pages/Landing"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Trades = lazy(() => import("./pages/Trades"));
+const NewTrade = lazy(() => import("./pages/NewTrade"));
 const TradeDetail = lazy(() => import("./pages/TradeDetail"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Setups = lazy(() => import("./pages/Setups"));
+const NewSetup = lazy(() => import("./pages/NewSetup"));
 const Reviews = lazy(() => import("./pages/Reviews"));
 const EconomicCalendar = lazy(() => import("./pages/EconomicCalendar"));
 const EconomicCalendarEventDetail = lazy(() => import("./pages/EconomicCalendarEventDetail"));
@@ -40,6 +42,13 @@ const SharedTradePage = lazy(() => import("./pages/SharedTradePage"));
 const queryClient = createAppQueryClient();
 
 function getProtectedBootFallback(pathname: string) {
+  if (pathname === "/trades/new") {
+    return {
+      pageTitleWidth: "w-24",
+      content: <TradesSkeleton />,
+    };
+  }
+
   if (pathname.startsWith("/trades/")) {
     return {
       pageTitleWidth: "w-36",
@@ -150,10 +159,12 @@ function AppRoutes() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
+            <Route path="/setups/new" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/economic-calendar" element={<EconomicCalendar />} />
             <Route path="/economic-calendar/:eventId" element={<EconomicCalendarEventDetail />} />
             <Route path="/trades" element={<Trades />} />
+            <Route path="/trades/new" element={<NewTrade />} />
             <Route path="/trades/:id" element={<TradeDetail />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/calculator" element={<LotCalculator />} />

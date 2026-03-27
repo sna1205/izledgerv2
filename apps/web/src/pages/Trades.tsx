@@ -307,7 +307,7 @@ export default function Trades() {
       <PageHeader
         title="Trades"
         actions={(
-          <Button onClick={() => { setEditingTrade(null); setFormOpen(true); }}>
+          <Button onClick={() => navigate("/trades/new")}>
             <Plus className="h-4 w-4" />
             New Trade
           </Button>
@@ -424,7 +424,7 @@ export default function Trades() {
                   ? "Adjust filters and try again."
                   : "Log a trade to populate this view."}
                 action={!hasActiveFilters ? (
-                  <Button onClick={() => setFormOpen(true)}>
+                  <Button onClick={() => navigate("/trades/new")}>
                     <Plus className="h-4 w-4" />
                     Add trade
                   </Button>
