@@ -25,19 +25,16 @@ function run(command, args, options = {}) {
   return result;
 }
 
-const dirtyPrismaState = run(
-  "git",
-  [
-    "-C",
-    repoRoot,
-    "status",
-    "--porcelain",
-    "--untracked-files=all",
-    "--",
-    "apps/api/prisma/schema.prisma",
-    "apps/api/prisma/migrations",
-  ],
-);
+const dirtyPrismaState = run("git", [
+  "-C",
+  repoRoot,
+  "status",
+  "--porcelain",
+  "--untracked-files=all",
+  "--",
+  "apps/api/prisma/schema.prisma",
+  "apps/api/prisma/migrations",
+]);
 
 if (dirtyPrismaState.status !== 0) {
   fail(
@@ -56,16 +53,25 @@ if (text(dirtyPrismaState.stdout)) {
   );
 }
 
-for (const args of [
-  ["run", "prisma:validate"],
-  ["run", "prisma:generate"],
-  ["run", "prisma:check:migrations"],
+for (const check of [
+  {
+    label: "node ./scripts/run-prisma-command.mjs validate",
+    args: [path.join(apiRoot, "scripts", "run-prisma-command.mjs"), "validate"],
+  },
+  {
+    label: "node ./scripts/run-prisma-command.mjs generate",
+    args: [path.join(apiRoot, "scripts", "run-prisma-command.mjs"), "generate"],
+  },
+  {
+    label: "node ./scripts/check-prisma-migrations.mjs",
+    args: [path.join(apiRoot, "scripts", "check-prisma-migrations.mjs")],
+  },
 ]) {
-  const result = run("npm", args, { cwd: apiRoot });
+  const result = run(process.execPath, check.args, { cwd: apiRoot });
 
   if (result.status !== 0) {
     fail(
-      `Prisma release check failed while running \`npm ${args.join(" ")}\`.`,
+      `Prisma release check failed while running \`${check.label}\`.`,
       [text(result.stdout), text(result.stderr)].filter(Boolean).join("\n"),
     );
   }
