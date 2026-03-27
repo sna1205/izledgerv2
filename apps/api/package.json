@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "prisma:validate": "prisma validate",
+    "prisma:validate": "node ./scripts/run-prisma-command.mjs validate",
     "prisma:check:migrations": "node ./scripts/check-prisma-migrations.mjs",
     "prisma:check:release": "node ./scripts/check-prisma-release.mjs",
     "release:migrate": "node ./scripts/run-release-migrations.mjs",
@@ -28,10 +28,10 @@
     "check:persistence:release": "node ./scripts/check-persistence-release.mjs",
     "test:run": "node --import tsx --import ./test/setup.ts --test ./test/dashboard-summary.integration.test.ts ./test/account-deletion.integration.test.ts ./test/account-default.integration.test.ts ./test/economic-calendar.test.ts ./test/screenshot-security.test.ts ./test/screenshot-completion-security.test.ts ./test/screenshot-cleanup.integration.test.ts ./test/review-snapshot.test.ts ./test/review-deleted-trade.integration.test.ts ./test/review-date-schema.test.ts ./test/review-date.integration.test.ts ./test/review-list-pagination.integration.test.ts ./test/scope-uniqueness.integration.test.ts ./test/trade-date-schema.test.ts ./test/numeric-validation.test.ts ./test/numeric-validation.integration.test.ts ./test/numeric-constraints.integration.test.ts ./test/error-mapper.test.ts ./test/error-response.integration.test.ts ./test/screenshot-reorder.test.ts ./test/storage-endpoint.test.ts ./test/username-uniqueness.integration.test.ts ./test/trade-date.integration.test.ts ./test/screenshot-validation.integration.test.ts ./test/trade-share-storage.test.ts ./test/trade-share.integration.test.ts ./test/auth-session.integration.test.ts",
     "test": "npm run test:db:prepare && npm run test:run",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:generate": "node ./scripts/run-prisma-command.mjs generate",
+    "prisma:migrate:dev": "node ./scripts/run-prisma-command.mjs migrate dev",
     "prisma:migrate:deploy": "npm run release:migrate",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "node ./scripts/run-prisma-command.mjs studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
