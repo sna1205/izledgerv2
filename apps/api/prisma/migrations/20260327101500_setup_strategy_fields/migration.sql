@@ -1,0 +1,5 @@
+ALTER TABLE "setups"
+ADD COLUMN IF NOT EXISTS "entry_logic" TEXT,
+ADD COLUMN IF NOT EXISTS "confirmation_logic" TEXT,
+ADD COLUMN IF NOT EXISTS "invalidation_logic" TEXT,
+ADD COLUMN IF NOT EXISTS "notes" TEXT;
