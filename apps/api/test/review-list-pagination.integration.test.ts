@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createAccountViaApi } from "./helpers.js";
 
 process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
@@ -38,18 +39,7 @@ test("review listing paginates daily reviews and filters trade reviews by review
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const account = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
-
-    assert.ok(account, "Expected the default account created during registration.");
+    const account = await createAccountViaApi(app, sessionCookie);
 
     for (const reviewDate of ["2026-03-03", "2026-03-14", "2026-03-28"]) {
       const createReviewResponse = await app.inject({

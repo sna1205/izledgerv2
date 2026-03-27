@@ -3,13 +3,43 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "exports": {
-    ".": "./src/index.ts",
-    "./domain": "./src/types/domain.ts",
-    "./types/domain": "./src/types/domain.ts",
-    "./setup-colors": "./src/constants/setup-colors.ts",
-    "./constants/setup-colors": "./src/constants/setup-colors.ts",
-    "./constants/instruments": "./src/constants/instruments.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./domain": {
+      "types": "./dist/types/domain.d.ts",
+      "import": "./dist/types/domain.js",
+      "default": "./dist/types/domain.js"
+    },
+    "./types/domain": {
+      "types": "./dist/types/domain.d.ts",
+      "import": "./dist/types/domain.js",
+      "default": "./dist/types/domain.js"
+    },
+    "./setup-colors": {
+      "types": "./dist/constants/setup-colors.d.ts",
+      "import": "./dist/constants/setup-colors.js",
+      "default": "./dist/constants/setup-colors.js"
+    },
+    "./constants/setup-colors": {
+      "types": "./dist/constants/setup-colors.d.ts",
+      "import": "./dist/constants/setup-colors.js",
+      "default": "./dist/constants/setup-colors.js"
+    },
+    "./constants/instruments": {
+      "types": "./dist/constants/instruments.d.ts",
+      "import": "./dist/constants/instruments.js",
+      "default": "./dist/constants/instruments.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

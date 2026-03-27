@@ -7,6 +7,7 @@ export type ReviewType = "daily" | "weekly" | "trade";
 export type ReviewRuleStatus = "Yes" | "Partially" | "No";
 export type ReviewRiskStatus = "Yes" | "Partially" | "No";
 export type ReviewEmotion = "Calm" | "Confident" | "Hesitant" | "FOMO" | "Revenge" | "Frustrated";
+export type ChecklistEnforcementMode = "soft" | "strict";
 export type EconomicEventImpact = "holiday" | "low" | "medium" | "high";
 export type EconomicEventStatus = "upcoming" | "pending_release" | "released" | "revised" | "passed" | "holiday";
 export type EconomicEventCategory =
@@ -34,10 +35,50 @@ export interface SetupDefinition {
   id: string;
   name: string;
   description: string;
+  entryLogic?: string | null;
+  confirmationLogic?: string | null;
+  invalidationLogic?: string | null;
+  notes?: string | null;
+  preTradeChecklist?: ChecklistRule[];
   color: string;
   createdAt: string;
   updatedAt: string;
   isArchived: boolean;
+}
+
+export interface ChecklistRule {
+  id: string;
+  title: string;
+  description: string | null;
+  isRequired: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  setupId: string | null;
+  accountId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  setup?: {
+    id: string;
+    name: string;
+  } | null;
+  account?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface TradeChecklistResponse {
+  id: string;
+  tradeId: string;
+  checklistRuleId: string | null;
+  ruleTitleSnapshot: string;
+  ruleDescriptionSnapshot: string | null;
+  isRequiredSnapshot: boolean;
+  checked: boolean;
+  note: string | null;
+  sortOrderSnapshot: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ReviewTradeSnapshot {
@@ -133,6 +174,7 @@ export interface Trade {
   createdAt: string;
   updatedAt: string;
   screenshotAssets?: TradeScreenshotAsset[];
+  checklistResponses?: TradeChecklistResponse[];
   account?: {
     id: string;
     name: string;
@@ -147,6 +189,7 @@ export interface Trade {
 export interface AuthUser {
   id: string;
   username: string;
+  checklistEnforcementMode: ChecklistEnforcementMode;
 }
 
 export interface AuthenticatedUser extends AuthUser {

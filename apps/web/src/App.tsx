@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShellSkeleton } from "@/components/skeletons/AppShellSkeleton";
 import { AuthPageSkeleton } from "@/components/skeletons/AuthPageSkeleton";
 import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
@@ -158,6 +158,7 @@ function AppRoutes() {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/calculator" element={<LotCalculator />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/checklist" element={<Navigate to="/setups" replace />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />

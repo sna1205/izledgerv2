@@ -3,12 +3,19 @@ import { consumePasswordVerificationTime, hashPassword, verifyPassword } from ".
 import { createSession } from "../../lib/session.js";
 import { AppError } from "../../utils/errors.js";
 import { normalizeUsername } from "../../utils/strings.js";
-import { createUserWithDefaultAccount } from "./user-provisioning.js";
+import { createUser } from "./user-provisioning.js";
 
-function toAuthUser(user: { id: string; username: string; createdAt?: Date; updatedAt?: Date }) {
+function toAuthUser(user: {
+  id: string;
+  username: string;
+  checklistEnforcementMode?: "soft" | "strict";
+  createdAt?: Date;
+  updatedAt?: Date;
+}) {
   return {
     id: user.id,
     username: user.username,
+    checklistEnforcementMode: "checklistEnforcementMode" in user ? user.checklistEnforcementMode : "soft",
     createdAt: user.createdAt?.toISOString(),
     updatedAt: user.updatedAt?.toISOString(),
   };
@@ -36,7 +43,7 @@ export async function registerUser(params: {
 
   const passwordHash = await hashPassword(params.password);
 
-  const user = await createUserWithDefaultAccount({
+  const user = await createUser({
     username,
     passwordHash,
   });

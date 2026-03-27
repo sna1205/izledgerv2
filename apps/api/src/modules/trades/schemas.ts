@@ -9,6 +9,11 @@ export const tradeParamsSchema = z.object({
 
 const optionalString = z.string().trim().optional().nullable();
 const isoDateSchema = isoCalendarDateSchema("Invalid trade date");
+const checklistResponseSchema = z.object({
+  checklistRuleId: z.string().uuid(),
+  checked: z.boolean().default(false),
+  note: z.string().trim().max(1000).optional().nullable(),
+});
 
 export const createTradeSchema = z.object({
   date: isoDateSchema,
@@ -25,6 +30,8 @@ export const createTradeSchema = z.object({
   session: z.enum(tradeSessions).optional().nullable(),
   emotion: z.enum(tradeEmotions).optional().nullable(),
   notes: z.string().max(10000).default(""),
+  checklistResponses: z.array(checklistResponseSchema).default([]),
+  checklistScopeMode: z.enum(["applicable", "exact"]).optional(),
 });
 
 export const updateTradeSchema = createTradeSchema.partial().refine(

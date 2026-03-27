@@ -15,6 +15,7 @@ import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
 import { ShareTradeModal } from "@/features/trade-sharing/components/ShareTradeModal";
 import { TradeFormDialog } from "@/features/trades/components/TradeFormDialog";
+import { TradeChecklistResults } from "@/features/checklist/components/TradeChecklistResults";
 import { TradeReviewContent } from "@/features/reviews/components/TradeReviewContent";
 import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
 import { TradeReviewStatusBadge } from "@/features/reviews/components/TradeReviewStatusBadge";
@@ -438,6 +439,8 @@ export default function TradeDetail() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => {
           void Promise.all([
             tradeQuery.refetch(),
@@ -603,6 +606,10 @@ export default function TradeDetail() {
               pasteEnabled={!editOpen}
               isUploading={isProcessingScreenshotClipboard}
             />
+
+            <SectionCard title="Checklist Evidence">
+              <TradeChecklistResults responses={trade.checklistResponses ?? []} />
+            </SectionCard>
 
             <SectionCard title="Journal Notes">
               {trade.notes ? (

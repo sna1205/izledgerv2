@@ -1,6 +1,12 @@
 import type { Pagination, Trade } from "@/types";
 import { apiFetch } from "@/services/api/client";
 
+export type TradeChecklistResponsePayload = {
+  checklistRuleId: string;
+  checked: boolean;
+  note?: string | null;
+};
+
 export type TradePayload = {
   date: string;
   accountId: string;
@@ -16,6 +22,8 @@ export type TradePayload = {
   session?: Trade["session"] | null;
   emotion?: Trade["emotion"] | null;
   notes?: string;
+  checklistResponses?: TradeChecklistResponsePayload[];
+  checklistScopeMode?: "applicable" | "exact";
 };
 
 export type ListTradesParams = {

@@ -10,6 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
+import { TradeChecklistCard } from "@/features/checklist/components/TradeChecklistCard";
+import { ApiError } from "@/services/api/client";
+import { listChecklistRules } from "@/services/api/checklist-rules";
 import { uploadTradeScreenshot } from "@/services/api/screenshots";
 import { getEconomicCalendarList } from "@/services/api/economic-calendar";
 import { privateQueryKey } from "@/services/query-client";
@@ -17,7 +20,17 @@ import { useAuth } from "@/features/auth/auth-context";
 import { getLocalDateKey, getTradeEventWarning } from "@/features/economic-calendar/utils";
 import { InstrumentSelect } from "./InstrumentSelect";
 import { ResultBadge } from "./ResultBadge";
-import type { Account, Direction, Result, SetupDefinition, Trade, TradeEmotion, TradeScreenshotAsset, TradeSession } from "@/types";
+import type {
+  Account,
+  ChecklistEnforcementMode,
+  Direction,
+  Result,
+  SetupDefinition,
+  Trade,
+  TradeEmotion,
+  TradeScreenshotAsset,
+  TradeSession,
+} from "@/types";
 import { EMOTIONS, SESSIONS } from "@/types";
 import {
   deriveTradeDirectionFromPrices,
@@ -40,6 +53,11 @@ type TradeFormValue = {
   session: TradeSession | "";
   emotion: TradeEmotion | "";
   notes: string;
+  checklistResponses?: Array<{
+    checklistRuleId: string;
+    checked: boolean;
+    note?: string | null;
+  }>;
 };
 
 interface TradeFormDialogProps {
@@ -60,6 +78,12 @@ interface TradeFormDialogProps {
     session?: TradeSession | null;
     emotion?: TradeEmotion | null;
     notes: string;
+    checklistResponses?: Array<{
+      checklistRuleId: string;
+      checked: boolean;
+      note?: string | null;
+    }>;
+    checklistScopeMode?: "applicable" | "exact";
   }) => Promise<Trade | void> | Trade | void;
   editTrade?: Trade | null;
   accounts: Account[];
@@ -96,6 +120,7 @@ export function TradeFormDialog({
 }: TradeFormDialogProps) {
   const { user } = useAuth();
   const [form, setForm] = useState<TradeFormValue>(() => buildEmptyForm(accounts));
+  const [checklistSelections, setChecklistSelections] = useState<Record<string, { checked: boolean }>>({});
   const [createdTrade, setCreatedTrade] = useState<Trade | null>(null);
   const [draftScreenshots, setDraftScreenshots] = useState<File[]>([]);
   const [isUploadingDraftScreenshots, setIsUploadingDraftScreenshots] = useState(false);
@@ -161,6 +186,7 @@ export function TradeFormDialog({
     setCreatedTrade(null);
     setDraftScreenshots([]);
     setIsUploadingDraftScreenshots(false);
+    setChecklistSelections({});
   }, [open]);
 
   const derivedResult = useMemo(() => deriveTradeResultFromProfit(form.profit), [form.profit]);
@@ -203,6 +229,34 @@ export function TradeFormDialog({
       now: new Date(),
     });
   }, [economicCalendarQuery.data?.items, form.pair, isTradeDateToday]);
+  const selectedSetupId = form.setupId === "__none" ? null : form.setupId;
+  const selectedSetup = selectedSetupId
+    ? setups.find((setup) => setup.id === selectedSetupId) ?? null
+    : null;
+  const setupChecklistRules = selectedSetup?.preTradeChecklist;
+  const checklistRulesQuery = useQuery({
+    queryKey: privateQueryKey(user.id, "checklist-rules", "trade-form", selectedSetupId ?? "__setup-required"),
+    queryFn: async () => listChecklistRules({
+      activeOnly: true,
+      setupId: selectedSetupId,
+      scopeMode: "exact",
+    }),
+    enabled: open && !editTrade && Boolean(selectedSetupId),
+  });
+  const checklistRules = useMemo(
+    () => checklistRulesQuery.data?.items ?? setupChecklistRules ?? [],
+    [checklistRulesQuery.data?.items, setupChecklistRules],
+  );
+  const checklistMode: ChecklistEnforcementMode = user.checklistEnforcementMode ?? "soft";
+  const checklistErrorMessage = checklistRules.length === 0 && checklistRulesQuery.error instanceof ApiError
+    ? checklistRulesQuery.error.message
+    : checklistRules.length === 0 && checklistRulesQuery.error
+      ? "Checklist rules could not be loaded right now."
+      : null;
+  const incompleteRequiredChecklistCount = checklistRules.filter(
+    (rule) => rule.isRequired && !checklistSelections[rule.id]?.checked,
+  ).length;
+  const isChecklistStrictlyBlocked = !editTrade && checklistMode === "strict" && incompleteRequiredChecklistCount > 0;
 
   const handleSave = async () => {
     if (
@@ -216,8 +270,6 @@ export function TradeFormDialog({
     ) {
       return;
     }
-
-    const selectedSetup = setups.find((setup) => setup.id === form.setupId);
 
     const savedTrade = await onSave({
       date: form.date,
@@ -234,6 +286,13 @@ export function TradeFormDialog({
       session: form.session || null,
       emotion: form.emotion || null,
       notes: form.notes.trim(),
+      checklistResponses: selectedSetupId
+        ? checklistRules.map((rule) => ({
+        checklistRuleId: rule.id,
+        checked: checklistSelections[rule.id]?.checked ?? false,
+      }))
+        : [],
+      checklistScopeMode: selectedSetupId ? "exact" : undefined,
     });
 
     const persistedTrade = savedTrade ?? activeTrade;
@@ -305,6 +364,22 @@ export function TradeFormDialog({
 
     onScreenshotsChange?.(updatedTrade);
   };
+
+  useEffect(() => {
+    if (!open || editTrade || !selectedSetupId) {
+      setChecklistSelections({});
+      return;
+    }
+
+    setChecklistSelections((current) => Object.fromEntries(
+      checklistRules.map((rule) => [
+        rule.id,
+        {
+          checked: current[rule.id]?.checked ?? false,
+        },
+      ]),
+    ));
+  }, [checklistRules, editTrade, open, selectedSetupId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -458,6 +533,45 @@ export function TradeFormDialog({
             <Textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} rows={3} />
           </div>
 
+          {!editTrade ? (
+            <div className="space-y-2 sm:col-span-2">
+              {selectedSetupId ? (
+                <TradeChecklistCard
+                  rules={checklistRules}
+                  selections={checklistSelections}
+                  checklistMode={checklistMode}
+                  isLoading={checklistRules.length === 0 && checklistRulesQuery.isLoading}
+                  errorMessage={checklistErrorMessage}
+                  title="Pre-Trade"
+                  description={
+                    checklistRules.length > 0
+                      ? "Review the active checklist items attached to this setup before saving the trade."
+                      : "This setup does not have an active pre-trade checklist yet."
+                  }
+                  emptyTitle={`No pre-trade items for ${selectedSetup?.name ?? "this setup"} yet.`}
+                  emptyDescription="Setup-specific discipline lives in Setups and will appear here once items are added."
+                  onToggle={(ruleId, checked) => setChecklistSelections((current) => ({
+                    ...current,
+                    [ruleId]: {
+                      checked,
+                    },
+                  }))}
+                />
+              ) : (
+                <TradeChecklistCard
+                  rules={[]}
+                  selections={{}}
+                  checklistMode={checklistMode}
+                  title="Pre-Trade"
+                  description="Select a setup to load its active pre-trade checklist before saving this trade."
+                  emptyTitle="No setup selected"
+                  emptyDescription="Setup-specific discipline stays tied to the strategy you choose for this trade."
+                  onToggle={() => undefined}
+                />
+              )}
+            </div>
+          ) : null}
+
           <div className="space-y-2 sm:col-span-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Screenshots</Label>
             <ScreenshotUpload
@@ -477,7 +591,15 @@ export function TradeFormDialog({
           <Button
             onClick={() => void handleSave()}
             className="w-full sm:w-auto"
-            disabled={isSaving || isUploadingDraftScreenshots || accounts.length === 0 || derivedResult === null || derivedDirection === null || parsedTakeProfit === null}
+            disabled={
+              isSaving
+              || isUploadingDraftScreenshots
+              || accounts.length === 0
+              || derivedResult === null
+              || derivedDirection === null
+              || parsedTakeProfit === null
+              || isChecklistStrictlyBlocked
+            }
           >
             {isUploadingDraftScreenshots ? "Uploading screenshots..." : isSaving ? "Saving..." : activeTrade ? "Update Trade" : "Save Trade"}
           </Button>

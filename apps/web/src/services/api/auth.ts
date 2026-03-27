@@ -39,3 +39,12 @@ export function changePassword(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+export function updatePreferences(payload: {
+  checklistEnforcementMode: AuthUser["checklistEnforcementMode"];
+}) {
+  return apiFetch<{ user: AuthenticatedUser }>("/auth/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}

@@ -22,6 +22,11 @@ export async function tradeRoutes(app: FastifyInstance) {
     const trade = await createTrade(request.auth!.userId, {
       ...body,
       notes: body.notes ?? "",
+      checklistResponses: (body.checklistResponses ?? []).map((response) => ({
+        checklistRuleId: response.checklistRuleId,
+        checked: response.checked ?? false,
+        note: response.note ?? null,
+      })),
     });
     reply.status(201).send({ trade });
   });

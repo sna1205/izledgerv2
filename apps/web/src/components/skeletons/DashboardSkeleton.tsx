@@ -1,7 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   SkeletonCardList,
-  SkeletonHeader,
   SkeletonShell,
   SkeletonStatGrid,
   SkeletonTable,

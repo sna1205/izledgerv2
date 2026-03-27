@@ -8,6 +8,10 @@ export const setupParamsSchema = z.object({
 export const createSetupSchema = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(2000).default(""),
+  entryLogic: z.string().trim().max(4000).optional().nullable(),
+  confirmationLogic: z.string().trim().max(4000).optional().nullable(),
+  invalidationLogic: z.string().trim().max(4000).optional().nullable(),
+  notes: z.string().trim().max(4000).optional().nullable(),
   color: z.string().trim().max(32).optional(),
   isArchived: z.boolean().optional(),
 });

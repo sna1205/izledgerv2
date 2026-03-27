@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createAccountViaApi } from "./helpers.js";
 
 process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
@@ -39,18 +40,10 @@ test("trade shares store snapshots, filter public fields, increment views, and r
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const account = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    const userId = registerResponse.json().user.id as string;
+    const account = await createAccountViaApi(app, sessionCookie, {
+      name: "Shared Trade Account",
     });
-
-    assert.ok(account, "Expected a default account for the registered user.");
 
     const createTradeResponse = await app.inject({
       method: "POST",
@@ -105,7 +98,7 @@ test("trade shares store snapshots, filter public fields, increment views, and r
       where: {
         tradeId_userId: {
           tradeId,
-          userId: account.userId,
+          userId,
         },
       },
     });
@@ -226,18 +219,10 @@ test("legacy unversioned trade share payloads still load after versioned rollout
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const account = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    const userId = registerResponse.json().user.id as string;
+    const account = await createAccountViaApi(app, sessionCookie, {
+      name: "Legacy Trade Share Account",
     });
-
-    assert.ok(account, "Expected a default account for the registered user.");
 
     const createTradeResponse = await app.inject({
       method: "POST",
@@ -288,7 +273,7 @@ test("legacy unversioned trade share payloads still load after versioned rollout
       where: {
         tradeId_userId: {
           tradeId,
-          userId: account.userId,
+          userId,
         },
       },
       data: {
@@ -355,18 +340,10 @@ test("malformed stored trade share payloads fail gracefully instead of throwing 
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const account = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    const userId = registerResponse.json().user.id as string;
+    const account = await createAccountViaApi(app, sessionCookie, {
+      name: "Revoke Trade Share Account",
     });
-
-    assert.ok(account, "Expected a default account for the registered user.");
 
     const createTradeResponse = await app.inject({
       method: "POST",
@@ -414,7 +391,7 @@ test("malformed stored trade share payloads fail gracefully instead of throwing 
       where: {
         tradeId_userId: {
           tradeId,
-          userId: account.userId,
+          userId,
         },
       },
       data: {

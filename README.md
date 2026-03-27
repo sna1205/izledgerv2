@@ -16,11 +16,13 @@ The app is API-backed. Frontend requests go through the backend, and auth uses H
 npm install
 ```
 
+If you run the repo from WSL, make sure `npm` also comes from WSL/Linux instead of `C:\\Program Files\\nodejs\\npm`. A mixed Windows `npm` + Linux `node` shell can start the app with the wrong runtime context and cause hard-to-debug local auth or database issues.
+
 2. Create env files:
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
+cp apps/api/.env.example apps/api/.env.local
+cp apps/web/.env.example apps/web/.env.local
 ```
 
 3. Start backend dependencies from `apps/api` if you use the included Docker stack:
@@ -52,9 +54,11 @@ npm run dev
 
 The root dev launcher now:
 
-- creates `apps/api/.env` and `apps/web/.env` from their examples when missing
-- keeps the frontend pointed at the backend automatically
-- falls forward to the next free port if `4000` or `5173` is already in use
+- creates `apps/api/.env.local` and `apps/web/.env.local` from their examples when missing
+- validates that local frontend and backend URLs agree before starting
+- applies committed Prisma migrations to the local API database before booting the backend
+- uses the ports and core URLs from the local env files instead of silently overriding them
+- only supplements WSL-safe temp-directory vars for the API process
 
 Default local app URLs:
 
@@ -63,14 +67,14 @@ Default local app URLs:
 
 ## Required env vars
 
-Frontend in `apps/web/.env`:
+Frontend in `apps/web/.env.local`:
 
 ```bash
 VITE_APP_ENV=local
 VITE_API_BASE_URL=http://localhost:4000
 ```
 
-Backend in `apps/api/.env`:
+Backend in `apps/api/.env.local`:
 
 ```bash
 NODE_ENV=development
@@ -118,17 +122,40 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5433/izledger_test
 PRISMA_MIGRATE_CHECK_SHADOW_DATABASE_URL=
 ```
 
+## Local Env Strategy
+
+- `apps/api/.env.local` is the source of truth for local backend `PORT`, `APP_URL`, `API_URL`, and `CORS_ALLOWED_ORIGINS`.
+- `apps/web/.env.local` is the source of truth for local frontend `VITE_APP_ENV`, `VITE_API_BASE_URL`, and `VITE_FEATURE_ECONOMIC_CALENDAR`.
+- `npm run dev` creates missing `.env.local` files from the examples, validates that `apps/web/.env.local` points at `apps/api/.env.local` `API_URL`, then starts both apps with those file values.
+- `npm run dev:api` uses `apps/api/.env.local` only. It does not redefine `PORT`, `APP_URL`, or `API_URL`.
+- `npm run dev:web` uses `apps/web/.env.local` for Vite env vars and uses the `APP_URL` port from `apps/api/.env.local` so it matches `npm run dev`.
+- `npm run start` builds the API and a local web preview, then starts both from built output using the same `.env.local` values.
+- All local run commands now agree on the default local values: API URL `http://localhost:4000`, web app env `local`, web port `5173`, and API port `4000`.
+
 ## Run commands
 
 From the repo root:
 
 ```bash
+# Local dev with watch mode
 npm run dev
 npm run dev:web
 npm run dev:api
+
+# Local production-like start from built output
+npm run start
+npm run start:web
+npm run start:api
+
+# Production builds
 npm run build
 npm run build:web
 npm run build:api
+
+# Local preview build
+npm run build:web:local
+
+# Tooling
 npm run prisma:validate
 npm run prisma:check:migrations
 npm run prisma:check:release
@@ -208,6 +235,7 @@ That release check fails when Prisma files are uncommitted, schema validation fa
 ## Production readiness summary
 
 - No mock/demo journal seeding remains.
+- New user registration does not auto-create default accounts or other starter records.
 - Frontend auth uses backend HTTP-only cookie sessions.
 - Frontend requests go through centralized API modules and env config.
 - Empty databases render clean empty states instead of fake starter content.

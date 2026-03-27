@@ -24,7 +24,6 @@ import { AccountFilterSelect } from "@/features/accounts/components/AccountFilte
 import {
   EmotionsBreakdownChart,
   getBreakdownCategoryAccent,
-  getBreakdownColor,
   PairsBreakdownChart,
   SessionsBreakdownChart,
   SetupsBreakdownChart,
@@ -811,6 +810,8 @@ export default function Analytics() {
       <PageErrorState
         title={pageError.title}
         description={pageError.description}
+        layout="page"
+        size="wide"
         onRetry={pageError.allowRetry ? () => {
           void Promise.all([breakdownsQuery.refetch(), calendarQuery.refetch(), detailedTradesQuery.refetch()]);
         } : undefined}

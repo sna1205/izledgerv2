@@ -1,12 +1,14 @@
-import "dotenv/config";
 import process from "node:process";
 import { PrismaClient } from "@prisma/client";
+import { env } from "../src/config/env.ts";
 import {
   loadNumericIntegrityAudit,
   writeNumericIntegrityReport,
 } from "./lib/numeric-integrity.mjs";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  log: env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+});
 const applyChanges = process.argv.includes("--apply");
 
 try {

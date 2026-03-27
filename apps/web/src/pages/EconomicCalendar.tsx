@@ -215,6 +215,8 @@ function EconomicCalendarLivePage() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => void eventsQuery.refetch() : undefined}
         isRetrying={eventsQuery.isFetching}
       />

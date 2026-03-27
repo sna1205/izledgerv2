@@ -6,6 +6,7 @@ import { getReadUrl } from "../../lib/storage.js";
 import { buildPagination } from "../../utils/http.js";
 import { AppError } from "../../utils/errors.js";
 import { sessionFromDb, sessionToDb } from "../../utils/domain-mappers.js";
+import { createTradeChecklistSnapshots, type ChecklistResponseInput } from "../checklist-rules/service.js";
 import { deriveTradeDirection } from "./direction.js";
 import { deriveTradeResultFromProfit } from "./result.js";
 
@@ -13,7 +14,7 @@ function normalizeTradePair(value: string) {
   return value.trim().replace(/\s+/g, "").toUpperCase();
 }
 
-const tradeInclude = Prisma.validator<Prisma.TradeInclude>()({
+const tradeListInclude = Prisma.validator<Prisma.TradeInclude>()({
   account: true,
   setup: true,
   screenshots: {
@@ -22,6 +23,18 @@ const tradeInclude = Prisma.validator<Prisma.TradeInclude>()({
     },
   },
 });
+
+const tradeDetailInclude = Prisma.validator<Prisma.TradeInclude>()({
+  ...tradeListInclude,
+  checklistResponses: {
+    orderBy: {
+      sortOrderSnapshot: "asc" as const,
+    },
+  },
+});
+
+type TradeListRecord = Prisma.TradeGetPayload<{ include: typeof tradeListInclude }>;
+type TradeDetailRecord = Prisma.TradeGetPayload<{ include: typeof tradeDetailInclude }>;
 
 async function resolveSetup(userId: string, input: {
   setupId?: string | null;
@@ -89,7 +102,7 @@ async function ensureOwnedAccount(userId: string, accountId: string, options?: {
   return account;
 }
 
-async function toTradeDto(trade: Prisma.TradeGetPayload<{ include: typeof tradeInclude }>) {
+async function toTradeDto(trade: TradeListRecord | TradeDetailRecord) {
   const screenshotAssets = await Promise.all(
     trade.screenshots.map(async (screenshot) => ({
       id: screenshot.id,
@@ -119,6 +132,22 @@ async function toTradeDto(trade: Prisma.TradeGetPayload<{ include: typeof tradeI
     notes: trade.notes,
     screenshots: screenshotAssets.map((asset) => asset.url),
     screenshotAssets,
+    checklistResponses:
+      "checklistResponses" in trade
+        ? trade.checklistResponses.map((response) => ({
+            id: response.id,
+            tradeId: response.tradeId,
+            checklistRuleId: response.checklistRuleId,
+            ruleTitleSnapshot: response.ruleTitleSnapshot,
+            ruleDescriptionSnapshot: response.ruleDescriptionSnapshot,
+            isRequiredSnapshot: response.isRequiredSnapshot,
+            checked: response.checked,
+            note: response.note,
+            sortOrderSnapshot: response.sortOrderSnapshot,
+            createdAt: response.createdAt.toISOString(),
+            updatedAt: response.updatedAt.toISOString(),
+          }))
+        : undefined,
     createdAt: trade.createdAt.toISOString(),
     updatedAt: trade.updatedAt.toISOString(),
     account: {
@@ -179,7 +208,7 @@ async function getOwnedTrade(userId: string, tradeId: string) {
       userId,
       deletedAt: null,
     },
-    include: tradeInclude,
+    include: tradeDetailInclude,
   });
 
   if (!trade) {
@@ -219,7 +248,7 @@ export async function listTrades(userId: string, query: {
     prisma.trade.count({ where }),
     prisma.trade.findMany({
       where,
-      include: tradeInclude,
+      include: tradeListInclude,
       orderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
@@ -252,6 +281,8 @@ export async function createTrade(userId: string, input: {
   session?: "Asia" | "London" | "New York" | null;
   emotion?: "Calm" | "Focused" | "Confident" | "Anxious" | "Frustrated" | null;
   notes: string;
+  checklistResponses?: ChecklistResponseInput[];
+  checklistScopeMode?: "applicable" | "exact";
 }) {
   await ensureOwnedAccount(userId, input.accountId);
   const setup = await resolveSetup(userId, {
@@ -265,25 +296,46 @@ export async function createTrade(userId: string, input: {
     throw new AppError(400, "INVALID_TRADE_DIRECTION", "Stop Loss must be above or below Entry to determine trade direction.");
   }
 
-  const trade = await prisma.trade.create({
-    data: {
-      userId,
+  const trade = await prisma.$transaction(async (tx) => {
+    const createdTrade = await tx.trade.create({
+      data: {
+        userId,
+        accountId: input.accountId,
+        tradeDate: new Date(`${input.date}T00:00:00.000Z`),
+        pair: normalizeTradePair(input.pair),
+        direction: derivedDirection,
+        entry: input.entry,
+        stopLoss: input.stopLoss,
+        takeProfit: input.takeProfit,
+        profit: input.profit,
+        result: derivedResult,
+        setupId: setup.setupId,
+        setupNameSnapshot: setup.setupNameSnapshot,
+        session: (sessionToDb(input.session) as TradeSession | null | undefined) ?? null,
+        emotion: input.emotion ?? null,
+        notes: input.notes,
+      },
+    });
+
+    await createTradeChecklistSnapshots(tx, userId, createdTrade.id, {
       accountId: input.accountId,
-      tradeDate: new Date(`${input.date}T00:00:00.000Z`),
-      pair: normalizeTradePair(input.pair),
-      direction: derivedDirection,
-      entry: input.entry,
-      stopLoss: input.stopLoss,
-      takeProfit: input.takeProfit,
-      profit: input.profit,
-      result: derivedResult,
       setupId: setup.setupId,
-      setupNameSnapshot: setup.setupNameSnapshot,
-      session: (sessionToDb(input.session) as TradeSession | null | undefined) ?? null,
-      emotion: input.emotion ?? null,
-      notes: input.notes,
-    },
-    include: tradeInclude,
+      checklistResponses: input.checklistResponses,
+      scopeMode: input.checklistScopeMode,
+    });
+
+    const tradeWithRelations = await tx.trade.findUnique({
+      where: {
+        id: createdTrade.id,
+      },
+      include: tradeDetailInclude,
+    });
+
+    if (!tradeWithRelations) {
+      throw new AppError(404, "TRADE_NOT_FOUND", "Trade not found.");
+    }
+
+    return tradeWithRelations;
   });
 
   return toTradeDto(trade);
@@ -354,7 +406,7 @@ export async function updateTrade(userId: string, tradeId: string, input: {
       emotion: input.emotion === undefined ? undefined : input.emotion,
       notes: input.notes,
     },
-    include: tradeInclude,
+    include: tradeDetailInclude,
   });
 
   return toTradeDto(trade);

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ScreenshotCleanupAction, ScreenshotCleanupReason } from "@prisma/client";
+import { createAccountViaApi } from "./helpers.js";
 
 process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
@@ -39,18 +40,14 @@ async function createAuthenticatedTrade(username: string, password: string) {
 
   assert.equal(registerResponse.statusCode, 201);
   const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-  const account = await prisma.account.findFirst({
+  const createdAccount = await createAccountViaApi(app, sessionCookie);
+  const account = await prisma.account.findUnique({
     where: {
-      user: {
-        username,
-      },
-    },
-    orderBy: {
-      createdAt: "asc",
+      id: createdAccount.id,
     },
   });
 
-  assert.ok(account, "Expected the default account created during registration.");
+  assert.ok(account, "Expected the created account to be persisted.");
 
   const createTradeResponse = await app.inject({
     method: "POST",

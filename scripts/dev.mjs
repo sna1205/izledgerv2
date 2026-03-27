@@ -1,21 +1,20 @@
 import { spawn } from "node:child_process";
-import { access, copyFile } from "node:fs/promises";
-import { constants, existsSync } from "node:fs";
-import net from "node:net";
+import http from "node:http";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import {
+  applyLocalApiMigrations,
+  ensureLocalDevEnvFiles,
+  getApiLocalProcessEnv,
+  getWebLocalProcessEnv,
+  loadLocalDevConfig,
+  preferredNodePath,
+  rootDir,
+} from "./local-dev-config.mjs";
 
-const DEFAULT_WEB_PORT = 5173;
-const DEFAULT_API_PORT = 4000;
-const WSL_SAFE_TMP_DIR = "/tmp";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, "..");
-const preferredNodePath =
-  process.env.IZLEDGER_NODE_PATH ??
-  (process.platform === "linux" && existsSync("/usr/bin/node") ? "/usr/bin/node" : process.execPath);
+const API_READY_TIMEOUT_MS = 30_000;
+const API_READY_POLL_MS = 500;
+const API_LIVENESS_PATH = "/live";
 
 const runningChildren = [];
 
@@ -25,47 +24,6 @@ function log(message) {
 
 function logError(message) {
   process.stderr.write(`[dev] ${message}\n`);
-}
-
-async function ensureFile(targetPath, examplePath) {
-  try {
-    await access(targetPath, constants.F_OK);
-    return false;
-  } catch {
-    await copyFile(examplePath, targetPath);
-    return true;
-  }
-}
-
-function isPortAvailable(port, host = "0.0.0.0") {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-
-    server.once("error", (error) => {
-      if (error && typeof error === "object" && "code" in error) {
-        resolve(false);
-        return;
-      }
-
-      resolve(false);
-    });
-
-    server.once("listening", () => {
-      server.close(() => resolve(true));
-    });
-
-    server.listen({ host, port });
-  });
-}
-
-async function findAvailablePort(preferredPort) {
-  let port = preferredPort;
-
-  while (!(await isPortAvailable(port))) {
-    port += 1;
-  }
-
-  return port;
 }
 
 function pipeWithPrefix(stream, prefix, output) {
@@ -164,6 +122,82 @@ function spawnApp(name, cwd, scriptPath, args, env) {
   return child;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function requestJson(url) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(url, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        resolve({
+          statusCode: response.statusCode ?? 0,
+          body,
+        });
+      });
+    });
+
+    request.on("error", reject);
+    request.setTimeout(5_000, () => {
+      request.destroy(new Error(`Timed out waiting for ${url}`));
+    });
+  });
+}
+
+function getApiLivenessUrls(apiOrigin) {
+  const urls = [];
+
+  try {
+    const parsed = new URL(apiOrigin);
+    const addUrl = (hostname) => {
+      const nextUrl = new URL(parsed);
+      nextUrl.hostname = hostname;
+      urls.push(`${nextUrl.origin}${API_LIVENESS_PATH}`);
+    };
+
+    addUrl(parsed.hostname);
+
+    if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(parsed.hostname)) {
+      addUrl("127.0.0.1");
+      addUrl("localhost");
+    }
+  } catch {
+    urls.push(`${apiOrigin}${API_LIVENESS_PATH}`);
+  }
+
+  return [...new Set(urls)];
+}
+
+async function waitForApiBoot(apiOrigin) {
+  const livenessUrls = getApiLivenessUrls(apiOrigin);
+  const deadline = Date.now() + API_READY_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    for (const livenessUrl of livenessUrls) {
+      try {
+        const response = await requestJson(livenessUrl);
+
+        if (response.statusCode === 200) {
+          return livenessUrl;
+        }
+      } catch {
+        // Keep polling until the timeout is reached.
+      }
+    }
+
+    await delay(API_READY_POLL_MS);
+  }
+
+  throw new Error(`API liveness checks at ${livenessUrls.join(", ")} did not succeed within ${API_READY_TIMEOUT_MS}ms.`);
+}
+
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => shutdown(0));
 }
@@ -175,67 +209,39 @@ process.on("exit", () => {
 });
 
 async function main() {
-  const apiEnvPath = path.join(rootDir, "apps/api/.env");
-  const apiEnvExamplePath = path.join(rootDir, "apps/api/.env.example");
-  const webEnvPath = path.join(rootDir, "apps/web/.env");
-  const webEnvExamplePath = path.join(rootDir, "apps/web/.env.example");
-
-  const createdApiEnv = await ensureFile(apiEnvPath, apiEnvExamplePath);
-  const createdWebEnv = await ensureFile(webEnvPath, webEnvExamplePath);
-
-  if (createdApiEnv) {
-    log("created apps/api/.env from apps/api/.env.example");
-  }
-
-  if (createdWebEnv) {
-    log("created apps/web/.env.local from apps/web/.env.example");
-  }
-
-  const apiPort = await findAvailablePort(DEFAULT_API_PORT);
-  const webPort = await findAvailablePort(DEFAULT_WEB_PORT);
-
-  if (apiPort !== DEFAULT_API_PORT) {
-    log(`port ${DEFAULT_API_PORT} is busy, using API port ${apiPort}`);
-  }
-
-  if (webPort !== DEFAULT_WEB_PORT) {
-    log(`port ${DEFAULT_WEB_PORT} is busy, using web port ${webPort}`);
-  }
-
-  const apiOrigin = `http://localhost:${apiPort}`;
-  const webOrigin = `http://localhost:${webPort}`;
+  await ensureLocalDevEnvFiles(log);
+  const config = await loadLocalDevConfig();
+  const apiOrigin = config.api.origin;
+  const webOrigin = config.web.origin;
+  const webPort = config.web.port;
 
   log(`starting API at ${apiOrigin}`);
   log(`starting web at ${webOrigin}`);
+  log(`local env sources: ${path.relative(rootDir, config.paths.apiEnvLocalPath)} and ${path.relative(rootDir, config.paths.webEnvLocalPath)}`);
+  log("applying local Prisma migrations before starting API");
+  await applyLocalApiMigrations(log, logError);
 
   spawnApp(
     "api",
     path.join(rootDir, "apps/api"),
     path.join(rootDir, "node_modules/tsx/dist/cli.mjs"),
     ["watch", "src/server.ts"],
-    {
-      ...process.env,
-      NODE_ENV: process.env.NODE_ENV ?? "development",
-      PORT: String(apiPort),
-      APP_URL: webOrigin,
-      API_URL: apiOrigin,
-      CORS_ALLOWED_ORIGINS: webOrigin,
-      TMPDIR: WSL_SAFE_TMP_DIR,
-      TMP: WSL_SAFE_TMP_DIR,
-      TEMP: WSL_SAFE_TMP_DIR,
-    },
+    getApiLocalProcessEnv(),
   );
+
+  log("waiting for API liveness check before starting web");
+  const readyUrl = await waitForApiBoot(apiOrigin);
+
+  if (readyUrl !== `${apiOrigin}${API_LIVENESS_PATH}`) {
+    log(`API became ready via ${readyUrl}`);
+  }
 
   spawnApp(
     "web",
     path.join(rootDir, "apps/web"),
     path.join(rootDir, "node_modules/vite/bin/vite.js"),
-    ["--host", "0.0.0.0", "--port", String(webPort)],
-    {
-      ...process.env,
-      VITE_API_BASE_URL: apiOrigin,
-      VITE_APP_ENV: "local",
-    },
+    ["--host", "0.0.0.0", "--port", String(webPort), "--strictPort"],
+    getWebLocalProcessEnv(),
   );
 }
 

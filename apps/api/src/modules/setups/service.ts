@@ -23,10 +23,26 @@ function toSetupDto(setup: {
   id: string;
   name: string;
   description: string;
+  entryLogic: string | null;
+  confirmationLogic: string | null;
+  invalidationLogic: string | null;
+  notes: string | null;
   color: string;
   isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
+  checklistRules?: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    isRequired: boolean;
+    isActive: boolean;
+    sortOrder: number;
+    setupId: string | null;
+    accountId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
   _count?: {
     trades: number;
   };
@@ -35,10 +51,28 @@ function toSetupDto(setup: {
     id: setup.id,
     name: setup.name,
     description: setup.description,
+    entryLogic: setup.entryLogic,
+    confirmationLogic: setup.confirmationLogic,
+    invalidationLogic: setup.invalidationLogic,
+    notes: setup.notes,
     color: normalizeSetupColor(setup.color) ?? "#10B981",
     isArchived: setup.isArchived,
     createdAt: setup.createdAt.toISOString(),
     updatedAt: setup.updatedAt.toISOString(),
+    preTradeChecklist: setup.checklistRules?.map((rule) => ({
+      id: rule.id,
+      title: rule.title,
+      description: rule.description,
+      isRequired: rule.isRequired,
+      isActive: rule.isActive,
+      sortOrder: rule.sortOrder,
+      setupId: rule.setupId,
+      accountId: rule.accountId,
+      createdAt: rule.createdAt.toISOString(),
+      updatedAt: rule.updatedAt.toISOString(),
+      setup: null,
+      account: null,
+    })) ?? [],
     tradeCount: setup._count?.trades ?? 0,
   };
 }
@@ -154,6 +188,30 @@ export async function listSetups(userId: string, query: {
               mode: "insensitive" as const,
             },
           },
+          {
+            entryLogic: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            confirmationLogic: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            invalidationLogic: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            notes: {
+              contains: query.search,
+              mode: "insensitive" as const,
+            },
+          },
         ]
       : undefined,
   } satisfies Prisma.SetupWhereInput;
@@ -170,6 +228,15 @@ export async function listSetups(userId: string, query: {
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
       include: {
+        checklistRules: {
+          where: {
+            isActive: true,
+          },
+          orderBy: [
+            { sortOrder: "asc" },
+            { createdAt: "asc" },
+          ],
+        },
         _count: {
           select: {
             trades: {
@@ -192,6 +259,10 @@ export async function listSetups(userId: string, query: {
 export async function createSetup(userId: string, input: {
   name: string;
   description: string;
+  entryLogic?: string | null;
+  confirmationLogic?: string | null;
+  invalidationLogic?: string | null;
+  notes?: string | null;
   color?: string;
   isArchived?: boolean;
 }) {
@@ -205,6 +276,10 @@ export async function createSetup(userId: string, input: {
         name: input.name,
         nameNormalized: normalizeSetupName(input.name),
         description: input.description,
+        entryLogic: input.entryLogic?.trim() || null,
+        confirmationLogic: input.confirmationLogic?.trim() || null,
+        invalidationLogic: input.invalidationLogic?.trim() || null,
+        notes: input.notes?.trim() || null,
         color,
         isArchived: input.isArchived ?? false,
       },
@@ -223,6 +298,10 @@ export async function createSetup(userId: string, input: {
 export async function updateSetup(userId: string, setupId: string, input: {
   name?: string;
   description?: string;
+  entryLogic?: string | null;
+  confirmationLogic?: string | null;
+  invalidationLogic?: string | null;
+  notes?: string | null;
   color?: string;
   isArchived?: boolean;
 }) {
@@ -244,6 +323,10 @@ export async function updateSetup(userId: string, setupId: string, input: {
         name: input.name,
         nameNormalized: input.name ? normalizeSetupName(input.name) : undefined,
         description: input.description,
+        entryLogic: input.entryLogic === undefined ? undefined : input.entryLogic?.trim() || null,
+        confirmationLogic: input.confirmationLogic === undefined ? undefined : input.confirmationLogic?.trim() || null,
+        invalidationLogic: input.invalidationLogic === undefined ? undefined : input.invalidationLogic?.trim() || null,
+        notes: input.notes === undefined ? undefined : input.notes?.trim() || null,
         color,
         isArchived: input.isArchived,
       },

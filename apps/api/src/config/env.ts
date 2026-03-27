@@ -66,7 +66,15 @@ function normalizeOrigin(value: string) {
 }
 
 function isLocalHostname(hostname: string) {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  return hostname === "localhost" || hostname === "0.0.0.0" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function getUrlHostname(value: string) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
 }
 
 function getRegistrableDomain(hostname: string) {
@@ -117,9 +125,9 @@ function resolveRuntimeEnv() {
 
 function loadFileEnv() {
   const runtimeEnv = resolveRuntimeEnv();
-  const hasLocalFiles = existsSync(path.join(appRootDir, ".env")) || existsSync(path.join(appRootDir, ".env.local"));
+  const hasLocalFile = existsSync(path.join(appRootDir, ".env.local"));
 
-  const developmentFallback = runtimeEnv === "development" && !hasLocalFiles
+  const developmentFallback = runtimeEnv === "development" && !hasLocalFile
     ? readEnvFile(".env.example")
     : {};
 
@@ -131,7 +139,6 @@ function loadFileEnv() {
 
   return {
     ...developmentFallback,
-    ...readEnvFile(".env"),
     ...modeEnv,
   };
 }
@@ -146,6 +153,9 @@ const envSchema = z.object({
   API_URL: optionalUrlFromEnv,
   CORS_ALLOWED_ORIGINS: optionalUrlArrayFromEnv,
   DATABASE_URL: z.string().min(1),
+  DIRECT_URL: optionalStringFromEnv,
+  TEST_DATABASE_URL: optionalStringFromEnv,
+  PRISMA_MIGRATE_CHECK_SHADOW_DATABASE_URL: optionalStringFromEnv,
   SESSION_COOKIE_NAME: z.string().default("izledger_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(14),
   SESSION_COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
@@ -170,6 +180,10 @@ const envSchema = z.object({
   ECONOMIC_CALENDAR_TRADING_ECONOMICS_API_KEY: optionalStringFromEnv,
   ECONOMIC_CALENDAR_PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().default(7000),
   ECONOMIC_CALENDAR_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  RESTORE_VERIFY_API_URL: optionalUrlFromEnv,
+  RESTORE_VERIFY_STORAGE_SAMPLE_SIZE: optionalStringFromEnv,
+  RESTORE_VERIFY_REQUIRE_API: booleanFromEnv.default(false),
+  RESTORE_VERIFY_REQUIRE_STORAGE: booleanFromEnv.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 }).superRefine((data, ctx) => {
   const appUrl = data.APP_URL ? new URL(data.APP_URL) : null;
@@ -285,6 +299,22 @@ const envSchema = z.object({
         });
       }
     }
+
+    for (const [key, url] of [["DATABASE_URL", data.DATABASE_URL], ["DIRECT_URL", data.DIRECT_URL]] as const) {
+      if (!url) {
+        continue;
+      }
+
+      const hostname = getUrlHostname(url);
+
+      if (hostname && isLocalHostname(hostname)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} cannot use localhost or loopback hosts in production`,
+        });
+      }
+    }
   }
 
   if (data.NODE_ENV === "production" && appUrl && apiUrl && isCrossSite(appUrl.hostname, apiUrl.hostname)
@@ -355,6 +385,53 @@ const normalizedAllowedOrigins = parsed.data.CORS_ALLOWED_ORIGINS.length > 0
     ? [normalizeOrigin(parsed.data.APP_URL)]
     : [];
 
+function serializeEnvValue(value: boolean | number | string | string[] | undefined) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(",");
+  }
+
+  return String(value);
+}
+
+function applyValidatedEnv(targetEnv: NodeJS.ProcessEnv, values: Record<string, boolean | number | string | string[] | undefined>) {
+  for (const [key, value] of Object.entries(values)) {
+    const serializedValue = serializeEnvValue(value);
+
+    if (serializedValue === undefined) {
+      delete targetEnv[key];
+      continue;
+    }
+
+    targetEnv[key] = serializedValue;
+  }
+}
+
+applyValidatedEnv(process.env, {
+  ...parsed.data,
+  APP_URL: parsed.data.APP_URL ? normalizeOrigin(parsed.data.APP_URL) : undefined,
+  API_URL: parsed.data.API_URL ? normalizeOrigin(parsed.data.API_URL) : undefined,
+  CORS_ALLOWED_ORIGINS: normalizedAllowedOrigins,
+  COOKIE_DOMAIN: parsed.data.COOKIE_DOMAIN,
+  SESSION_COOKIE_DOMAIN: parsed.data.COOKIE_DOMAIN,
+});
+
+const envWarnings: string[] = [];
+const explicitCorsAllowedOrigins = Object.prototype.hasOwnProperty.call(rawEnv, "CORS_ALLOWED_ORIGINS")
+  ? (rawEnv as Record<string, string | undefined>).CORS_ALLOWED_ORIGINS
+  : undefined;
+
+if (parsed.data.NODE_ENV === "production" && !explicitCorsAllowedOrigins && normalizedAllowedOrigins.length > 0) {
+  envWarnings.push("CORS_ALLOWED_ORIGINS is not set explicitly; defaulting to APP_URL.");
+}
+
+if (parsed.data.NODE_ENV === "production" && ["debug", "trace"].includes(parsed.data.LOG_LEVEL)) {
+  envWarnings.push(`LOG_LEVEL=${parsed.data.LOG_LEVEL} is unusually verbose for production.`);
+}
+
 export const env = {
   ...parsed.data,
   APP_URL: parsed.data.APP_URL ? normalizeOrigin(parsed.data.APP_URL) : undefined,
@@ -362,3 +439,5 @@ export const env = {
   CORS_ALLOWED_ORIGINS: normalizedAllowedOrigins,
   SESSION_COOKIE_DOMAIN: parsed.data.COOKIE_DOMAIN,
 } as const;
+
+export { envWarnings };

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers3, Pencil, Plus, RefreshCw, Sparkles, SwatchBook, Trash2 } from "lucide-react";
+import { Layers3, Pencil, Plus, Sparkles, SwatchBook, Trash2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { FilterBar, FilterField } from "@/components/FilterBar";
 import { PageErrorState } from "@/components/PageErrorState";
@@ -10,11 +11,8 @@ import { StatCard } from "@/components/StatCard";
 import { DataBadge } from "@/components/DataBadge";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,27 +26,15 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { SetupWorkspaceDialog, type WorkspaceTab } from "@/features/setups/components/SetupWorkspaceDialog";
 import { ApiError } from "@/services/api/client";
 import { createSetup, deleteSetup, listSetups, updateSetup } from "@/services/api/setups";
 import { formatNumberDisplay } from "@/utils/analytics-rendering";
 import { getPageErrorState } from "@/utils/page-errors";
 import { withMinimumDelay } from "@/utils/loading";
 import { privateQueryKey } from "@/services/query-client";
-import {
-  generateUniqueSetupColor,
-  normalizeSetupColor,
-  type SetupDefinition,
-} from "@/types";
+import { normalizeSetupColor, type SetupDefinition } from "@/types";
 
-function createEmptyForm(color = "") {
-  return {
-    name: "",
-    description: "",
-    color,
-  };
-}
-
-const emptyForm = createEmptyForm();
 const SETUPS_PAGE_SIZE = 12;
 const FALLBACK_SETUP_COLOR = "#10B981";
 
@@ -56,23 +42,14 @@ function resolveDisplayColor(color: string) {
   return normalizeSetupColor(color) ?? FALLBACK_SETUP_COLOR;
 }
 
-function buildUniqueFormColor(setups: SetupDefinition[], excludeSetupId?: string) {
-  return generateUniqueSetupColor(
-    setups
-      .filter((setup) => setup.id !== excludeSetupId)
-      .map((setup) => setup.color),
-  );
-}
-
-type SetupFormState = ReturnType<typeof createEmptyForm>;
-
 export default function Setups() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [editingSetup, setEditingSetup] = useState<SetupDefinition | null>(null);
+  const [initialDialogTab, setInitialDialogTab] = useState<WorkspaceTab>("strategy");
   const [deleteTarget, setDeleteTarget] = useState<SetupDefinition | null>(null);
-  const [form, setForm] = useState<SetupFormState>(emptyForm);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("all");
   const [sortBy, setSortBy] = useState<"createdAt" | "name">("createdAt");
@@ -99,15 +76,12 @@ export default function Setups() {
     placeholderData: keepPreviousData,
   });
 
-  const setups = setupsQuery.data?.items ?? [];
+  const setups = useMemo(() => setupsQuery.data?.items ?? [], [setupsQuery.data?.items]);
   const totalSetups = setupsQuery.data?.pagination.total ?? 0;
   const totalSetupPages = setupsQuery.data?.pagination.totalPages ?? 1;
   const activeSetups = setups.filter((setup) => !setup.isArchived).length;
-  const archivedSetups = setups.filter((setup) => setup.isArchived).length;
   const totalTradesMapped = setups.reduce((sum, setup) => sum + (setup.tradeCount ?? 0), 0);
   const hasActiveFilters = Boolean(search.trim()) || statusFilter !== "all";
-  const previewColor = resolveDisplayColor(form.color);
-  const formColorLabel = normalizeSetupColor(form.color) ?? previewColor;
 
   const invalidateData = async () => {
     await Promise.all([
@@ -119,32 +93,56 @@ export default function Setups() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: SetupFormState) => {
-      const normalized = {
-        name: payload.name.trim(),
-        description: payload.description.trim(),
-        color: normalizeSetupColor(payload.color)
-          ?? buildUniqueFormColor(setups, editingSetup?.id),
+    mutationFn: async ({ setupId, payload }: {
+      setupId: string | null;
+      payload: {
+        name: string;
+        description: string;
+        entryLogic: string | null;
+        confirmationLogic: string | null;
+        invalidationLogic: string | null;
+        notes: string | null;
+        color: string;
+        isArchived: boolean;
       };
-
-      if (editingSetup) {
-        return updateSetup(editingSetup.id, normalized);
+    }) => {
+      if (setupId) {
+        return updateSetup(setupId, payload);
       }
 
-      return createSetup(normalized);
-    },
-    onSuccess: async () => {
-      await invalidateData();
-      toast.success(editingSetup ? "Setup updated successfully." : "Setup created successfully.");
-      setOpen(false);
-      setEditingSetup(null);
-      setForm(createEmptyForm());
+      return createSetup(payload);
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not save the setup right now.";
       toast.error(message);
     },
   });
+
+  const handleSaveStrategy = async (
+    setupId: string | null,
+    payload: {
+      name: string;
+      description: string;
+      entryLogic: string | null;
+      confirmationLogic: string | null;
+      invalidationLogic: string | null;
+      notes: string | null;
+      color: string;
+      isArchived: boolean;
+    },
+  ) => {
+    const response = await saveMutation.mutateAsync({
+      setupId,
+      payload,
+    });
+
+    if (!setupId) {
+      setEditingSetup(response.setup);
+    }
+
+    await invalidateData();
+    return response.setup;
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (setupId: string) => deleteSetup(setupId),
@@ -163,26 +161,40 @@ export default function Setups() {
 
   const openCreateModal = () => {
     setEditingSetup(null);
-    setForm(createEmptyForm(buildUniqueFormColor(setups)));
+    setInitialDialogTab("strategy");
     setOpen(true);
   };
 
-  const openEditModal = (setup: SetupDefinition) => {
+  const openEditModal = (setup: SetupDefinition, tab: WorkspaceTab = "strategy") => {
     setEditingSetup(setup);
-    setForm({
-      name: setup.name,
-      description: setup.description,
-      color: resolveDisplayColor(setup.color),
-    });
+    setInitialDialogTab(tab);
     setOpen(true);
   };
 
-  const regenerateFormColor = () => {
-    setForm((current) => ({
-      ...current,
-      color: buildUniqueFormColor(setups, editingSetup?.id),
-    }));
-  };
+  useEffect(() => {
+    if (setupsQuery.isLoading || setups.length === 0) {
+      return;
+    }
+
+    const setupId = searchParams.get("setup");
+
+    if (!setupId) {
+      return;
+    }
+
+    const targetSetup = setups.find((item) => item.id === setupId);
+
+    if (!targetSetup) {
+      setSearchParams({}, { replace: true });
+      return;
+    }
+
+    const requestedTab = searchParams.get("tab") === "pre-trade" ? "pre-trade" : "strategy";
+    setEditingSetup(targetSetup);
+    setInitialDialogTab(requestedTab);
+    setOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams, setups, setupsQuery.isLoading]);
 
   if (setupsQuery.isLoading && !setupsQuery.data) {
     return <SetupsSkeleton />;
@@ -203,6 +215,8 @@ export default function Setups() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => void setupsQuery.refetch() : undefined}
         isRetrying={setupsQuery.isFetching}
       />
@@ -365,78 +379,22 @@ export default function Setups() {
         </div>
       )}
 
-      <Dialog
+      <SetupWorkspaceDialog
         open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
 
           if (!nextOpen) {
             setEditingSetup(null);
-            setForm(createEmptyForm());
+            setInitialDialogTab("strategy");
           }
         }}
-      >
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingSetup ? "Edit Setup" : "Create Setup"}</DialogTitle>
-            <DialogDescription>
-              Color is assigned automatically.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <Label className="text-label" htmlFor="setup-name">Setup Name</Label>
-              <Input id="setup-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-label" htmlFor="setup-description">Description</Label>
-              <Textarea id="setup-description" rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-label">Color</Label>
-              <div className="rounded-2xl border border-border/55 bg-muted/20 px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span
-                      aria-hidden="true"
-                      className="h-4 w-4 rounded-full border border-black/5 shadow-sm ring-1 ring-black/5 dark:border-white/10 dark:ring-white/10"
-                      style={{ backgroundColor: previewColor }}
-                    />
-                    <div>
-                      <p className="font-mono-price text-sm font-medium text-foreground">{formColorLabel}</p>
-                      <p className="text-xs text-muted-foreground">Auto-assigned</p>
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 rounded-xl px-3 text-xs"
-                    aria-label="Regenerate setup color"
-                    onClick={regenerateFormColor}
-                  >
-                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                    Regenerate
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : editingSetup ? "Save Changes" : "Create Setup"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        setup={editingSetup}
+        setups={setups}
+        initialTab={initialDialogTab}
+        isSavingStrategy={saveMutation.isPending}
+        onSaveStrategy={handleSaveStrategy}
+      />
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
         <AlertDialogContent>

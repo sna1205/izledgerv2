@@ -68,6 +68,11 @@ enum ReviewEmotion {
   Frustrated
 }
 
+enum ChecklistEnforcementMode {
+  soft
+  strict
+}
+
 enum ScreenshotCleanupAction {
   deleteObject
   deleteExpiredUploadRecord
@@ -82,19 +87,21 @@ enum ScreenshotCleanupReason {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  username     String    @unique @db.Citext
-  passwordHash String    @map("password_hash")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  accounts     Account[]
-  setups       Setup[]
-  trades       Trade[]
-  screenshots  TradeScreenshot[]
-  screenshotUploads TradeScreenshotUpload[]
-  tradeShares  TradeShare[]
-  reviews      Review[]
-  sessions     Session[]
+  id                       String                   @id @default(uuid()) @db.Uuid
+  username                 String                   @unique @db.Citext
+  passwordHash             String                   @map("password_hash")
+  checklistEnforcementMode ChecklistEnforcementMode @default(soft) @map("checklist_enforcement_mode")
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  updatedAt                DateTime                 @updatedAt @map("updated_at")
+  accounts                 Account[]
+  setups                   Setup[]
+  trades                   Trade[]
+  checklistRules           ChecklistRule[]
+  screenshots              TradeScreenshot[]
+  screenshotUploads        TradeScreenshotUpload[]
+  tradeShares              TradeShare[]
+  reviews                  Review[]
+  sessions                 Session[]
 
   @@map("users")
 }
@@ -130,6 +137,7 @@ model Account {
   updatedAt DateTime    @updatedAt @map("updated_at")
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades    Trade[]
+  checklistRules ChecklistRule[]
 
   @@index([userId])
   @@map("accounts")
@@ -141,12 +149,17 @@ model Setup {
   name       String
   nameNormalized String @map("name_normalized")
   description String
+  entryLogic String?   @map("entry_logic")
+  confirmationLogic String? @map("confirmation_logic")
+  invalidationLogic String? @map("invalidation_logic")
+  notes      String?
   color      String
   isArchived Boolean   @default(false) @map("is_archived")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   trades     Trade[]
+  checklistRules ChecklistRule[]
 
   @@unique([userId, nameNormalized])
   @@map("setups")
@@ -179,6 +192,7 @@ model Trade {
   screenshots       TradeScreenshot[]
   shares            TradeShare[]
   review            Review?
+  checklistResponses TradeChecklistResponse[]
 
   @@index([userId, tradeDate(sort: Desc)])
   @@index([accountId, tradeDate(sort: Desc)])
@@ -311,4 +325,46 @@ model Review {
   @@unique([userId, weeklyScopeStart])
   @@index([userId, type, updatedAt(sort: Desc)])
   @@map("reviews")
+}
+
+model ChecklistRule {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  title       String
+  description String?
+  isRequired  Boolean  @default(false) @map("is_required")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  setupId     String?  @map("setup_id") @db.Uuid
+  accountId   String?  @map("account_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  setup       Setup?   @relation(fields: [setupId], references: [id], onDelete: SetNull)
+  account     Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  tradeChecklistResponses TradeChecklistResponse[]
+
+  @@index([userId, isActive, sortOrder])
+  @@index([userId, setupId, accountId, isActive])
+  @@map("checklist_rules")
+}
+
+model TradeChecklistResponse {
+  id                      String        @id @default(uuid()) @db.Uuid
+  tradeId                 String        @map("trade_id") @db.Uuid
+  checklistRuleId         String?       @map("checklist_rule_id") @db.Uuid
+  ruleTitleSnapshot       String        @map("rule_title_snapshot")
+  ruleDescriptionSnapshot String?       @map("rule_description_snapshot")
+  isRequiredSnapshot      Boolean       @default(false) @map("is_required_snapshot")
+  checked                 Boolean       @default(false)
+  note                    String?
+  sortOrderSnapshot       Int           @default(0) @map("sort_order_snapshot")
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+  trade                   Trade         @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  checklistRule           ChecklistRule? @relation(fields: [checklistRuleId], references: [id], onDelete: SetNull)
+
+  @@index([tradeId, sortOrderSnapshot])
+  @@index([checklistRuleId])
+  @@map("trade_checklist_responses")
 }

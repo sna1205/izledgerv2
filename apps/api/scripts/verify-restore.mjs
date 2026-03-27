@@ -1,6 +1,6 @@
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { env } from "../src/config/env.ts";
 
 function fail(message, details = "") {
   console.error(details ? `${message}\n${details}` : message);
@@ -81,7 +81,7 @@ function outputLine(message) {
 }
 
 function createStorageClient() {
-  if (!process.env.STORAGE_BUCKET || !process.env.STORAGE_ACCESS_KEY || !process.env.STORAGE_SECRET_KEY) {
+  if (!env.STORAGE_BUCKET || !env.STORAGE_ACCESS_KEY || !env.STORAGE_SECRET_KEY) {
     fail(
       "Storage verification could not start.",
       "Set STORAGE_BUCKET, STORAGE_ACCESS_KEY, and STORAGE_SECRET_KEY when STORAGE_ENABLED=true.",
@@ -89,18 +89,18 @@ function createStorageClient() {
   }
 
   return new S3Client({
-    region: process.env.STORAGE_REGION || "auto",
-    endpoint: process.env.STORAGE_ENDPOINT || undefined,
-    forcePathStyle: parseBoolean(process.env.STORAGE_FORCE_PATH_STYLE, true),
+    region: env.STORAGE_REGION,
+    endpoint: env.STORAGE_ENDPOINT || undefined,
+    forcePathStyle: env.STORAGE_FORCE_PATH_STYLE,
     credentials: {
-      accessKeyId: process.env.STORAGE_ACCESS_KEY,
-      secretAccessKey: process.env.STORAGE_SECRET_KEY,
+      accessKeyId: env.STORAGE_ACCESS_KEY,
+      secretAccessKey: env.STORAGE_SECRET_KEY,
     },
   });
 }
 
 function isStorageEnabled() {
-  return parseBoolean(process.env.STORAGE_ENABLED, false);
+  return env.STORAGE_ENABLED;
 }
 
 function normalizeBaseUrl(value) {
@@ -111,13 +111,23 @@ function formatCount(label, value) {
   return `- ${label}: ${value.toLocaleString("en-US")}`;
 }
 
+function describeDatabaseUrl(value) {
+  try {
+    const url = new URL(value);
+    return `${url.hostname}${url.pathname}`;
+  } catch {
+    return "invalid";
+  }
+}
+
 const args = parseArgs(process.argv.slice(2));
-const restoreVerifyApiUrl = args["api-url"] ?? process.env.RESTORE_VERIFY_API_URL;
+const printEnv = parseBoolean(args["print-env"], false);
+const restoreVerifyApiUrl = args["api-url"] ?? env.RESTORE_VERIFY_API_URL;
 const storageSampleSize = parseStorageSampleSize(
-  args["storage-sample-size"] ?? process.env.RESTORE_VERIFY_STORAGE_SAMPLE_SIZE,
+  args["storage-sample-size"] ?? env.RESTORE_VERIFY_STORAGE_SAMPLE_SIZE,
 );
-const requireApi = parseBoolean(args["require-api"] ?? process.env.RESTORE_VERIFY_REQUIRE_API, false);
-const requireStorage = parseBoolean(args["require-storage"] ?? process.env.RESTORE_VERIFY_REQUIRE_STORAGE, false);
+const requireApi = parseBoolean(args["require-api"] ?? env.RESTORE_VERIFY_REQUIRE_API, false);
+const requireStorage = parseBoolean(args["require-storage"] ?? env.RESTORE_VERIFY_REQUIRE_STORAGE, false);
 const prisma = new PrismaClient({
   log: ["error"],
 });
@@ -186,7 +196,7 @@ async function verifyApiHealth() {
     return;
   }
 
-  const healthUrl = `${normalizeBaseUrl(restoreVerifyApiUrl)}/health`;
+  const healthUrl = `${normalizeBaseUrl(restoreVerifyApiUrl)}/ready`;
   const response = await fetch(healthUrl);
 
   if (!response.ok) {
@@ -255,7 +265,7 @@ async function verifyScreenshotStorage(screenshotCount) {
     try {
       await s3.send(
         new HeadObjectCommand({
-          Bucket: process.env.STORAGE_BUCKET,
+          Bucket: env.STORAGE_BUCKET,
           Key: screenshot.storageKey,
         }),
       );
@@ -299,6 +309,21 @@ async function verifyScreenshotStorage(screenshotCount) {
 }
 
 async function main() {
+  if (printEnv) {
+    outputHeader("Resolved env");
+    outputLine(JSON.stringify({
+      nodeEnv: env.NODE_ENV,
+      appEnv: env.APP_ENV,
+      appUrl: env.APP_URL ?? null,
+      apiUrl: env.API_URL ?? null,
+      restoreVerifyApiUrl: env.RESTORE_VERIFY_API_URL ?? null,
+      storageEnabled: env.STORAGE_ENABLED,
+      databaseTarget: describeDatabaseUrl(env.DATABASE_URL),
+      directDatabaseTarget: env.DIRECT_URL ? describeDatabaseUrl(env.DIRECT_URL) : null,
+    }, null, 2));
+    return;
+  }
+
   const databaseSummary = await verifyDatabase();
   await verifyApiHealth();
   await verifyScreenshotStorage(databaseSummary.screenshotCount);

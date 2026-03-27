@@ -253,6 +253,8 @@ export default function Accounts() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => void accountsQuery.refetch() : undefined}
         isRetrying={accountsQuery.isFetching}
       />

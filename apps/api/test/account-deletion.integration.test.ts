@@ -35,22 +35,6 @@ async function registerAndGetSession(app: Awaited<ReturnType<typeof buildApp>>, 
   return getSessionCookie(registerResponse.headers["set-cookie"]);
 }
 
-async function getFirstAccountId(username: string) {
-  const account = await prisma.account.findFirst({
-    where: {
-      user: {
-        username,
-      },
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-  });
-
-  assert.ok(account, "Expected the default account created during registration.");
-  return account.id;
-}
-
 async function createAccount(app: Awaited<ReturnType<typeof buildApp>>, sessionCookie: string, name: string) {
   const createAccountResponse = await app.inject({
     method: "POST",
@@ -105,7 +89,6 @@ test("account deletion remains blocked when only soft-deleted trades remain", as
 
   try {
     const sessionCookie = await registerAndGetSession(app, username);
-    await getFirstAccountId(username);
     const targetAccountId = await createAccount(app, sessionCookie, "Delete Target");
     const tradeId = await createTrade(app, sessionCookie, targetAccountId, today, "Soft delete account protection");
 
@@ -284,7 +267,7 @@ test("deleting one account does not affect other accounts", async () => {
 
   try {
     const sessionCookie = await registerAndGetSession(app, username);
-    const originalDefaultAccountId = await getFirstAccountId(username);
+    const originalDefaultAccountId = await createAccount(app, sessionCookie, "Primary Default");
     const deletedAccountId = await createAccount(app, sessionCookie, "Delete Me");
     const remainingAccountId = await createAccount(app, sessionCookie, "Keep Me");
 

@@ -292,6 +292,8 @@ export default function Trades() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => {
           void Promise.all([accountsQuery.refetch(), setupsQuery.refetch(), tradesQuery.refetch()]);
         } : undefined}

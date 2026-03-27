@@ -687,6 +687,8 @@ export default function Reviews() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => {
           void Promise.all([
             dailyReviewsQuery.refetch(),

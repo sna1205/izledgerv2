@@ -163,6 +163,8 @@ function EconomicCalendarEventDetailLivePage() {
         description={notFound
           ? "This event is no longer available in the current provider window."
           : "The economic event could not be loaded right now."}
+        layout="page"
+        size="wide"
         onRetry={notFound ? undefined : () => void detailQuery.refetch()}
         isRetrying={detailQuery.isFetching}
         secondaryAction={{

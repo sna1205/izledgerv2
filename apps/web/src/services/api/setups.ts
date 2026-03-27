@@ -4,6 +4,10 @@ import { apiFetch } from "@/services/api/client";
 export type SetupPayload = {
   name: string;
   description: string;
+  entryLogic?: string | null;
+  confirmationLogic?: string | null;
+  invalidationLogic?: string | null;
+  notes?: string | null;
   color?: string;
   isArchived?: boolean;
 };

@@ -28,6 +28,8 @@ export function AppLayout() {
   const economicCalendarLive = FEATURES.economicCalendar === "live";
   const pageTitle = location.pathname.startsWith("/economic-calendar")
     ? "Economic Calendar"
+    : location.pathname.startsWith("/settings")
+      ? "Settings"
     : pageTitles[location.pathname] || "IZLedger";
 
   return (
