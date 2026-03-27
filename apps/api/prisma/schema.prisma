@@ -131,7 +131,7 @@ model Trade {
   fxRateSource                                                                 String?                  @map("fx_rate_source")
   fxRateTimestamp                                                              DateTime?                @map("fx_rate_timestamp") @db.Timestamptz(3)
   review                                                                       Review?
-  reviews_reviews_trade_id_user_idTotrades                                     Review?                  @relation("reviews_trade_id_user_idTotrades")
+  reviews_reviews_trade_id_user_idTotrades                                     Review[]                 @relation("reviews_trade_id_user_idTotrades")
   checklistResponses                                                           TradeChecklistResponse[]
   trade_checklist_responses_trade_checklist_responses_trade_id_user_idTotrades TradeChecklistResponse[] @relation("trade_checklist_responses_trade_id_user_idTotrades")
   screenshotUploads                                                            TradeScreenshotUpload[]
