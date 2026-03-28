@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
-import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
+import { TradeFormSkeleton } from "@/components/skeletons/TradeFormSkeleton";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -82,7 +82,7 @@ export default function EditTrade() {
   useUnauthorizedSessionGuard(tradeQuery.error, accountsQuery.error, setupsQuery.error);
 
   if (isLoading) {
-    return <TradesSkeleton />;
+    return <TradeFormSkeleton />;
   }
 
   if (!tradeQuery.data || pageError) {

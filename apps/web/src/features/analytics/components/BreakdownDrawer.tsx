@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, BarChart3, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TagChip } from "@/components/ui/TagChip";
 import { DataBadge } from "@/components/DataBadge";
 import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
@@ -87,7 +88,7 @@ export function BreakdownDrawer({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6" aria-busy={loading}>
                 <div className="mb-4 flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-lg font-medium text-foreground">Trades</h3>
@@ -96,7 +97,23 @@ export function BreakdownDrawer({
                 {loading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="h-24 animate-pulse rounded-2xl border border-border/60 bg-background/70 dark:bg-white/[0.03]" />
+                      <div key={index} className="rounded-2xl border border-border/60 bg-background/70 p-4 dark:bg-white/[0.03]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Skeleton className="h-4 w-24 rounded-md" />
+                              <Skeleton className="h-6 w-14 rounded-full" />
+                              <Skeleton className="h-6 w-16 rounded-full" />
+                            </div>
+                            <Skeleton className="h-3 w-28 rounded-md" />
+                            <div className="flex flex-wrap gap-2">
+                              <Skeleton className="h-6 w-16 rounded-full" />
+                              <Skeleton className="h-6 w-16 rounded-full" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-5 w-20 rounded-md" />
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : trades.length === 0 ? (

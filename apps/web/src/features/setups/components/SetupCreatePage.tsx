@@ -4,7 +4,7 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { DataBadge } from "@/components/DataBadge";
 import { PageErrorState } from "@/components/PageErrorState";
-import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
+import { SetupWorkspaceSkeleton } from "@/components/skeletons/SetupWorkspaceSkeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/sonner";
@@ -126,7 +126,7 @@ export function SetupCreatePage() {
   };
 
   if (setupsQuery.isLoading && !setupsQuery.data) {
-    return <SetupsSkeleton />;
+    return <SetupWorkspaceSkeleton />;
   }
 
   if (setupsQuery.isError) {

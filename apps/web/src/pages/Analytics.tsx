@@ -38,6 +38,7 @@ import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/layouts/Pag
 import { TradingDayDrawer } from "@/features/trades/components/TradingDayDrawer";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -619,6 +620,7 @@ function BreakdownPanel({
   const weightedWinRate = totalTrades > 0
     ? rows.reduce((sum, row) => sum + ((row.winRate / 100) * row.trades), 0) / totalTrades * 100
     : 0;
+  const showLoadingState = loading && rows.length === 0;
 
   return (
     <SectionCard className="space-y-6 border-border/60 p-0">
@@ -649,8 +651,28 @@ function BreakdownPanel({
       </div>
 
       <div className="px-5 sm:px-6">
-        {loading ? (
-          <div className="h-[280px] animate-pulse rounded-3xl bg-muted/50" />
+        {showLoadingState ? (
+          <div className="h-[280px] rounded-3xl border border-border/50 bg-background/70 p-5">
+            <div className="grid h-full gap-4 md:grid-cols-[1.2fr_0.8fr]">
+              <div className="flex items-end gap-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton
+                    key={index}
+                    className="w-full rounded-[1.25rem]"
+                    style={{ height: `${35 + (index % 4) * 14}%` }}
+                  />
+                ))}
+              </div>
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="rounded-2xl border border-border/50 bg-background/70 px-4 py-4">
+                    <Skeleton className="h-3 w-20 rounded-md" />
+                    <Skeleton className="mt-2 h-4 w-28 rounded-md" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         ) : (
           <>
             {kind === "setup" ? <SetupsBreakdownChart rows={rows} onInspect={onInspect} /> : null}
@@ -1115,7 +1137,17 @@ export default function Analytics() {
 
                   <div className="px-2 pb-3 pt-4 sm:px-4">
                     {detailedTradesQuery.isLoading && trendPoints.length === 0 ? (
-                      <div className="h-[320px] animate-pulse rounded-3xl bg-muted/45" />
+                      <div className="h-[320px] rounded-3xl border border-border/50 bg-background/70 p-5">
+                        <div className="flex h-full items-end gap-3">
+                          {Array.from({ length: 8 }).map((_, index) => (
+                            <Skeleton
+                              key={index}
+                              className="w-full rounded-[1.35rem]"
+                              style={{ height: `${32 + ((index * 11) % 44)}%` }}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ) : trendPoints.length === 0 ? (
                       <EmptyChartState message={trendEmptyMessage} />
                     ) : (
@@ -1223,7 +1255,7 @@ export default function Analytics() {
                       title={definition.label}
                       description={definition.description}
                       rows={definition.rows}
-                      loading={detailedTradesQuery.isLoading}
+                      loading={detailedTradesQuery.isLoading && definition.rows.length === 0}
                       currency={analyticsCurrency}
                       onInspect={(row) => openBreakdownSlice(definition, row)}
                     />
@@ -1327,7 +1359,7 @@ export default function Analytics() {
         description={breakdownDrawer?.description ?? ""}
         stats={drawerStats}
         trades={breakdownDrawerTrades}
-        loading={detailedTradesQuery.isLoading || detailedTradesQuery.isFetching}
+        loading={detailedTradesQuery.isLoading && breakdownDrawerTrades.length === 0}
         currency={analyticsCurrency}
         onClose={() => setBreakdownDrawer(null)}
         onTradeClick={(tradeId) => navigate(`/trades/${tradeId}`)}

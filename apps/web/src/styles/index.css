@@ -165,6 +165,35 @@
     @apply rounded-2xl border bg-background/50 transition-colors duration-200;
     border-color: hsl(var(--border));
   }
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+      180deg,
+      hsl(var(--muted) / 0.86),
+      hsl(var(--muted) / 0.96)
+    );
+  }
+  .dark .skeleton {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--accent) / 0.82),
+      hsl(var(--muted) / 0.94)
+    );
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--background) / 0.55),
+      transparent
+    );
+    animation: skeleton-shimmer 1.9s ease-in-out infinite;
+  }
   .text-label {
     @apply text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground;
   }
@@ -184,5 +213,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
   }
 }

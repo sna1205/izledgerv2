@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
@@ -347,7 +348,23 @@ export function SetupPreTradeSection({
         {rulesQuery.isLoading ? (
           <div className="mt-5 space-y-3">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="h-24 animate-pulse rounded-[24px] bg-muted/40" />
+              <div key={index} className="rounded-[24px] border border-border/70 bg-background/70 px-4 py-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Skeleton className="h-4 w-36 rounded-md" />
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                      <Skeleton className="h-6 w-14 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-full max-w-[320px] rounded-md" />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {Array.from({ length: 5 }).map((__, actionIndex) => (
+                      <Skeleton key={actionIndex} className="h-10 w-10 rounded-xl" />
+                    ))}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         ) : null}

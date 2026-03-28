@@ -6,10 +6,14 @@ import { AuthPageSkeleton } from "@/components/skeletons/AuthPageSkeleton";
 import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
 import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
+import { EconomicCalendarEventDetailSkeleton } from "@/components/skeletons/EconomicCalendarEventDetailSkeleton";
+import { EconomicCalendarSkeleton } from "@/components/skeletons/EconomicCalendarSkeleton";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { TradeDetailSkeleton } from "@/components/skeletons/TradeDetailSkeleton";
+import { TradeFormSkeleton } from "@/components/skeletons/TradeFormSkeleton";
 import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
+import { SetupWorkspaceSkeleton } from "@/components/skeletons/SetupWorkspaceSkeleton";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -46,7 +50,7 @@ function getProtectedBootFallback(pathname: string) {
   if (pathname === "/trades/new" || pathname.endsWith("/edit")) {
     return {
       pageTitleWidth: "w-24",
-      content: <TradesSkeleton />,
+      content: <TradeFormSkeleton />,
     };
   }
 
@@ -79,6 +83,13 @@ function getProtectedBootFallback(pathname: string) {
   }
 
   if (pathname.startsWith("/setups")) {
+    if (pathname === "/setups/new") {
+      return {
+        pageTitleWidth: "w-24",
+        content: <SetupWorkspaceSkeleton />,
+      };
+    }
+
     return {
       pageTitleWidth: "w-20",
       content: <SetupsSkeleton />,
@@ -93,9 +104,16 @@ function getProtectedBootFallback(pathname: string) {
   }
 
   if (pathname.startsWith("/economic-calendar")) {
+    if (pathname !== "/economic-calendar") {
+      return {
+        pageTitleWidth: "w-44",
+        content: <EconomicCalendarEventDetailSkeleton />,
+      };
+    }
+
     return {
       pageTitleWidth: "w-40",
-      content: <DashboardSkeleton />,
+      content: <EconomicCalendarSkeleton />,
     };
   }
 

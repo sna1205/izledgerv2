@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Clock3, Globe2 } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
+import { EconomicCalendarEventDetailSkeleton } from "@/components/skeletons/EconomicCalendarEventDetailSkeleton";
 import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
 import { FEATURES } from "@/config/features";
@@ -147,11 +148,7 @@ function EconomicCalendarEventDetailLivePage() {
     : null);
 
   if (detailQuery.isLoading && !detailData) {
-    return (
-      <PageShell size="wide">
-        <div className="text-sm text-muted-foreground">Loading event...</div>
-      </PageShell>
-    );
+    return <EconomicCalendarEventDetailSkeleton />;
   }
 
   if ((detailQuery.isError && !canUseFallbackEvent) || !detailData) {

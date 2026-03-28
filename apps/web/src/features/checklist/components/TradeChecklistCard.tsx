@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataBadge } from "@/components/DataBadge";
 import { cn } from "@/utils/class-names";
 import type { ChecklistEnforcementMode, ChecklistRule } from "@/types";
@@ -40,7 +41,7 @@ export function TradeChecklistCard({
   const isSoftIncomplete = checklistMode === "soft" && requiredIncompleteCount > 0;
 
   return (
-    <section className="surface space-y-4 p-4">
+    <section className="surface space-y-4 p-4" aria-busy={isLoading}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -63,6 +64,11 @@ export function TradeChecklistCard({
               {checklistMode === "strict" ? "Strict" : "Soft"}
             </DataBadge>
           </div>
+        ) : isLoading ? (
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-12 rounded-full" />
+            <Skeleton className="h-6 w-12 rounded-full" />
+          </div>
         ) : null}
       </div>
 
@@ -70,10 +76,10 @@ export function TradeChecklistCard({
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className="surface-muted flex items-center gap-3 rounded-2xl p-4">
-              <div className="h-5 w-5 rounded-md bg-muted" />
+              <Skeleton className="h-5 w-5 rounded-md" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 w-40 rounded bg-muted" />
-                <div className="h-3 w-64 rounded bg-muted" />
+                <Skeleton className="h-4 w-40 rounded-md" />
+                <Skeleton className="h-3 w-full max-w-[18rem] rounded-md" />
               </div>
             </div>
           ))}

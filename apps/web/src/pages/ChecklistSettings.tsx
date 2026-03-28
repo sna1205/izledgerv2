@@ -4,6 +4,7 @@ import { ArrowLeft, ClipboardList, GripVertical, Pencil, Plus, ShieldCheck, Spar
 import { useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
+import { ChecklistSettingsSkeleton } from "@/components/skeletons/ChecklistSettingsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -253,14 +254,7 @@ export default function ChecklistSettings() {
   };
 
   if (rulesQuery.isLoading && !rulesQuery.data) {
-    return (
-      <PageShell size="wide">
-        <div className="grid gap-6 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => <div key={index} className="surface h-32 animate-pulse" />)}
-        </div>
-        <div className="surface h-96 animate-pulse" />
-      </PageShell>
-    );
+    return <ChecklistSettingsSkeleton />;
   }
 
   if (rulesQuery.isError) {

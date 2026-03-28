@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FEATURES } from "@/config/features";
 import { PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
@@ -255,8 +256,22 @@ function EconomicCalendarLivePage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(300px,1fr)] lg:items-start">
         <div className="order-2 space-y-4 lg:order-1">
           {eventsQuery.isLoading && !eventsQuery.data ? (
-            <div className="border-b border-border/35 pb-4 text-sm text-muted-foreground">
-              Loading events...
+            <div className="space-y-3" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <article key={index} className="surface space-y-3 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-14 rounded-full" />
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                  <Skeleton className="h-5 w-full max-w-[320px] rounded-md" />
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Skeleton className="h-4 w-24 rounded-md" />
+                    <Skeleton className="h-4 w-20 rounded-md" />
+                    <Skeleton className="h-4 w-28 rounded-md" />
+                  </div>
+                </article>
+              ))}
             </div>
           ) : (
             <EconomicCalendarTimeline

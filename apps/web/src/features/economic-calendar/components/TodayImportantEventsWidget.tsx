@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { DataBadge } from "@/components/DataBadge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/auth-context";
 import { EconomicCalendarEventCard } from "@/features/economic-calendar/components/EconomicCalendarEventCard";
 import { getDashboardImportantEvents } from "@/services/api/economic-calendar";
@@ -64,7 +65,23 @@ export function TodayImportantEventsWidget({
       </div>
 
       {eventsQuery.isLoading && !eventsQuery.data ? (
-        <div className="surface-muted p-4 text-sm text-muted-foreground">Loading events...</div>
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <article key={index} className="surface-muted space-y-3 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-6 w-16 rounded-full" />
+                <Skeleton className="h-6 w-14 rounded-full" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-5 w-full max-w-[280px] rounded-md" />
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Skeleton className="h-4 w-24 rounded-md" />
+                <Skeleton className="h-4 w-20 rounded-md" />
+                <Skeleton className="h-4 w-28 rounded-md" />
+              </div>
+            </article>
+          ))}
+        </div>
       ) : importantTodayEvents.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
