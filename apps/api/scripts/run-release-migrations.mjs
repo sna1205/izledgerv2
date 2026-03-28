@@ -10,6 +10,8 @@ const apiRoot = path.resolve(__dirname, "..");
 const require = createRequire(import.meta.url);
 const prismaCliPath = require.resolve("prisma/build/index.js", { paths: [apiRoot] });
 const migrationDatabaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+const advisoryLockRetryCount = Number.parseInt(process.env.PRISMA_MIGRATE_ADVISORY_LOCK_RETRY_COUNT ?? "4", 10);
+const advisoryLockRetryDelayMs = Number.parseInt(process.env.PRISMA_MIGRATE_ADVISORY_LOCK_RETRY_DELAY_MS ?? "15000", 10);
 
 function fail(message, details = "") {
   console.error(details ? `${message}\n${details}` : message);
@@ -20,12 +22,29 @@ function outputText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function runPrisma(args, options = {}) {
   return spawnSync(process.execPath, [prismaCliPath, ...args], {
     encoding: "utf8",
     stdio: "pipe",
     ...options,
   });
+}
+
+function getCommandOutput(result) {
+  return [
+    result.error instanceof Error ? result.error.message : "",
+    outputText(result.stdout),
+    outputText(result.stderr),
+  ].filter(Boolean).join("\n");
+}
+
+function isAdvisoryLockTimeout(result) {
+  const output = getCommandOutput(result).toLowerCase();
+  return output.includes("advisory lock") && output.includes("timeout: 10000ms");
 }
 
 function createPrismaWorkspace(databaseUrl) {
@@ -80,16 +99,32 @@ if (!parsed) {
 
 const prismaWorkspace = createPrismaWorkspace(migrationDatabaseUrl);
 let result;
+let attempt = 0;
 
 try {
-  result = runPrisma(["migrate", "deploy", "--schema", "prisma/schema.prisma"], {
-    cwd: prismaWorkspace,
-    env: {
-      ...process.env,
-      DATABASE_URL: migrationDatabaseUrl,
-      DIRECT_URL: migrationDatabaseUrl,
-    },
-  });
+  do {
+    attempt += 1;
+    result = runPrisma(["migrate", "deploy", "--schema", "prisma/schema.prisma"], {
+      cwd: prismaWorkspace,
+      env: {
+        ...process.env,
+        DATABASE_URL: migrationDatabaseUrl,
+        DIRECT_URL: migrationDatabaseUrl,
+      },
+    });
+
+    if (result.status === 0 || !isAdvisoryLockTimeout(result) || attempt > advisoryLockRetryCount) {
+      break;
+    }
+
+    process.stderr.write(
+      [
+        `Prisma advisory lock timed out during release migration attempt ${attempt}.`,
+        `Retrying in ${advisoryLockRetryDelayMs}ms...`,
+      ].join(" ") + "\n",
+    );
+    sleep(advisoryLockRetryDelayMs);
+  } while (true);
 } finally {
   cleanupWorkspace(prismaWorkspace);
 }
@@ -97,11 +132,7 @@ try {
 if (result.status !== 0) {
   fail(
     "Prisma release migrations failed.",
-    [
-      result.error instanceof Error ? result.error.message : "",
-      outputText(result.stdout),
-      outputText(result.stderr),
-    ].filter(Boolean).join("\n"),
+    getCommandOutput(result),
   );
 }
 
