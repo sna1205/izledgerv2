@@ -58,20 +58,6 @@ export function TradeFormPage({
           />
         )}
       />
-
-      {controller.tradeWarning ? (
-        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-foreground">
-          <p className="font-medium">
-            High-impact event {controller.tradeWarning.direction === "upcoming" ? "in " : ""}
-            {controller.tradeWarning.minutesAway}m
-            {controller.tradeWarning.direction === "recent" ? " ago" : ""}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {controller.tradeWarning.event.currency} {controller.tradeWarning.event.title} is inside the {controller.tradeWarning.thresholdMinutes}m window for {controller.form.pair}. {controller.tradeWarning.relevance.reason}
-          </p>
-        </div>
-      ) : null}
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <TradeCoreFields
@@ -115,7 +101,6 @@ export function TradeFormPage({
             totalChecklistCount={controller.checklistRules.length}
             requiredChecklistRemaining={controller.incompleteRequiredChecklistCount}
             screenshotCount={(controller.activeTrade?.screenshotAssets?.length ?? 0) + controller.draftScreenshots.length}
-            tradeWarning={controller.tradeWarning}
           />
 
           <TradeChecklistSection

@@ -14,7 +14,6 @@ import { screenshotRoutes } from "./modules/screenshots/routes.js";
 import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
-import { economicCalendarRoutes } from "./modules/economic-calendar/routes.js";
 import { checklistRuleRoutes } from "./modules/checklist-rules/routes.js";
 
 function normalizeOrigin(origin: string) {
@@ -161,7 +160,6 @@ export async function buildApp() {
   await app.register(screenshotRoutes, { prefix: "/trades" });
   await app.register(reviewRoutes, { prefix: "/reviews" });
   await app.register(analyticsRoutes, { prefix: "/" });
-  await app.register(economicCalendarRoutes, { prefix: "/" });
   await app.register(tradeShareRoutes, { prefix: "/" });
 
   return app;

@@ -48,20 +48,6 @@ export function TradeFormDialog({
         <DialogHeader>
           <DialogTitle>{editTrade ? "Edit Trade" : "New Trade"}</DialogTitle>
         </DialogHeader>
-
-        {controller.tradeWarning ? (
-          <div className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-foreground">
-            <p className="font-medium">
-              Relevant high-impact event {controller.tradeWarning.direction === "upcoming" ? "in " : ""}
-              {controller.tradeWarning.minutesAway}m
-              {controller.tradeWarning.direction === "recent" ? " ago" : ""}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {controller.tradeWarning.event.currency} {controller.tradeWarning.event.title} is within the {controller.tradeWarning.thresholdMinutes}m risk window for {controller.form.pair}. {controller.tradeWarning.relevance.reason}
-            </p>
-          </div>
-        ) : null}
-
         <div className="space-y-4">
           <TradeCoreFields
             form={controller.form}

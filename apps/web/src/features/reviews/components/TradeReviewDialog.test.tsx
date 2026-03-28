@@ -20,26 +20,6 @@ vi.mock("@/features/auth/auth-context", () => ({
   useAuth: authContextMocks.useAuth,
 }));
 
-vi.mock("@/services/api/economic-calendar", () => ({
-  getEconomicCalendarList: vi.fn(async () => ({
-    fetchedAtUtc: new Date().toISOString(),
-    providerStatus: "live",
-    cacheStatus: "miss",
-    range: {
-      startDate: "2026-03-16",
-      endDate: "2026-03-16",
-    },
-    filters: {
-      range: "custom",
-      currencies: [],
-      impacts: [],
-      instrument: "EURUSD",
-      relevantOnly: false,
-    },
-    items: [],
-  })),
-}));
-
 vi.mock("@/features/reviews/components/TradeReviewSummary", () => ({
   TradeReviewSummary: ({ trade }: { trade: Trade }) => <div>{trade.pair}</div>,
 }));

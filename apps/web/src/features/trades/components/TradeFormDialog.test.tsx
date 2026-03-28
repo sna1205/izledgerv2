@@ -9,10 +9,6 @@ const screenshotServiceMocks = vi.hoisted(() => ({
   uploadTradeScreenshot: vi.fn(),
 }));
 
-const economicCalendarMocks = vi.hoisted(() => ({
-  getEconomicCalendarList: vi.fn(),
-}));
-
 const checklistRuleMocks = vi.hoisted(() => ({
   listChecklistRules: vi.fn(),
 }));
@@ -80,10 +76,6 @@ vi.mock("@/features/screenshots/components/ScreenshotUpload", () => ({
 
 vi.mock("@/services/api/screenshots", () => ({
   uploadTradeScreenshot: screenshotServiceMocks.uploadTradeScreenshot,
-}));
-
-vi.mock("@/services/api/economic-calendar", () => ({
-  getEconomicCalendarList: economicCalendarMocks.getEconomicCalendarList,
 }));
 
 vi.mock("@/services/api/checklist-rules", () => ({
@@ -257,47 +249,7 @@ function renderWithProviders(ui: React.ReactElement) {
 describe("TradeFormDialog", () => {
   beforeEach(() => {
     screenshotServiceMocks.uploadTradeScreenshot.mockReset();
-    economicCalendarMocks.getEconomicCalendarList.mockReset();
     checklistRuleMocks.listChecklistRules.mockReset();
-    economicCalendarMocks.getEconomicCalendarList.mockResolvedValue({
-      fetchedAtUtc: new Date().toISOString(),
-      providerStatus: "live",
-      cacheStatus: "miss",
-      range: {
-        startDate: "2026-03-25",
-        endDate: "2026-03-25",
-      },
-      filters: {
-        range: "today",
-        currencies: [],
-        impacts: [],
-        instrument: null,
-        relevantOnly: false,
-      },
-      items: [],
-    });
-    const economicCalendarState = {
-      data: {
-        fetchedAtUtc: new Date().toISOString(),
-        providerStatus: "live",
-        cacheStatus: "miss",
-        range: {
-          startDate: "2026-03-25",
-          endDate: "2026-03-25",
-        },
-        filters: {
-          range: "today",
-          currencies: [],
-          impacts: [],
-          instrument: null,
-          relevantOnly: false,
-        },
-        items: [],
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    };
     const setupChecklistState = {
       data: {
         items: [
@@ -340,7 +292,12 @@ describe("TradeFormDialog", () => {
         return emptyChecklistState;
       }
 
-      return economicCalendarState;
+      return {
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+      };
     });
   });
 
@@ -405,29 +362,6 @@ describe("TradeFormDialog", () => {
       isError: false,
       error: null,
     };
-    const economicCalendarState = {
-      data: {
-        fetchedAtUtc: new Date().toISOString(),
-        providerStatus: "live",
-        cacheStatus: "miss",
-        range: {
-          startDate: "2026-03-25",
-          endDate: "2026-03-25",
-        },
-        filters: {
-          range: "today",
-          currencies: [],
-          impacts: [],
-          instrument: null,
-          relevantOnly: false,
-        },
-        items: [],
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    };
-
     reactQueryMocks.useQuery.mockImplementation((options: { queryKey?: unknown[] }) => {
       const key = JSON.stringify(options.queryKey ?? []);
 
@@ -435,7 +369,12 @@ describe("TradeFormDialog", () => {
         return fallbackChecklistState;
       }
 
-      return economicCalendarState;
+      return {
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+      };
     });
 
     renderWithProviders(<Harness setupsOverride={staleSetups} />);
@@ -592,71 +531,6 @@ describe("TradeFormDialog", () => {
         result: "Win",
       }));
     });
-  });
-
-  it("shows a non-blocking warning when a relevant high-impact event is near", async () => {
-    const eventTime = new Date(Date.now() + 10 * 60_000);
-
-    reactQueryMocks.useQuery.mockReturnValue({
-      data: {
-        fetchedAtUtc: new Date().toISOString(),
-        providerStatus: "live",
-        cacheStatus: "miss",
-        range: {
-          startDate: "2026-03-25",
-          endDate: "2026-03-25",
-        },
-        filters: {
-          range: "today",
-          currencies: ["USD"],
-          impacts: ["high"],
-          instrument: "XAUUSD",
-          relevantOnly: true,
-        },
-        items: [
-          {
-            id: "event-1",
-            providerEventId: "provider-1",
-            title: "CPI y/y",
-            country: "USD",
-            currency: "USD",
-            impactLevel: "high",
-            eventTimeUtc: eventTime.toISOString(),
-            previousValue: "3.0%",
-            forecastValue: "3.1%",
-            actualValue: null,
-            revisedValue: null,
-            status: "upcoming",
-            category: "inflation",
-            sourceProvider: "fair-economy",
-            lastUpdatedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            relevance: {
-              relevant: true,
-              reason: "Major US macro and Fed releases can move XAUUSD through USD and rate expectations.",
-            },
-          },
-        ],
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-
-    renderWithProviders(<Harness />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Relevant high-impact event/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/CPI y\/y/i).length).toBeGreaterThan(0);
-    });
-
-    fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });
-    fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "2990" } });
-    fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "3020" } });
-    fireEvent.change(getProfitInput(), { target: { value: "50" } });
-
-    expect(screen.getByRole("button", { name: "Save Trade" })).not.toBeDisabled();
   });
 
   it("keeps an archived account available when editing a historical trade", async () => {

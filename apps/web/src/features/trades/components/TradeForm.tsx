@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/components/ui/sonner";
 import { privateQueryKey } from "@/services/query-client";
 import { useAuth } from "@/features/auth/auth-context";
-import { getLocalDateKey, getTradeEventWarning } from "@/features/economic-calendar/utils";
 import { listChecklistRules } from "@/services/api/checklist-rules";
-import { getEconomicCalendarList } from "@/services/api/economic-calendar";
 import { uploadTradeScreenshot } from "@/services/api/screenshots";
 import { ApiError } from "@/services/api/client";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
@@ -269,31 +267,6 @@ export function useTradeFormController({
     [form.entry, form.stopLoss, form.takeProfit],
   );
 
-  const economicCalendarQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "economic-calendar", "trade-warning", form.date, form.pair),
-    queryFn: () => getEconomicCalendarList({
-      dateFrom: form.date,
-      dateTo: form.date,
-      impacts: ["high"],
-      instrument: form.pair,
-      relevantOnly: true,
-    }),
-    enabled: isActive,
-  });
-
-  const isTradeDateToday = form.date === getLocalDateKey(new Date());
-  const tradeWarning = useMemo(() => {
-    if (!isTradeDateToday) {
-      return null;
-    }
-
-    return getTradeEventWarning({
-      events: economicCalendarQuery.data?.items ?? [],
-      instrument: form.pair,
-      now: new Date(),
-    });
-  }, [economicCalendarQuery.data?.items, form.pair, isTradeDateToday]);
-
   const selectedSetupId = form.setupId === "__none" ? null : form.setupId;
   const selectedSetup = selectedSetupId
     ? setups.find((setup) => setup.id === selectedSetupId) ?? null
@@ -481,7 +454,6 @@ export function useTradeFormController({
     derivedResult,
     directionError,
     takeProfitWarning,
-    tradeWarning,
     selectedAccount,
     selectedSetup,
     checklistRules,
@@ -854,7 +826,6 @@ type TradeSummaryPanelProps = {
   totalChecklistCount: number;
   requiredChecklistRemaining: number;
   screenshotCount: number;
-  tradeWarning: ReturnType<typeof getTradeEventWarning>;
 };
 
 export function TradeSummaryPanel({
@@ -867,7 +838,6 @@ export function TradeSummaryPanel({
   totalChecklistCount,
   requiredChecklistRemaining,
   screenshotCount,
-  tradeWarning,
 }: TradeSummaryPanelProps) {
   return (
     <aside className="surface space-y-4 p-4 sm:p-5">
@@ -913,13 +883,6 @@ export function TradeSummaryPanel({
           <p className="mt-1 text-sm font-medium text-foreground">{screenshotCount} file{screenshotCount === 1 ? "" : "s"}</p>
         </div>
       </div>
-
-      {tradeWarning ? (
-        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-foreground">
-          <p className="font-medium">High-impact event nearby</p>
-          <p className="mt-1 text-xs text-muted-foreground">{tradeWarning.event.currency} {tradeWarning.event.title}</p>
-        </div>
-      ) : null}
     </aside>
   );
 }

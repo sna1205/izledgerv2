@@ -6,8 +6,6 @@ import { AuthPageSkeleton } from "@/components/skeletons/AuthPageSkeleton";
 import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
 import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-import { EconomicCalendarEventDetailSkeleton } from "@/components/skeletons/EconomicCalendarEventDetailSkeleton";
-import { EconomicCalendarSkeleton } from "@/components/skeletons/EconomicCalendarSkeleton";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { TradeDetailSkeleton } from "@/components/skeletons/TradeDetailSkeleton";
@@ -35,8 +33,6 @@ const Accounts = lazy(() => import("./pages/Accounts"));
 const Setups = lazy(() => import("./pages/Setups"));
 const NewSetup = lazy(() => import("./pages/NewSetup"));
 const Reviews = lazy(() => import("./pages/Reviews"));
-const EconomicCalendar = lazy(() => import("./pages/EconomicCalendar"));
-const EconomicCalendarEventDetail = lazy(() => import("./pages/EconomicCalendarEventDetail"));
 const LotCalculator = lazy(() => import("./pages/LotCalculator"));
 const Login = lazy(() => import("./pages/Login"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -103,20 +99,6 @@ function getProtectedBootFallback(pathname: string) {
     };
   }
 
-  if (pathname.startsWith("/economic-calendar")) {
-    if (pathname !== "/economic-calendar") {
-      return {
-        pageTitleWidth: "w-44",
-        content: <EconomicCalendarEventDetailSkeleton />,
-      };
-    }
-
-    return {
-      pageTitleWidth: "w-40",
-      content: <EconomicCalendarSkeleton />,
-    };
-  }
-
   return {
     pageTitleWidth: "w-24",
     content: <DashboardSkeleton />,
@@ -133,7 +115,6 @@ function AppRoutes() {
     pathname.startsWith("/accounts") ||
     pathname.startsWith("/setups") ||
     pathname.startsWith("/reviews") ||
-    pathname.startsWith("/economic-calendar") ||
     pathname.startsWith("/trades") ||
     pathname.startsWith("/analytics") ||
     pathname.startsWith("/calculator") ||
@@ -180,8 +161,6 @@ function AppRoutes() {
             <Route path="/setups" element={<Setups />} />
             <Route path="/setups/new" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
-            <Route path="/economic-calendar" element={<EconomicCalendar />} />
-            <Route path="/economic-calendar/:eventId" element={<EconomicCalendarEventDetail />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/new" element={<NewTrade />} />
             <Route path="/trades/:id/edit" element={<EditTrade />} />

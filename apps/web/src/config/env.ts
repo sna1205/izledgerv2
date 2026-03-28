@@ -17,6 +17,5 @@ function trimTrailingSlash(value: string) {
 export const env = {
   apiBaseUrl: trimTrailingSlash(parsed.data.VITE_API_BASE_URL),
   appEnv: parsed.data.VITE_APP_ENV,
-  featureEconomicCalendar: parsed.data.VITE_FEATURE_ECONOMIC_CALENDAR,
   isProduction: parsed.data.VITE_APP_ENV === "production",
 } as const;
