@@ -26,6 +26,7 @@
     "screenshots:cleanup:run": "node --import tsx src/scripts/run-screenshot-cleanup.ts",
     "screenshots:reconcile": "node --import tsx src/scripts/reconcile-screenshot-storage.ts",
     "start": "node dist/server.js",
+    "start:render": "npm run start:server",
     "start:server": "npm run start",
     "test:db:prepare": "node ./scripts/prepare-integration-db.mjs",
     "test:persistence:run": "node --import tsx --import ./test/setup.ts --test ./test/account-default.integration.test.ts ./test/account-deletion.integration.test.ts ./test/trade-persistence.integration.test.ts ./test/checklist.integration.test.ts ./test/review-persistence.integration.test.ts ./test/review-list-pagination.integration.test.ts ./test/ownership-integrity.integration.test.ts ./test/screenshot-validation.integration.test.ts ./test/screenshot-cleanup.integration.test.ts ./test/trade-share.integration.test.ts ./test/trade-share-storage.test.ts",
