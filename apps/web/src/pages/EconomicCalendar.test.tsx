@@ -5,6 +5,12 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EconomicCalendar from "@/pages/EconomicCalendar";
 
+vi.mock("@/config/features", () => ({
+  FEATURES: {
+    economicCalendar: "live",
+  },
+}));
+
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
     user: {

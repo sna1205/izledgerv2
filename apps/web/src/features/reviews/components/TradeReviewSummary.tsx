@@ -3,7 +3,6 @@ import { CameraOff } from "lucide-react";
 import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
 import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
-import { TagChip } from "@/components/ui/TagChip";
 import { Trade } from "@/types";
 import { cn } from "@/utils/class-names";
 
@@ -57,10 +56,6 @@ export function TradeReviewSummary({ trade, variant = "card" }: TradeReviewSumma
             <span>{trade.direction}</span>
             {trade.session ? <><span aria-hidden="true">·</span><span>{trade.session}</span></> : null}
             {trade.emotion ? <><span aria-hidden="true">·</span><span>{trade.emotion}</span></> : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {trade.session ? <TagChip label={trade.session} kind="session" className="text-[11px]" /> : null}
-            {trade.emotion ? <TagChip label={trade.emotion} kind="emotion" className="text-[11px]" /> : null}
           </div>
         </div>
         <ProfitDisplay value={trade.profit} className="text-xl font-semibold sm:text-2xl" />

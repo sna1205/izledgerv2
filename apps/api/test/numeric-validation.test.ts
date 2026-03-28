@@ -3,7 +3,7 @@ import test from "node:test";
 import { createAccountSchema } from "../src/modules/accounts/schemas.js";
 import { createReviewSchema, listReviewsQuerySchema } from "../src/modules/reviews/schemas.js";
 import { completeScreenshotSchema, presignScreenshotSchema } from "../src/modules/screenshots/schemas.js";
-import { createTradeSchema, listTradesQuerySchema } from "../src/modules/trades/schemas.js";
+import { createTradeSchema, listTradesQuerySchema, updateTradeSchema } from "../src/modules/trades/schemas.js";
 
 const validTrade = {
   date: "2026-02-28",
@@ -74,6 +74,45 @@ test("trade schema rejects non-finite and unrealistic numeric values", () => {
     ...validTrade,
     profit: -1_000_000_000_000,
   }).success, false);
+});
+
+test("trade schema strips server-owned derived fields from client payloads", () => {
+  const parsedTrade = createTradeSchema.parse({
+    ...validTrade,
+    direction: "Sell",
+    result: "Loss",
+    grossPnl: 999,
+    netPnl: 999,
+  });
+
+  assert.equal("direction" in parsedTrade, false);
+  assert.equal("result" in parsedTrade, false);
+  assert.equal("grossPnl" in parsedTrade, false);
+  assert.equal("netPnl" in parsedTrade, false);
+});
+
+test("trade schema accepts lifecycle timestamps and rejects reversed execution windows", () => {
+  assert.equal(createTradeSchema.safeParse({
+    ...validTrade,
+    openedAt: "2026-02-28T09:00:00.000Z",
+    closedAt: "2026-02-28T10:00:00.000Z",
+    clientRequestId: "req-123",
+  }).success, true);
+
+  assert.equal(createTradeSchema.safeParse({
+    ...validTrade,
+    openedAt: "2026-02-28T10:00:00.000Z",
+    closedAt: "2026-02-28T09:00:00.000Z",
+  }).success, false);
+});
+
+test("trade update schema strips client request ids so create idempotency stays immutable", () => {
+  const parsedTrade = updateTradeSchema.parse({
+    notes: "Updated notes",
+    clientRequestId: "req-456",
+  });
+
+  assert.equal("clientRequestId" in parsedTrade, false);
 });
 
 test("trade list pagination rejects non-finite and oversized values", () => {

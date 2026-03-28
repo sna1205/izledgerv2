@@ -45,9 +45,8 @@ export default function Register() {
     <AuthPageShell
       eyebrow="IZLedger"
       title="Create account"
-      description="Set up a username and password so you can get into the journal quickly."
-      cardTitle="A few quick details"
-      cardDescription="Choose a username and password to get into your journal."
+      description="Start your journal."
+      cardTitle="Account details"
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div className="space-y-2">
@@ -65,7 +64,7 @@ export default function Register() {
             maxLength={AUTH_USERNAME_MAX_LENGTH}
           />
           <p className="text-xs text-muted-foreground">
-            Use {AUTH_USERNAME_MIN_LENGTH} to {AUTH_USERNAME_MAX_LENGTH} characters.
+            {AUTH_USERNAME_MIN_LENGTH} to {AUTH_USERNAME_MAX_LENGTH} characters.
           </p>
         </div>
 
@@ -81,7 +80,6 @@ export default function Register() {
                 setError("");
               }}
               className="pr-12"
-              placeholder="Create a password"
               autoComplete="new-password"
               minLength={AUTH_PASSWORD_MIN_LENGTH}
               maxLength={AUTH_PASSWORD_MAX_LENGTH}
@@ -97,7 +95,7 @@ export default function Register() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Use {AUTH_PASSWORD_MIN_LENGTH} to {AUTH_PASSWORD_MAX_LENGTH} characters.
+            {AUTH_PASSWORD_MIN_LENGTH} to {AUTH_PASSWORD_MAX_LENGTH} characters.
           </p>
         </div>
 

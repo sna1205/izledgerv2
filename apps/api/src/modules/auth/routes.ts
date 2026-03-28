@@ -1,6 +1,8 @@
 import { FastifyInstance } from "fastify";
 import { env } from "../../config/env.js";
 import { authenticate } from "../../middleware/auth.js";
+import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../utils/errors.js";
 import {
   clearSessionCookie,
   getSessionCookieLogContext,
@@ -10,6 +12,8 @@ import {
 import { parseOrThrow } from "../../utils/http.js";
 import { changePasswordSchema, credentialsSchema } from "./schemas.js";
 import { changePassword, loginUser, registerUser } from "./service.js";
+import { checklistPreferenceSchema } from "../checklist-rules/schemas.js";
+import { updateChecklistEnforcementMode } from "../checklist-rules/service.js";
 
 export async function authRoutes(app: FastifyInstance) {
   const authRateLimit = {
@@ -81,11 +85,23 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get("/me", { preHandler: authenticate }, async (request) => {
-    return {
-      user: {
+    const user = await prisma.user.findUnique({
+      where: {
         id: request.auth!.userId,
-        username: request.auth!.username,
       },
+      select: {
+        id: true,
+        username: true,
+        checklistEnforcementMode: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError(404, "USER_NOT_FOUND", "User not found.");
+    }
+
+    return {
+      user,
     };
   });
 
@@ -113,4 +129,18 @@ export async function authRoutes(app: FastifyInstance) {
       });
     },
   );
+
+  app.patch("/preferences", { preHandler: authenticate }, async (request) => {
+    const body = parseOrThrow(checklistPreferenceSchema, request.body);
+    const user = await updateChecklistEnforcementMode(request.auth!.userId, body.checklistEnforcementMode);
+    return {
+      user: {
+        id: user.id,
+        username: user.username,
+        checklistEnforcementMode: user.checklistEnforcementMode,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      },
+    };
+  });
 }

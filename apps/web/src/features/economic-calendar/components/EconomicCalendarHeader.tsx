@@ -53,9 +53,6 @@ export function EconomicCalendarHeader({
           <h1 className="mt-2 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground sm:text-[1.9rem]">
             Economic Calendar
           </h1>
-          <p className="mt-1 max-w-xl text-sm leading-5 text-muted-foreground">
-            Review old releases, scan today’s tape, and plan ahead without leaving your trade workflow.
-          </p>
         </div>
 
         <EconomicCalendarTimezoneSelect

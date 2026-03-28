@@ -1,0 +1,114 @@
+{
+  "generatedAt": "2026-03-27T09:43:14.070Z",
+  "summary": {
+    "orphanRowCount": 0,
+    "duplicateTradeGroupCount": 0,
+    "nullCriticalSnapshotCount": 0,
+    "impossibleFinancialValueCount": 0,
+    "impossibleFxValueCount": 0
+  },
+  "details": {
+    "orphanRows": {
+      "tradeAccountOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "tradeSetupOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "reviewTradeOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "shareOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "screenshotOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "screenshotUploadOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "checklistRuleScopeMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "checklistResponseOwnershipMismatches": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      }
+    },
+    "duplicateTrades": {
+      "duplicateClientRequestIds": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "candidateNaturalKeyDuplicates": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      }
+    },
+    "nullCriticalSnapshots": {
+      "fxSnapshotGaps": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      },
+      "setupSnapshotGaps": {
+        "count": 0,
+        "sample": [],
+        "sampled": false
+      }
+    },
+    "impossibleFinancialValues": {
+      "count": 0,
+      "sample": [],
+      "sampled": false
+    },
+    "impossibleFxValues": {
+      "count": 0,
+      "sample": [],
+      "sampled": false
+    }
+  },
+  "remediationPlan": {
+    "manualReviewQueues": {
+      "duplicateClientRequestIds": [],
+      "candidateNaturalKeyDuplicates": [],
+      "orphanRows": {
+        "tradeAccountOwnershipMismatches": [],
+        "tradeSetupOwnershipMismatches": [],
+        "reviewTradeOwnershipMismatches": [],
+        "shareOwnershipMismatches": [],
+        "screenshotOwnershipMismatches": [],
+        "screenshotUploadOwnershipMismatches": [],
+        "checklistRuleScopeMismatches": [],
+        "checklistResponseOwnershipMismatches": []
+      },
+      "fxSnapshotGaps": [],
+      "setupSnapshotGaps": [],
+      "impossibleFinancialValues": [],
+      "impossibleFxValues": []
+    },
+    "automaticActions": [],
+    "notes": [
+      "This plan is intentionally non-destructive.",
+      "No automatic deletions are proposed because duplicate-trade and orphan cleanup are not provably safe without production review.",
+      "Use these findings to prepare reviewed SQL or application-level remediation once real DB access is available."
+    ]
+  }
+}

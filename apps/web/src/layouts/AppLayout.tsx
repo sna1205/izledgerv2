@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { FEATURES } from "@/config/features";
 import { useAuth } from "@/features/auth/auth-context";
 import { HighImpactNewsAlertManager } from "@/features/economic-calendar/components/HighImpactNewsAlertManager";
 import { EconomicCalendarLivePollingManager } from "@/features/economic-calendar/components/EconomicCalendarLivePollingManager";
@@ -14,6 +15,8 @@ const pageTitles: Record<string, string> = {
   "/setups": "Setups",
   "/reviews": "Reviews",
   "/trades": "Trades",
+  "/trades/new": "New Trade",
+  "/trades/edit": "Edit Trade",
   "/analytics": "Analytics",
   "/calculator": "Lot Calculator",
   "/settings": "Settings",
@@ -24,14 +27,23 @@ export function AppLayout() {
   const location = useLocation();
   const { user } = useAuth();
   const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
-  const pageTitle = location.pathname.startsWith("/economic-calendar/")
+  const economicCalendarLive = FEATURES.economicCalendar === "live";
+  const pageTitle = location.pathname.startsWith("/economic-calendar")
     ? "Economic Calendar"
+    : location.pathname.startsWith("/trades/")
+      ? location.pathname === "/trades/new"
+        ? "New Trade"
+        : location.pathname.endsWith("/edit")
+          ? "Edit Trade"
+        : "Trades"
+    : location.pathname.startsWith("/settings")
+      ? "Settings"
     : pageTitles[location.pathname] || "IZLedger";
 
   return (
     <SidebarProvider>
-      {user ? <HighImpactNewsAlertManager /> : null}
-      {user ? <EconomicCalendarLivePollingManager /> : null}
+      {user && economicCalendarLive ? <HighImpactNewsAlertManager /> : null}
+      {user && economicCalendarLive ? <EconomicCalendarLivePollingManager /> : null}
       <div className="flex min-h-screen w-full bg-transparent">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">

@@ -44,8 +44,8 @@ export function EconomicCalendarContextPanel({
       {importantEvents.length === 0 ? (
         <EmptyState
           icon={Globe2}
-          title="No major events for this session"
-          description="No medium or high-impact events were found in the provider window for this trade date."
+          title="No major events"
+          description="No medium or high-impact events were found."
           className="py-8"
         />
       ) : (

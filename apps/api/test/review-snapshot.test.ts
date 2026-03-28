@@ -21,6 +21,7 @@ test("review snapshot hydration converts stored storage keys when building a res
     profit: 100,
     result: "Win",
     setup: "Breakout",
+    setupColor: "#10B981",
     session: "London",
     emotion: "Calm",
     notes: "Test snapshot",
@@ -38,6 +39,7 @@ test("review snapshot hydration converts stored storage keys when building a res
     profit: 100,
     result: "Win",
     setup: "Breakout",
+    setupColor: "#10B981",
     session: "London",
     emotion: "Calm",
     notes: "Test snapshot",
@@ -53,5 +55,26 @@ test("review snapshot hydration preserves legacy signed URLs", async () => {
 
   assert.deepEqual(snapshot, {
     screenshots: [url],
+  });
+});
+
+test("review snapshot hydration supports structured screenshot metadata without losing it", async () => {
+  const snapshot = await hydrateTradeSnapshot({
+    screenshots: [
+      {
+        storageKey: "users/user-1/trades/trade-1/chart.png",
+        sortOrder: 0,
+      },
+    ],
+  });
+
+  assert.deepEqual(snapshot, {
+    screenshots: [
+      {
+        storageKey: "users/user-1/trades/trade-1/chart.png",
+        sortOrder: 0,
+        url: "",
+      },
+    ],
   });
 });

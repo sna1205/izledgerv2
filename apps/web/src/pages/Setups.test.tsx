@@ -1,9 +1,10 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Setups from "@/pages/Setups";
+import NewSetup from "@/pages/NewSetup";
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
@@ -103,8 +104,11 @@ function renderPage() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <Setups />
+      <MemoryRouter initialEntries={["/setups"]}>
+        <Routes>
+          <Route path="/setups" element={<Setups />} />
+          <Route path="/setups/new" element={<NewSetup />} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -169,11 +173,11 @@ describe("setups color flow", () => {
     renderPage();
 
     await screen.findByText("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Add Setup" }));
+    fireEvent.click(screen.getByRole("link", { name: "New Setup" }));
 
-    await screen.findByText("Auto-assigned");
+    await screen.findByText("Live Preview");
     fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create Setup" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
 
     await waitFor(() => {
       expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
@@ -204,7 +208,7 @@ describe("setups color flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
 
     await screen.findByDisplayValue("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Strategy" }));
 
     await waitFor(() => {
       expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", expect.objectContaining({

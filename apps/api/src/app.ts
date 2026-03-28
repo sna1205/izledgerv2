@@ -15,6 +15,7 @@ import { reviewRoutes } from "./modules/reviews/routes.js";
 import { analyticsRoutes } from "./modules/analytics/routes.js";
 import { tradeShareRoutes } from "./modules/trade-shares/routes.js";
 import { economicCalendarRoutes } from "./modules/economic-calendar/routes.js";
+import { checklistRuleRoutes } from "./modules/checklist-rules/routes.js";
 
 function normalizeOrigin(origin: string) {
   try {
@@ -35,17 +36,7 @@ function isAllowedCorsOrigin(origin?: string) {
     return false;
   }
 
-  try {
-    const requestOrigin = new URL(normalizedOrigin);
-
-    if (env.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(requestOrigin.hostname)) {
-      return true;
-    }
-
-    return env.CORS_ALLOWED_ORIGINS.includes(normalizedOrigin);
-  } catch {
-    return false;
-  }
+  return env.CORS_ALLOWED_ORIGINS.includes(normalizedOrigin);
 }
 
 export async function buildApp() {
@@ -97,16 +88,42 @@ export async function buildApp() {
     ),
   });
 
+  function getBaseHealthPayload() {
+    return {
+      service: "izledger-backend",
+      storageEnabled: env.STORAGE_ENABLED,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  function getLivenessPayload() {
+    return {
+      status: "ok",
+      database: "unchecked",
+      ...getBaseHealthPayload(),
+    };
+  }
+
+  app.get("/live", async (_request, reply) => {
+    reply.status(200);
+
+    return getLivenessPayload();
+  });
+
   app.get("/health", async (_request, reply) => {
+    reply.status(200);
+
+    return getLivenessPayload();
+  });
+
+  app.get("/ready", async (_request, reply) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
 
       return {
         status: "ok",
-        service: "izledger-backend",
         database: "ok",
-        storageEnabled: env.STORAGE_ENABLED,
-        timestamp: new Date().toISOString(),
+        ...getBaseHealthPayload(),
       };
     } catch (error) {
       app.log.error(error);
@@ -114,10 +131,8 @@ export async function buildApp() {
 
       return {
         status: "error",
-        service: "izledger-backend",
         database: "unavailable",
-        storageEnabled: env.STORAGE_ENABLED,
-        timestamp: new Date().toISOString(),
+        ...getBaseHealthPayload(),
       };
     }
   });
@@ -141,6 +156,7 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(accountRoutes, { prefix: "/accounts" });
   await app.register(setupRoutes, { prefix: "/setups" });
+  await app.register(checklistRuleRoutes, { prefix: "/checklist-rules" });
   await app.register(tradeRoutes, { prefix: "/trades" });
   await app.register(screenshotRoutes, { prefix: "/trades" });
   await app.register(reviewRoutes, { prefix: "/reviews" });

@@ -50,6 +50,14 @@ test("register/login issue an HTTP-only session cookie and logout clears it", as
     assert.ok(registerCookieHeader?.includes("Secure"));
     assert.ok(registerCookieHeader?.includes("Path=/"));
     assert.ok(registerCookieHeader?.includes("Domain=.example.com"));
+    const createdAccounts = await prisma.account.findMany({
+      where: {
+        user: {
+          username,
+        },
+      },
+    });
+    assert.equal(createdAccounts.length, 0);
 
     const logoutResponse = await app.inject({
       method: "POST",

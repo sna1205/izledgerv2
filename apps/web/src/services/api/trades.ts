@@ -1,14 +1,29 @@
 import type { Pagination, Trade } from "@/types";
 import { apiFetch } from "@/services/api/client";
 
+export type TradeChecklistResponsePayload = {
+  checklistRuleId: string;
+  checked: boolean;
+  note?: string | null;
+};
+
 export type TradePayload = {
   date: string;
   accountId: string;
+  clientRequestId?: string | null;
   pair: string;
   direction: Trade["direction"];
   entry: number;
   stopLoss: number;
   takeProfit: number;
+  quantity?: number | null;
+  lotSize?: number | null;
+  exitPrice?: number | null;
+  fees?: number | null;
+  riskAmount?: number | null;
+  riskPercent?: number | null;
+  grossPnl?: number | null;
+  netPnl?: number | null;
   profit: number;
   result: Trade["result"];
   setupId?: string | null;
@@ -16,6 +31,10 @@ export type TradePayload = {
   session?: Trade["session"] | null;
   emotion?: Trade["emotion"] | null;
   notes?: string;
+  openedAt?: string | null;
+  closedAt?: string | null;
+  checklistResponses?: TradeChecklistResponsePayload[];
+  checklistScopeMode?: "applicable" | "exact";
 };
 
 export type ListTradesParams = {

@@ -1,8 +1,23 @@
 import { cn } from "@/utils/class-names";
-import { formatCurrencyDisplay } from "@/utils/analytics-rendering";
+import { formatCurrencyDisplay, formatMoneyDisplay } from "@/utils/analytics-rendering";
 
-export function ProfitDisplay({ value, className }: { value: number; className?: string }) {
-  const formatted = formatCurrencyDisplay(value);
+export function ProfitDisplay({
+  value,
+  className,
+  currency,
+}: {
+  value: number;
+  className?: string;
+  currency?: string | null;
+}) {
+  const formatted = currency
+    ? formatMoneyDisplay(value, {
+        currency,
+        fallback: "0.00",
+      })
+    : formatCurrencyDisplay(value, {
+        fallback: "0.00",
+      });
   return (
     <span
       className={cn(

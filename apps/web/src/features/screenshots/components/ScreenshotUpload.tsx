@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CameraOff, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import {
   deleteTradeScreenshot,
@@ -200,7 +201,7 @@ export function ScreenshotUpload({
   }, [draftFiles, onDraftFilesChange]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" aria-busy={isUploading || isReadingClipboard}>
       {!tradeId ? (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
           Screenshots added here will upload right after the trade is saved.
@@ -239,7 +240,14 @@ export function ScreenshotUpload({
               }
             }}
           >
-            {isUploading || isReadingClipboard ? <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-muted-foreground" /> : <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />}
+            {isUploading || isReadingClipboard ? (
+              <div className="mx-auto mb-3 flex flex-col items-center gap-2">
+                <Skeleton className="h-5 w-20 rounded-full" />
+                <Skeleton className="h-3 w-28 rounded-full" />
+              </div>
+            ) : (
+              <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+            )}
             <p className="text-sm text-muted-foreground">
               {isUploading ? "Uploading screenshot..." : isReadingClipboard ? "Reading screenshot from clipboard..." : tradeId ? "Drop, paste, or click to upload" : "Drop, paste, or click to queue"}
             </p>

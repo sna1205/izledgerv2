@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, BarChart3, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TagChip } from "@/components/ui/TagChip";
 import { DataBadge } from "@/components/DataBadge";
 import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
 import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
-import { formatCurrencyDisplay, formatNumberDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
+import { formatMoneyDisplay, formatNumberDisplay, formatPercentageDisplay } from "@/utils/analytics-rendering";
 import type { Trade } from "@/types";
 
 type DrawerStat = {
@@ -22,6 +23,7 @@ export function BreakdownDrawer({
   stats,
   trades,
   loading,
+  currency,
   onClose,
   onTradeClick,
   onViewAllTrades,
@@ -32,6 +34,7 @@ export function BreakdownDrawer({
   stats: DrawerStat[];
   trades: Trade[];
   loading: boolean;
+  currency?: string | null;
   onClose: () => void;
   onTradeClick: (tradeId: string) => void;
   onViewAllTrades: () => void;
@@ -85,7 +88,7 @@ export function BreakdownDrawer({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6" aria-busy={loading}>
                 <div className="mb-4 flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-lg font-medium text-foreground">Trades</h3>
@@ -94,12 +97,28 @@ export function BreakdownDrawer({
                 {loading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="h-24 animate-pulse rounded-2xl border border-border/60 bg-background/70 dark:bg-white/[0.03]" />
+                      <div key={index} className="rounded-2xl border border-border/60 bg-background/70 p-4 dark:bg-white/[0.03]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Skeleton className="h-4 w-24 rounded-md" />
+                              <Skeleton className="h-6 w-14 rounded-full" />
+                              <Skeleton className="h-6 w-16 rounded-full" />
+                            </div>
+                            <Skeleton className="h-3 w-28 rounded-md" />
+                            <div className="flex flex-wrap gap-2">
+                              <Skeleton className="h-6 w-16 rounded-full" />
+                              <Skeleton className="h-6 w-16 rounded-full" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-5 w-20 rounded-md" />
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : trades.length === 0 ? (
                   <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-10 text-center text-sm text-muted-foreground dark:bg-white/[0.03]">
-                    No trades
+                    No trades.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -124,7 +143,7 @@ export function BreakdownDrawer({
                               {trade.emotion ? <TagChip label={trade.emotion} kind="emotion" /> : null}
                             </div>
                           </div>
-                          <ProfitDisplay value={trade.profit} />
+                          <ProfitDisplay value={trade.profit} currency={trade.accountCurrency ?? currency} />
                         </div>
                       </button>
                     ))}
@@ -134,7 +153,7 @@ export function BreakdownDrawer({
 
               <div className="border-t border-border/60 px-5 py-5 sm:px-6">
                 <Button className="w-full justify-between" onClick={onViewAllTrades}>
-                  Open trades
+                  Trades
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -146,7 +165,7 @@ export function BreakdownDrawer({
   );
 }
 
-export function buildBreakdownDrawerStats(trades: Trade[]): DrawerStat[] {
+export function buildBreakdownDrawerStats(trades: Trade[], currency?: string | null): DrawerStat[] {
   const totalTrades = trades.length;
   const totalProfit = trades.reduce((sum, trade) => sum + trade.profit, 0);
   const wins = trades.filter((trade) => trade.result === "Win").length;
@@ -154,9 +173,12 @@ export function buildBreakdownDrawerStats(trades: Trade[]): DrawerStat[] {
   const worstTrade = trades.reduce<Trade | null>((worst, trade) => (worst === null || trade.profit < worst.profit ? trade : worst), null);
 
   return [
-    { label: "Net PnL", value: formatCurrencyDisplay(totalProfit), tone: totalProfit > 0 ? "success" : totalProfit < 0 ? "danger" : "default" },
+    { label: "Net PnL", value: formatMoneyDisplay(totalProfit, { currency, fallback: "--" }), tone: totalProfit > 0 ? "success" : totalProfit < 0 ? "danger" : "default" },
     { label: "Win Rate", value: totalTrades > 0 ? formatPercentageDisplay((wins / totalTrades) * 100) : "0.0%" },
     { label: "Trades", value: formatNumberDisplay(totalTrades) },
-    { label: "Best / Worst", value: `${formatCurrencyDisplay(bestTrade?.profit ?? 0)} / ${formatCurrencyDisplay(worstTrade?.profit ?? 0)}` },
+    {
+      label: "Best / Worst",
+      value: `${formatMoneyDisplay(bestTrade?.profit ?? 0, { currency, fallback: "--" })} / ${formatMoneyDisplay(worstTrade?.profit ?? 0, { currency, fallback: "--" })}`,
+    },
   ];
 }

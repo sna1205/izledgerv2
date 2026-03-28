@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { TradeFormDialog } from "./TradeFormDialog";
 import type { Account, SetupDefinition, Trade } from "@/types";
 
@@ -11,6 +11,10 @@ const screenshotServiceMocks = vi.hoisted(() => ({
 
 const economicCalendarMocks = vi.hoisted(() => ({
   getEconomicCalendarList: vi.fn(),
+}));
+
+const checklistRuleMocks = vi.hoisted(() => ({
+  listChecklistRules: vi.fn(),
 }));
 
 const reactQueryMocks = vi.hoisted(() => ({
@@ -31,6 +35,7 @@ vi.mock("@/features/auth/auth-context", () => ({
     user: {
       id: "user-1",
       username: "trader",
+      checklistEnforcementMode: "soft",
     },
   }),
 }));
@@ -79,6 +84,10 @@ vi.mock("@/services/api/screenshots", () => ({
 
 vi.mock("@/services/api/economic-calendar", () => ({
   getEconomicCalendarList: economicCalendarMocks.getEconomicCalendarList,
+}));
+
+vi.mock("@/services/api/checklist-rules", () => ({
+  listChecklistRules: checklistRuleMocks.listChecklistRules,
 }));
 
 vi.mock("@/components/ui/select", async () => {
@@ -165,6 +174,31 @@ const setups: SetupDefinition[] = [
     name: "Breakout",
     description: "",
     color: "#000000",
+    preTradeChecklist: [
+      {
+        id: "rule-1",
+        title: "Wait for confirmation candle",
+        description: "Do not enter before the candle close confirms the move.",
+        isRequired: true,
+        isActive: true,
+        sortOrder: 0,
+        scopeType: "setup",
+        setupId: "setup-1",
+        accountId: null,
+        createdAt: "2026-03-21T10:00:00.000Z",
+        updatedAt: "2026-03-21T10:00:00.000Z",
+      },
+    ],
+    createdAt: "2026-03-21T10:00:00.000Z",
+    updatedAt: "2026-03-21T10:00:00.000Z",
+    isArchived: false,
+  },
+  {
+    id: "setup-2",
+    name: "Liquidity",
+    description: "",
+    color: "#2563EB",
+    preTradeChecklist: [],
     createdAt: "2026-03-21T10:00:00.000Z",
     updatedAt: "2026-03-21T10:00:00.000Z",
     isArchived: false,
@@ -174,9 +208,11 @@ const setups: SetupDefinition[] = [
 function Harness({
   saveImpl = vi.fn(),
   editTrade,
+  setupsOverride = setups,
 }: {
   saveImpl?: (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => Promise<void> | void;
   editTrade?: Trade | null;
+  setupsOverride?: SetupDefinition[];
 }) {
   const [open, setOpen] = useState(true);
 
@@ -187,7 +223,7 @@ function Harness({
       onSave={saveImpl}
       editTrade={editTrade}
       accounts={accounts}
-      setups={setups}
+      setups={setupsOverride}
     />
   );
 }
@@ -211,13 +247,18 @@ function getReadonlyField(label: string) {
 }
 
 function renderWithProviders(ui: React.ReactElement) {
-  return render(ui);
+  return render(
+    <MemoryRouter>
+      {ui}
+    </MemoryRouter>,
+  );
 }
 
 describe("TradeFormDialog", () => {
   beforeEach(() => {
     screenshotServiceMocks.uploadTradeScreenshot.mockReset();
     economicCalendarMocks.getEconomicCalendarList.mockReset();
+    checklistRuleMocks.listChecklistRules.mockReset();
     economicCalendarMocks.getEconomicCalendarList.mockResolvedValue({
       fetchedAtUtc: new Date().toISOString(),
       providerStatus: "live",
@@ -235,7 +276,7 @@ describe("TradeFormDialog", () => {
       },
       items: [],
     });
-    reactQueryMocks.useQuery.mockReturnValue({
+    const economicCalendarState = {
       data: {
         fetchedAtUtc: new Date().toISOString(),
         providerStatus: "live",
@@ -256,6 +297,185 @@ describe("TradeFormDialog", () => {
       isLoading: false,
       isError: false,
       error: null,
+    };
+    const setupChecklistState = {
+      data: {
+        items: [
+          {
+            id: "rule-1",
+            title: "Wait for confirmation candle",
+            description: "Do not enter before the candle close confirms the move.",
+            isRequired: true,
+            isActive: true,
+            sortOrder: 0,
+            scopeType: "setup",
+            setupId: "setup-1",
+            accountId: null,
+            createdAt: "2026-03-21T10:00:00.000Z",
+            updatedAt: "2026-03-21T10:00:00.000Z",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+    const emptyChecklistState = {
+      data: {
+        items: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+
+    reactQueryMocks.useQuery.mockImplementation((options: { queryKey?: unknown[] }) => {
+      const key = JSON.stringify(options.queryKey ?? []);
+
+      if (key.includes("checklist-rules")) {
+        if (key.includes("setup-1")) {
+          return setupChecklistState;
+        }
+
+        return emptyChecklistState;
+      }
+
+      return economicCalendarState;
+    });
+  });
+
+  it("shows a neutral pre-trade empty state before a setup is selected", () => {
+    renderWithProviders(<Harness />);
+
+    expect(screen.getByText("Pre-Trade")).toBeInTheDocument();
+    expect(screen.getByText("No active items for this account.")).toBeInTheDocument();
+    expect(screen.getByText("No account items")).toBeInTheDocument();
+    expect(screen.getByText("Active global and account rules appear here. Setup rules appear after you choose a setup.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage in Setups" })).not.toBeInTheDocument();
+  });
+
+  it("shows a neutral pre-trade empty state when the selected setup has no checklist items", () => {
+    renderWithProviders(<Harness />);
+
+    fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-2" } });
+
+    expect(screen.getByText("No active items for this account and setup.")).toBeInTheDocument();
+    expect(screen.getByText("No items for Liquidity")).toBeInTheDocument();
+    expect(screen.getByText("Active global, account, and setup rules appear here.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage in Setups" })).not.toBeInTheDocument();
+  });
+
+  it("renders pre-trade items from the selected setup", async () => {
+    renderWithProviders(<Harness />);
+
+    fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-1" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Wait for confirmation candle")).toBeInTheDocument();
+      expect(screen.getByText("Do not enter before the candle close confirms the move.")).toBeInTheDocument();
+      expect(screen.getByText("Required")).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to the checklist query when the selected setup payload is stale", async () => {
+    const staleSetups: SetupDefinition[] = setups.map((setup) => (
+      setup.id === "setup-1"
+        ? { ...setup, preTradeChecklist: undefined }
+        : setup
+    ));
+    const fallbackChecklistState = {
+      data: {
+        items: [
+          {
+            id: "rule-fallback-1",
+            title: "Sweep and reclaim",
+            description: "Confirm the liquidity sweep is reclaimed before entry.",
+            isRequired: true,
+            isActive: true,
+            sortOrder: 0,
+            scopeType: "setup",
+            setupId: "setup-1",
+            accountId: null,
+            createdAt: "2026-03-21T10:00:00.000Z",
+            updatedAt: "2026-03-21T10:00:00.000Z",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+    const economicCalendarState = {
+      data: {
+        fetchedAtUtc: new Date().toISOString(),
+        providerStatus: "live",
+        cacheStatus: "miss",
+        range: {
+          startDate: "2026-03-25",
+          endDate: "2026-03-25",
+        },
+        filters: {
+          range: "today",
+          currencies: [],
+          impacts: [],
+          instrument: null,
+          relevantOnly: false,
+        },
+        items: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+
+    reactQueryMocks.useQuery.mockImplementation((options: { queryKey?: unknown[] }) => {
+      const key = JSON.stringify(options.queryKey ?? []);
+
+      if (key.includes("checklist-rules")) {
+        return fallbackChecklistState;
+      }
+
+      return economicCalendarState;
+    });
+
+    renderWithProviders(<Harness setupsOverride={staleSetups} />);
+
+    fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-1" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Sweep and reclaim")).toBeInTheDocument();
+      expect(screen.getByText("Confirm the liquidity sweep is reclaimed before entry.")).toBeInTheDocument();
+    });
+  });
+
+  it("requests applicable checklist rules using both the account and setup scope", async () => {
+    checklistRuleMocks.listChecklistRules.mockResolvedValue({ items: [] });
+
+    renderWithProviders(<Harness />);
+
+    fireEvent.change(screen.getByDisplayValue("No setup"), { target: { value: "setup-1" } });
+
+    let checklistQueryOptions:
+      | { queryKey?: unknown[]; queryFn?: () => Promise<unknown> }
+      | undefined;
+
+    await waitFor(() => {
+      checklistQueryOptions = [...reactQueryMocks.useQuery.mock.calls]
+        .map(([options]) => options as { queryKey?: unknown[]; queryFn?: () => Promise<unknown> })
+        .reverse()
+        .find((options) => JSON.stringify(options.queryKey ?? []).includes("\"checklist-rules\""));
+
+      expect(JSON.stringify(checklistQueryOptions?.queryKey ?? [])).toContain("\"account-1\"");
+      expect(JSON.stringify(checklistQueryOptions?.queryKey ?? [])).toContain("\"setup-1\"");
+    });
+
+    await checklistQueryOptions?.queryFn?.();
+
+    expect(checklistRuleMocks.listChecklistRules).toHaveBeenCalledWith({
+      activeOnly: true,
+      accountId: "account-1",
+      setupId: "setup-1",
+      scopeMode: "applicable",
     });
   });
 
@@ -341,6 +561,39 @@ describe("TradeFormDialog", () => {
     });
   });
 
+  it("submits optional trade fact fields without breaking the legacy profit flow", async () => {
+    const saveImpl = vi.fn();
+    renderWithProviders(<Harness saveImpl={saveImpl} />);
+
+    fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });
+    fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "3010" } });
+    fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "2980" } });
+    fireEvent.change(getInputByLabel("Exit Price"), { target: { value: "2988" } });
+    fireEvent.change(getInputByLabel("Fees"), { target: { value: "5.25" } });
+    fireEvent.change(getInputByLabel("Quantity"), { target: { value: "2.5" } });
+    fireEvent.change(getInputByLabel("Lot Size"), { target: { value: "0.25" } });
+    fireEvent.change(getInputByLabel("Risk Amount"), { target: { value: "50" } });
+    fireEvent.change(getInputByLabel("Risk %"), { target: { value: "1" } });
+    fireEvent.change(getProfitInput(), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Trade" }));
+
+    await waitFor(() => {
+      expect(saveImpl).toHaveBeenCalledWith(expect.objectContaining({
+        direction: "Sell",
+        profit: 120,
+        netPnl: 120,
+        grossPnl: 125.25,
+        fees: 5.25,
+        quantity: 2.5,
+        lotSize: 0.25,
+        exitPrice: 2988,
+        riskAmount: 50,
+        riskPercent: 1,
+        result: "Win",
+      }));
+    });
+  });
+
   it("shows a non-blocking warning when a relevant high-impact event is near", async () => {
     const eventTime = new Date(Date.now() + 10 * 60_000);
 
@@ -395,7 +648,7 @@ describe("TradeFormDialog", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Relevant high-impact event/i)).toBeInTheDocument();
-      expect(screen.getByText(/CPI y\/y/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/CPI y\/y/i).length).toBeGreaterThan(0);
     });
 
     fireEvent.change(getInputByLabel("Entry"), { target: { value: "3000" } });
@@ -439,8 +692,67 @@ describe("TradeFormDialog", () => {
 
     renderWithProviders(<Harness editTrade={archivedTrade} />);
 
-    expect(screen.getByText("Archived accounts stay available here only so historical trades can still be edited safely.")).toBeInTheDocument();
+    expect(screen.getByText("Archived account kept for historical edits.")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Legacy Account (archived)" })).toBeInTheDocument();
+  });
+
+  it("shows and submits pre-trade selections when editing a trade", async () => {
+    const saveImpl = vi.fn();
+    const tradeWithChecklist: Trade = {
+      id: "trade-edit-checklist",
+      date: "2026-03-21",
+      pair: "XAUUSD",
+      accountId: "account-1",
+      direction: "Buy",
+      entry: 3000,
+      stopLoss: 2990,
+      takeProfit: 3020,
+      profit: 100,
+      result: "Win",
+      setupId: "setup-1",
+      setup: "Breakout",
+      session: "London",
+      emotion: "Calm",
+      notes: "",
+      screenshots: [],
+      createdAt: "2026-03-21T10:00:00.000Z",
+      updatedAt: "2026-03-21T10:00:00.000Z",
+      checklistResponses: [
+        {
+          id: "trade-check-1",
+          tradeId: "trade-edit-checklist",
+          checklistRuleId: "rule-1",
+          ruleTitleSnapshot: "Wait for confirmation candle",
+          ruleDescriptionSnapshot: "Do not enter before the candle close confirms the move.",
+          isRequiredSnapshot: true,
+          checked: true,
+          note: null,
+          sortOrderSnapshot: 0,
+          createdAt: "2026-03-21T10:00:00.000Z",
+          updatedAt: "2026-03-21T10:00:00.000Z",
+        },
+      ],
+    };
+
+    renderWithProviders(<Harness editTrade={tradeWithChecklist} saveImpl={saveImpl} />);
+
+    expect(await screen.findByText("Pre-Trade")).toBeInTheDocument();
+    expect(screen.getByText("Wait for confirmation candle")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update Trade" }));
+
+    await waitFor(() => {
+      expect(saveImpl).toHaveBeenCalledWith(expect.objectContaining({
+        checklistResponses: [
+          {
+            checklistRuleId: "rule-1",
+            checked: true,
+          },
+        ],
+        checklistScopeMode: "applicable",
+      }));
+    });
   });
 
   it("uploads queued screenshots after saving a new trade", async () => {

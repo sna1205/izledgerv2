@@ -14,7 +14,7 @@ import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
 import { ResultBadge } from "@/features/trades/components/ResultBadge";
 import { SetupTag } from "@/components/SetupTag";
 import { ShareTradeModal } from "@/features/trade-sharing/components/ShareTradeModal";
-import { TradeFormDialog } from "@/features/trades/components/TradeFormDialog";
+import { TradeChecklistResults } from "@/features/checklist/components/TradeChecklistResults";
 import { TradeReviewContent } from "@/features/reviews/components/TradeReviewContent";
 import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDialog";
 import { TradeReviewStatusBadge } from "@/features/reviews/components/TradeReviewStatusBadge";
@@ -22,9 +22,8 @@ import { TagChip } from "@/components/ui/TagChip";
 import { listAccounts } from "@/services/api/accounts";
 import { ApiError } from "@/services/api/client";
 import { createReview, listReviews, updateReview } from "@/services/api/reviews";
-import { listSetups } from "@/services/api/setups";
 import { readTradeScreenshotClipboardFiles, uploadTradeScreenshot } from "@/services/api/screenshots";
-import { deleteTrade, getTrade, updateTrade } from "@/services/api/trades";
+import { deleteTrade, getTrade } from "@/services/api/trades";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { withMinimumDelay } from "@/utils/loading";
@@ -143,8 +142,8 @@ function ScreenshotGalleryCard({
   return (
     <>
       <SectionCard
-        title="Screenshot Gallery"
-        description={isUploading ? "Uploading screenshot..." : undefined}
+        title="Screenshots"
+        description={isUploading ? "Uploading..." : undefined}
         action={
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => void onPasteButtonClick()} disabled={isUploading}>
@@ -152,7 +151,7 @@ function ScreenshotGalleryCard({
             </Button>
             <Button variant="outline" size="sm" onClick={onAddScreenshot} disabled={isUploading}>
               <ImagePlus className="mr-1 h-4 w-4" />
-              Manage Screenshots
+              Manage
             </Button>
           </div>
         }
@@ -178,10 +177,10 @@ function ScreenshotGalleryCard({
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
               <CameraOff className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-base font-medium text-foreground">No screenshots added</h3>
+            <h3 className="mt-4 text-base font-medium text-foreground">No screenshots</h3>
             <Button className="mt-4" variant="outline" size="sm" onClick={onAddScreenshot}>
               <Camera className="mr-1 h-4 w-4" />
-              Add Screenshot
+              Add screenshot
             </Button>
           </div>
         )}
@@ -204,23 +203,23 @@ function buildInsights({ trade, review }: { trade: Trade; review?: Review | null
   const insights: Array<{ tone: "neutral" | "good" | "warn"; text: string }> = [];
 
   if (trade.profit > 0 && review && (review.disciplineScore || 0) <= 2) {
-    insights.push({ tone: "warn", text: "Strong result, but discipline score is still low." });
+    insights.push({ tone: "warn", text: "Strong result, weak discipline." });
   } else if (trade.profit > 0 && trade.emotion === "Frustrated") {
-    insights.push({ tone: "warn", text: "Winning trade with a frustrated emotional state." });
+    insights.push({ tone: "warn", text: "Winning trade, frustrated state." });
   } else if (review?.lessonLearned) {
-    insights.push({ tone: "good", text: "Reviewed trade with a clear lesson captured." });
+    insights.push({ tone: "good", text: "Clear lesson captured." });
   }
 
   if (!(trade.screenshotAssets?.length ?? 0)) {
-    insights.push({ tone: "warn", text: "No screenshot added. Chart evidence is missing for future review." });
+    insights.push({ tone: "warn", text: "No screenshot saved." });
   }
 
   if (!review) {
-    insights.push({ tone: "neutral", text: "Trade is logged, but reflection is still missing." });
+    insights.push({ tone: "neutral", text: "Review still open." });
   }
 
   if (trade.session) {
-    insights.push({ tone: "neutral", text: `${trade.session} session context is captured for this execution.` });
+    insights.push({ tone: "neutral", text: `${trade.session} session captured.` });
   }
 
   return insights.slice(0, 3);
@@ -243,7 +242,6 @@ export default function TradeDetail() {
   const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -271,26 +269,6 @@ export default function TradeDetail() {
     queryFn: async () => {
       const response = await listAccounts({ status: "active" });
       return response.items;
-    },
-  });
-  const setupsQuery = useQuery({
-    queryKey: privateQueryKey(user.id, "setups", "options"),
-    queryFn: async () => {
-      const response = await listSetups({ page: 1, pageSize: 100, status: "all", sortBy: "name", sortOrder: "asc" });
-      return response.items;
-    },
-  });
-
-  const updateTradeMutation = useMutation({
-    mutationFn: async (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => updateTrade(id, payload),
-    onSuccess: async (result) => {
-      updateTradeQueryData(queryClient, user.id, result.trade);
-      await invalidateTradeQueries(queryClient, user.id, id);
-      toast.success("Trade updated successfully.");
-    },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not update the trade right now.";
-      toast.error(message);
     },
   });
   const deleteTradeMutation = useMutation({
@@ -358,6 +336,7 @@ export default function TradeDetail() {
   const isTradeLoading = tradeQuery.isLoading && !trade;
   const tradeError = tradeQuery.error ?? (!trade ? new ApiError("Trade not found.", 404, "TRADE_NOT_FOUND") : null);
   const isProcessingScreenshotClipboard = isUploadingScreenshot || isReadingScreenshotClipboard;
+  const editTradePath = `/trades/${id}/edit`;
 
   const handlePasteScreenshots = async (files: File[]) => {
     if (!trade || isProcessingScreenshotClipboard) {
@@ -414,7 +393,7 @@ export default function TradeDetail() {
     }
   };
 
-  useUnauthorizedSessionGuard(tradeQuery.error, reviewQuery.error, accountsQuery.error, setupsQuery.error);
+  useUnauthorizedSessionGuard(tradeQuery.error, reviewQuery.error, accountsQuery.error);
 
   if (isTradeLoading) {
     return <TradeDetailSkeleton />;
@@ -438,15 +417,16 @@ export default function TradeDetail() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => {
           void Promise.all([
             tradeQuery.refetch(),
             reviewQuery.refetch(),
             accountsQuery.refetch(),
-            setupsQuery.refetch(),
           ]);
         } : undefined}
-        isRetrying={tradeQuery.isFetching || reviewQuery.isFetching || accountsQuery.isFetching || setupsQuery.isFetching}
+        isRetrying={tradeQuery.isFetching || reviewQuery.isFetching || accountsQuery.isFetching}
         secondaryAction={{
           label: "Back to Trades",
           onClick: () => navigate("/trades"),
@@ -473,8 +453,6 @@ export default function TradeDetail() {
                   <ResultBadge result={trade.result} />
                   <TradeReviewStatusBadge trade={trade} reviewed={Boolean(review)} />
                   {trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : null}
-                  {trade.session ? <TagChip label={trade.session} kind="session" /> : null}
-                  {trade.emotion ? <TagChip label={trade.emotion} kind="emotion" /> : null}
                 </div>
 
                 <div className="space-y-1">
@@ -482,13 +460,9 @@ export default function TradeDetail() {
                     {formatTradeDate(trade.date)}
                   </p>
                   <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      <Clock3 className="h-4 w-4" />
-                      Trade logged
-                    </span>
                     <span className={cn("inline-flex items-center gap-2", review ? "text-success" : "text-muted-foreground")}>
                       <CheckCircle2 className="h-4 w-4" />
-                      {review ? `Review completed ${reviewUpdatedLabel || ""}` : "Review pending"}
+                      {review ? `Reviewed ${reviewUpdatedLabel || ""}` : "Review open"}
                     </span>
                   </div>
                 </div>
@@ -497,7 +471,7 @@ export default function TradeDetail() {
 
             <div className="flex w-full flex-col gap-4 xl:max-w-[420px] xl:items-end">
               <div className="surface-muted w-full p-4 xl:max-w-[360px]">
-                <p className="text-label mb-2">Net Result</p>
+                <p className="text-label mb-2">PnL</p>
                 <ProfitDisplay value={trade.profit} className="block text-2xl font-semibold" />
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="surface p-3">
@@ -512,17 +486,17 @@ export default function TradeDetail() {
               </div>
 
               <div className="grid w-full gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:justify-end">
-                <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setEditOpen(true)}>
+                <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => navigate(editTradePath)}>
                   <Pencil className="mr-1 h-4 w-4" />
-                  Edit Trade
+                  Edit
                 </Button>
                 <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setReviewOpen(true)}>
                   <Sparkles className="mr-1 h-4 w-4" />
-                  {review ? "Edit Review" : "Write Review"}
+                  {review ? "Edit review" : "Review"}
                 </Button>
                 <Button variant="outline" size="sm" className="w-full xl:w-auto" onClick={() => setShareOpen(true)}>
                   <Share2 className="mr-1 h-4 w-4" />
-                  Share Trade
+                  Share
                 </Button>
                 <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive xl:w-auto" onClick={() => setDeleteOpen(true)}>
                   <Trash2 className="mr-1 h-4 w-4" />
@@ -535,7 +509,7 @@ export default function TradeDetail() {
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)]">
           <div className="space-y-6">
-            <SectionCard title="Trade Overview">
+            <SectionCard title="Overview">
               <div className="grid gap-4 md:grid-cols-2">
                 <MetricTile label="Account" value={accountName} />
                 <MetricTile label="Direction" value={trade.direction} />
@@ -544,7 +518,7 @@ export default function TradeDetail() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Execution Metrics">
+            <SectionCard title="Execution">
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <MetricTile label="Entry" value={<span className="font-mono-price">{trade.entry}</span>} />
@@ -554,26 +528,26 @@ export default function TradeDetail() {
                 </div>
 
                 <div className="surface-muted p-4">
-                  <p className="text-label mb-3">Performance</p>
+                  <p className="text-label mb-3">Summary</p>
                   <div className="mt-3 space-y-1">
                     <InsightRow label="Result" value={<ResultBadge result={trade.result} />} />
                     <InsightRow label="Setup" value={trade.setup ? <SetupTag label={trade.setup} color={trade.setupColor} /> : "No setup tagged"} />
-                    <InsightRow label="Screenshot Count" value={`${trade.screenshotAssets?.length ?? 0} ${(trade.screenshotAssets?.length ?? 0) === 1 ? "image" : "images"}`} />
-                    <InsightRow label="Review Status" value={review ? "Completed" : "Pending"} />
+                    <InsightRow label="Screenshots" value={`${trade.screenshotAssets?.length ?? 0}`} />
+                    <InsightRow label="Review" value={review ? "Done" : "Open"} />
                   </div>
                 </div>
               </div>
             </SectionCard>
 
             <SectionCard
-              title="Trade Review"
-              action={<Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>{review ? "Edit Review" : "Write Review"}</Button>}
+              title="Review"
+              action={<Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>{review ? "Edit review" : "Review"}</Button>}
             >
               {review ? (
                 <div className="space-y-4">
                   <div className="surface-muted flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                     <div>
-                      <p className="text-sm font-medium text-foreground">Review completed</p>
+                      <p className="text-sm font-medium text-foreground">Reviewed</p>
                       <p className="mt-1 text-xs text-muted-foreground">{reviewUpdatedLabel || "Recently updated"}</p>
                     </div>
                     <TradeReviewStatusBadge trade={trade} reviewed />
@@ -585,9 +559,9 @@ export default function TradeDetail() {
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
                     <Sparkles className="h-5 w-5" />
                   </div>
-                  <h3 className="mt-4 text-base font-medium text-foreground">No review yet</h3>
+                  <h3 className="mt-4 text-base font-medium text-foreground">No review</h3>
                   <Button className="mt-4" onClick={() => setReviewOpen(true)}>
-                    Write Review
+                    Review
                   </Button>
                 </div>
               )}
@@ -597,26 +571,30 @@ export default function TradeDetail() {
           <div className="space-y-6">
             <ScreenshotGalleryCard
               trade={trade}
-              onAddScreenshot={() => setEditOpen(true)}
+              onAddScreenshot={() => navigate(editTradePath)}
               onPasteScreenshots={handlePasteScreenshots}
               onPasteButtonClick={handlePasteScreenshotsFromClipboard}
-              pasteEnabled={!editOpen}
+              pasteEnabled
               isUploading={isProcessingScreenshotClipboard}
             />
 
-            <SectionCard title="Journal Notes">
+            <SectionCard title="Checklist">
+              <TradeChecklistResults responses={trade.checklistResponses ?? []} />
+            </SectionCard>
+
+            <SectionCard title="Notes">
               {trade.notes ? (
                 <div className="surface-muted p-4">
                   <p className="whitespace-pre-wrap text-sm text-foreground">{trade.notes}</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">
-                  No notes added yet.
+                  No notes.
                 </div>
               )}
             </SectionCard>
 
-            <SectionCard title="Quick Insights">
+            <SectionCard title="Insights">
               <div className="space-y-3">
                 {insights.map((insight, index) => (
                   <div
@@ -635,22 +613,6 @@ export default function TradeDetail() {
             </SectionCard>
           </div>
         </div>
-      <TradeFormDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        onSave={async (payload) => {
-          const result = await updateTradeMutation.mutateAsync(payload);
-          return result.trade;
-        }}
-        editTrade={trade}
-        accounts={accountsQuery.data ?? []}
-        setups={setupsQuery.data ?? []}
-        isSaving={updateTradeMutation.isPending}
-        onScreenshotsChange={(updatedTrade) => {
-          void syncTradeScreenshotQueryData(queryClient, user.id, updatedTrade);
-        }}
-      />
-
       <TradeReviewDialog
         open={reviewOpen}
         onOpenChange={setReviewOpen}
@@ -669,7 +631,7 @@ export default function TradeDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Any linked trade review will be preserved in Reviews as journal history.
+              This cannot be undone. Linked reviews stay in Reviews.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

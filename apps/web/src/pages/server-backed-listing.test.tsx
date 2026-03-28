@@ -698,8 +698,8 @@ describe("server-backed list pages", () => {
 
     renderPage(<Setups />);
 
-    await screen.findByText(hasTextContent("33 setups in view"));
-    expect(screen.getAllByText("42").length).toBeGreaterThan(0);
+    await screen.findByText(hasTextContent("33 results"));
+    expect(screen.getByText(hasTextContent("42 trades tagged"))).toBeInTheDocument();
     expect(screen.getByText(hasTextContent("Page 1 of 3 setup pages"))).toBeInTheDocument();
 
     await waitFor(() => {
@@ -712,7 +712,7 @@ describe("server-backed list pages", () => {
       }));
     });
 
-    fireEvent.change(screen.getByPlaceholderText("Search setups..."), { target: { value: "Break" } });
+    fireEvent.change(screen.getByPlaceholderText("Search playbooks, descriptions, or rules..."), { target: { value: "Break" } });
 
     await waitFor(() => {
       expect(apiMocks.listSetups).toHaveBeenCalledWith(expect.objectContaining({
@@ -721,7 +721,7 @@ describe("server-backed list pages", () => {
       }));
     });
 
-    await screen.findByText(hasTextContent("33 setups in view"));
+    await screen.findByText(hasTextContent("33 results"));
     fireEvent.change(screen.getByDisplayValue("All Setups"), { target: { value: "archived" } });
 
     await waitFor(() => {

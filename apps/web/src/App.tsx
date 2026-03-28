@@ -1,15 +1,19 @@
 import { lazy, Suspense } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShellSkeleton } from "@/components/skeletons/AppShellSkeleton";
 import { AuthPageSkeleton } from "@/components/skeletons/AuthPageSkeleton";
 import { AccountsSkeleton } from "@/components/skeletons/AccountsSkeleton";
 import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
+import { EconomicCalendarEventDetailSkeleton } from "@/components/skeletons/EconomicCalendarEventDetailSkeleton";
+import { EconomicCalendarSkeleton } from "@/components/skeletons/EconomicCalendarSkeleton";
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { TradeDetailSkeleton } from "@/components/skeletons/TradeDetailSkeleton";
+import { TradeFormSkeleton } from "@/components/skeletons/TradeFormSkeleton";
 import { TradesSkeleton } from "@/components/skeletons/TradesSkeleton";
+import { SetupWorkspaceSkeleton } from "@/components/skeletons/SetupWorkspaceSkeleton";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,10 +27,13 @@ import { createAppQueryClient } from "@/services/query-client";
 const Landing = lazy(() => import("./pages/Landing"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Trades = lazy(() => import("./pages/Trades"));
+const NewTrade = lazy(() => import("./pages/NewTrade"));
+const EditTrade = lazy(() => import("./pages/EditTrade"));
 const TradeDetail = lazy(() => import("./pages/TradeDetail"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Setups = lazy(() => import("./pages/Setups"));
+const NewSetup = lazy(() => import("./pages/NewSetup"));
 const Reviews = lazy(() => import("./pages/Reviews"));
 const EconomicCalendar = lazy(() => import("./pages/EconomicCalendar"));
 const EconomicCalendarEventDetail = lazy(() => import("./pages/EconomicCalendarEventDetail"));
@@ -40,6 +47,13 @@ const SharedTradePage = lazy(() => import("./pages/SharedTradePage"));
 const queryClient = createAppQueryClient();
 
 function getProtectedBootFallback(pathname: string) {
+  if (pathname === "/trades/new" || pathname.endsWith("/edit")) {
+    return {
+      pageTitleWidth: "w-24",
+      content: <TradeFormSkeleton />,
+    };
+  }
+
   if (pathname.startsWith("/trades/")) {
     return {
       pageTitleWidth: "w-36",
@@ -69,6 +83,13 @@ function getProtectedBootFallback(pathname: string) {
   }
 
   if (pathname.startsWith("/setups")) {
+    if (pathname === "/setups/new") {
+      return {
+        pageTitleWidth: "w-24",
+        content: <SetupWorkspaceSkeleton />,
+      };
+    }
+
     return {
       pageTitleWidth: "w-20",
       content: <SetupsSkeleton />,
@@ -83,9 +104,16 @@ function getProtectedBootFallback(pathname: string) {
   }
 
   if (pathname.startsWith("/economic-calendar")) {
+    if (pathname !== "/economic-calendar") {
+      return {
+        pageTitleWidth: "w-44",
+        content: <EconomicCalendarEventDetailSkeleton />,
+      };
+    }
+
     return {
       pageTitleWidth: "w-40",
-      content: <DashboardSkeleton />,
+      content: <EconomicCalendarSkeleton />,
     };
   }
 
@@ -150,14 +178,18 @@ function AppRoutes() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
+            <Route path="/setups/new" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/economic-calendar" element={<EconomicCalendar />} />
             <Route path="/economic-calendar/:eventId" element={<EconomicCalendarEventDetail />} />
             <Route path="/trades" element={<Trades />} />
+            <Route path="/trades/new" element={<NewTrade />} />
+            <Route path="/trades/:id/edit" element={<EditTrade />} />
             <Route path="/trades/:id" element={<TradeDetail />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/calculator" element={<LotCalculator />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/checklist" element={<Navigate to="/setups" replace />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />

@@ -23,17 +23,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
-        run: npm run prisma:generate
-
       - name: Prepare integration PostgreSQL
         run: npm --workspace @izledger/api run test:db:prepare
 
       - name: Create Prisma shadow database
         run: docker compose -f apps/api/docker-compose.test.yml exec -T postgres createdb -U postgres izledger_shadow
 
-      - name: Check Prisma release state
-        run: npm run prisma:check:release
-
-      - name: Run persistence-critical release gate
-        run: npm run check:persistence:release
+      - name: Run release readiness gate
+        run: npm run release:check

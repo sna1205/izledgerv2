@@ -1,6 +1,6 @@
 # Backup And Restore Guide
 
-This repo cannot turn on Neon backups or S3 bucket versioning by itself. What it can do is make the required production setup explicit, provide safe config templates, and give you a repeatable restore verification command.
+This repo cannot turn on Neon backups or S3 bucket versioning by itself. What it can do is make the required production setup explicit, provide safe config templates, give you repeatable backup and restore verification commands, and provide a schedulable logical-backup workflow.
 
 For phase 1, use this production baseline:
 
@@ -33,7 +33,7 @@ Nightly logical export shape:
 - output name: `postgres/daily/YYYY/MM/DD/izledger-<timestamp>.dump`
 - retention: 35 days for daily dumps, 180 days for weekly/monthly checkpoints if you keep them
 
-You can schedule that export from a GitHub Actions workflow, a Render cron service, or another scheduler that can reach the production database with a direct connection string. The repo does not activate a scheduler automatically.
+This repo now includes a schedulable GitHub Actions workflow at [nightly-logical-backup.yml](/mnt/c/Users/PCM/Documents/IZledgerV2/IZLedgerV2/.github/workflows/nightly-logical-backup.yml). Configure the required repository secrets, then enable Actions scheduling for the repository.
 
 ### Screenshot/object storage protection
 
@@ -119,6 +119,22 @@ Restore-verification-only env vars added in this step:
 - `RESTORE_VERIFY_STORAGE_SAMPLE_SIZE`
 - `RESTORE_VERIFY_REQUIRE_API`
 - `RESTORE_VERIFY_REQUIRE_STORAGE`
+- `RESTORE_VERIFY_REQUIRE_BUCKET_VERSIONING`
+
+Backup-automation env vars added in this step:
+
+- `BACKUP_DATABASE_URL`
+- `BACKUP_S3_BUCKET`
+- `BACKUP_S3_REGION`
+- `BACKUP_S3_ENDPOINT`
+- `BACKUP_S3_ACCESS_KEY`
+- `BACKUP_S3_SECRET_KEY`
+- `BACKUP_S3_FORCE_PATH_STYLE`
+- `BACKUP_OBJECT_PREFIX`
+- `BACKUP_PGDUMP_PATH`
+- `BACKUP_PGRESTORE_PATH`
+- `BACKUP_LAST_RESTORE_VERIFIED_AT`
+- `RELEASE_CHECK_REQUIRE_BACKUP`
 
 Non-runtime provider settings that must exist outside the repo:
 
@@ -221,9 +237,59 @@ Useful flags:
 npm run restore:verify --workspace @izledger/api -- --api-url=https://api-restored.example.com
 npm run restore:verify --workspace @izledger/api -- --storage-sample-size=all
 npm run restore:verify --workspace @izledger/api -- --require-api=true --require-storage=true
+npm run restore:verify --workspace @izledger/api -- --require-bucket-versioning=true
 ```
 
-## 6. Minimal restore drill checklist
+## 6. Logical backup automation
+
+Backup readiness validation:
+
+```bash
+npm run backup:check --workspace @izledger/api -- --require-restore-drill=true
+```
+
+This check validates:
+
+- backup database URL shape
+- `pg_dump` and `pg_restore` availability
+- logical-backup bucket access
+- logical-backup bucket versioning
+- screenshot-bucket versioning when screenshot storage is enabled
+- recorded last restore-drill timestamp when `--require-restore-drill=true`
+
+Manual or scheduled logical backup:
+
+```bash
+npm run backup:logical --workspace @izledger/api
+```
+
+Dry-run planning:
+
+```bash
+npm run backup:logical --workspace @izledger/api -- --dry-run=true
+```
+
+The backup workflow stores dumps under:
+
+- `postgres/daily/YYYY/MM/DD/izledger-<timestamp>.dump`
+
+## 7. GitHub Actions schedule
+
+The repo includes [nightly-logical-backup.yml](/mnt/c/Users/PCM/Documents/IZledgerV2/IZLedgerV2/.github/workflows/nightly-logical-backup.yml).
+
+Configure these repository secrets before enabling it:
+
+- `BACKUP_DATABASE_URL`
+- `BACKUP_S3_BUCKET`
+- `BACKUP_S3_REGION`
+- `BACKUP_S3_ENDPOINT`
+- `BACKUP_S3_ACCESS_KEY`
+- `BACKUP_S3_SECRET_KEY`
+- `BACKUP_S3_FORCE_PATH_STYLE`
+- `BACKUP_OBJECT_PREFIX`
+- `BACKUP_LAST_RESTORE_VERIFIED_AT`
+
+## 8. Minimal restore drill checklist
 
 Run this at least once before onboarding beta users:
 

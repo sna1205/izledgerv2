@@ -4,6 +4,8 @@ export const numericBounds = {
   maxAccountBalance: 999_999_999_999.99,
   maxTradePrice: 1_000_000_000,
   maxTradeProfitAbs: 999_999_999_999.99,
+  maxTradePositionSize: 1_000_000_000,
+  maxTradeRiskPercent: 100,
   maxPage: 10_000,
   maxPageSize: 100,
   maxScreenshotSortOrder: 1_000,

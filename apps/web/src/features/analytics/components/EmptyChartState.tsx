@@ -2,7 +2,7 @@ import { BarChart3 } from "lucide-react";
 import { cn } from "@/utils/class-names";
 
 export function EmptyChartState({
-  message = "No data yet.",
+  message = "No data.",
   variant = "bars",
   className,
 }: {

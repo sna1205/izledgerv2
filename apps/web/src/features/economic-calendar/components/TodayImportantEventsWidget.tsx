@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { DataBadge } from "@/components/DataBadge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/auth-context";
 import { EconomicCalendarEventCard } from "@/features/economic-calendar/components/EconomicCalendarEventCard";
 import { getDashboardImportantEvents } from "@/services/api/economic-calendar";
@@ -41,7 +42,7 @@ export function TodayImportantEventsWidget({
     return (
       <PageErrorState
         title="Calendar unavailable"
-        description="Today’s macro events could not be loaded."
+        description="Today’s events could not be loaded."
         onRetry={() => void eventsQuery.refetch()}
         isRetrying={eventsQuery.isFetching}
       />
@@ -52,7 +53,7 @@ export function TodayImportantEventsWidget({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg font-medium text-foreground">Today’s Important Events</h3>
+          <h3 className="text-lg font-medium text-foreground">Today’s Events</h3>
           <p className="mt-1 text-xs text-muted-foreground">{formatEconomicCalendarTimeZoneLabel(timeZone)}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -64,12 +65,28 @@ export function TodayImportantEventsWidget({
       </div>
 
       {eventsQuery.isLoading && !eventsQuery.data ? (
-        <div className="surface-muted p-4 text-sm text-muted-foreground">Loading today’s events...</div>
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <article key={index} className="surface-muted space-y-3 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-6 w-16 rounded-full" />
+                <Skeleton className="h-6 w-14 rounded-full" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-5 w-full max-w-[280px] rounded-md" />
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Skeleton className="h-4 w-24 rounded-md" />
+                <Skeleton className="h-4 w-20 rounded-md" />
+                <Skeleton className="h-4 w-28 rounded-md" />
+              </div>
+            </article>
+          ))}
+        </div>
       ) : importantTodayEvents.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
-          title="No important events today"
-          description="No medium or high-impact macro releases are scheduled for today."
+          title="No major events today"
+          description="No medium or high-impact releases are scheduled."
           className="py-10"
         />
       ) : (
@@ -89,7 +106,7 @@ export function TodayImportantEventsWidget({
                 <AlertTriangle className="h-4 w-4" />
                 {importantTodayEvents.length - 3}
                 {" "}
-                more important events later today
+                more later today
               </div>
               <Link to="/economic-calendar" className="font-medium text-foreground">
                 View all

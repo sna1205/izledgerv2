@@ -27,15 +27,15 @@ export function DailyReviewContent({ review }: DailyReviewContentProps) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <ReviewMetricCard label="Review Date" value={formatDailyReviewLabel(review.reviewDate)} />
+        <ReviewMetricCard label="Date" value={formatDailyReviewLabel(review.reviewDate)} />
         <ReviewMetricCard label="Discipline" value={`${review.disciplineScore ?? 0}/10`} />
-        <ReviewMetricCard label="Rules Followed" value={review.followedRules ?? "Not recorded"} />
+        <ReviewMetricCard label="Rules" value={review.followedRules ?? "Not recorded"} />
         <ReviewMetricCard label="Emotion" value={review.emotion ?? "Not recorded"} />
       </div>
 
       {macroEvents.length > 0 ? (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Major events on that day</h3>
+          <h3 className="text-sm font-semibold text-foreground">Major events</h3>
           {macroEvents.slice(0, 4).map((event) => (
             <EconomicCalendarEventCard key={event.id} event={event} compact />
           ))}

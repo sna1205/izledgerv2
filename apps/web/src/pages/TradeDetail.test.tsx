@@ -175,6 +175,7 @@ function renderTradeDetail(id = "trade-1") {
       <MemoryRouter initialEntries={[`/trades/${id}`]}>
         <Routes>
           <Route path="/trades" element={<div>Trades Index</div>} />
+          <Route path="/trades/:id/edit" element={<div>Edit Trade Page</div>} />
           <Route path="/trades/:id" element={<TradeDetail />} />
         </Routes>
       </MemoryRouter>
@@ -229,7 +230,7 @@ describe("TradeDetail", () => {
 
     deferredTrade.resolve({ trade: baseTrade });
 
-    await screen.findByText("Trade Overview");
+    await screen.findByText("Overview");
 
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(expect.stringMatching(/Rendered more hooks than during the previous render|change in the order of Hooks/i));
   });
@@ -290,9 +291,8 @@ describe("TradeDetail", () => {
 
     renderTradeDetail();
 
-    await screen.findByText("Review completed");
-    expect(screen.getByText("Review lesson: Stick to the retest confirmation.")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Edit Review" }).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Review lesson: Stick to the retest confirmation.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /edit review/i }).length).toBeGreaterThan(0);
   });
 
   it("renders trade share controls and opens the share modal", async () => {
@@ -300,12 +300,22 @@ describe("TradeDetail", () => {
 
     renderTradeDetail();
 
-    const shareButton = await screen.findByRole("button", { name: "Share Trade" });
+    const shareButton = await screen.findByRole("button", { name: "Share" });
     fireEvent.click(shareButton);
 
     await waitFor(() => {
       expect(screen.getByText("Share modal open")).toBeInTheDocument();
     });
+  });
+
+  it("navigates to the full-page editor when edit is clicked", async () => {
+    apiMocks.getTrade.mockResolvedValue({ trade: baseTrade });
+
+    renderTradeDetail();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    await screen.findByText("Edit Trade Page");
   });
 
   it("uploads a pasted screenshot directly from the detail page", async () => {
@@ -322,9 +332,7 @@ describe("TradeDetail", () => {
 
     renderTradeDetail();
 
-    await screen.findByText("Screenshot Gallery");
-
-    fireEvent.click(screen.getByRole("button", { name: "Paste Screenshot" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Paste Screenshot" }));
 
     await waitFor(() => {
       expect(apiMocks.readTradeScreenshotClipboardFiles).toHaveBeenCalled();
@@ -335,7 +343,7 @@ describe("TradeDetail", () => {
       });
     });
 
-    expect(await screen.findByText("1 image")).toBeInTheDocument();
+    expect(await screen.findByAltText("EURUSD screenshot 1")).toBeInTheDocument();
     await waitFor(() => {
       expect(apiMocks.toast.success).toHaveBeenCalledWith("Screenshot uploaded.");
     });

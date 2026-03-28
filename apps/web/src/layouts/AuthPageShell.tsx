@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 interface AuthPageShellProps {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   cardTitle: string;
-  cardDescription: string;
+  cardDescription?: string;
   children: React.ReactNode;
 }
 
@@ -36,13 +36,13 @@ export function AuthPageShell({
         <div className="mb-8 text-center">
           <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">{eyebrow}</p>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{title}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+          {description ? <p className="mt-2 text-sm text-muted-foreground">{description}</p> : null}
         </div>
 
         <Card className="rounded-3xl border-border/70 bg-card/90 backdrop-blur-xl shadow-[0_24px_70px_-32px_hsl(var(--foreground)/0.28)] dark:shadow-[0_28px_80px_-34px_rgba(0,0,0,0.72)]">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl">{cardTitle}</CardTitle>
-            <CardDescription>{cardDescription}</CardDescription>
+            {cardDescription ? <CardDescription>{cardDescription}</CardDescription> : null}
           </CardHeader>
           <CardContent>{children}</CardContent>
         </Card>

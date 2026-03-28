@@ -1,4 +1,3 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -6,6 +5,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import EconomicCalendarEventDetail from "@/pages/EconomicCalendarEventDetail";
 import { ApiError } from "@/services/api/client";
 import type { EconomicCalendarEvent } from "@/types";
+
+vi.mock("@/config/features", () => ({
+  FEATURES: {
+    economicCalendar: "live",
+  },
+}));
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({

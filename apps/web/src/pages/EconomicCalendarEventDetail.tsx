@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Clock3, Globe2 } from "lucide-react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
+import { EconomicCalendarEventDetailSkeleton } from "@/components/skeletons/EconomicCalendarEventDetailSkeleton";
 import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
+import { FEATURES } from "@/config/features";
 import { PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -38,6 +40,7 @@ import { listTrades } from "@/services/api/trades";
 import { privateQueryKey } from "@/services/query-client";
 import { withMinimumDelay } from "@/utils/loading";
 import { ApiError } from "@/services/api/client";
+import EconomicCalendarComingSoonPage from "@/pages/EconomicCalendarComingSoonPage";
 import type { EconomicCalendarEvent } from "@/types";
 
 const RECENT_INSTRUMENT_LIMIT = 24;
@@ -89,7 +92,7 @@ function ContentMetric({
   );
 }
 
-export default function EconomicCalendarEventDetail() {
+function EconomicCalendarEventDetailLivePage() {
   const { user } = useAuth();
   const { eventId = "" } = useParams<{ eventId: string }>();
   const location = useLocation();
@@ -145,11 +148,7 @@ export default function EconomicCalendarEventDetail() {
     : null);
 
   if (detailQuery.isLoading && !detailData) {
-    return (
-      <PageShell size="wide">
-        <div className="text-sm text-muted-foreground">Loading event details...</div>
-      </PageShell>
-    );
+    return <EconomicCalendarEventDetailSkeleton />;
   }
 
   if ((detailQuery.isError && !canUseFallbackEvent) || !detailData) {
@@ -161,6 +160,8 @@ export default function EconomicCalendarEventDetail() {
         description={notFound
           ? "This event is no longer available in the current provider window."
           : "The economic event could not be loaded right now."}
+        layout="page"
+        size="wide"
         onRetry={notFound ? undefined : () => void detailQuery.refetch()}
         isRetrying={detailQuery.isFetching}
         secondaryAction={{
@@ -254,15 +255,15 @@ export default function EconomicCalendarEventDetail() {
               ) : null}
             </DetailSection>
 
-            <DetailSection title="Trader Breakdown">
+            <DetailSection title="Trading Context">
               <div className="grid gap-3 lg:grid-cols-2">
-                <ContentMetric title="What is this">
+                <ContentMetric title="Overview">
                   <p className="text-muted-foreground">{eventContent.description}</p>
                 </ContentMetric>
                 <ContentMetric title="Why it matters">
                   <p className="text-muted-foreground">{eventContent.whyItMatters}</p>
                 </ContentMetric>
-                <ContentMetric title="How it impacts">
+                <ContentMetric title="Impact">
                   <div className="space-y-2">
                     <p className="text-muted-foreground">
                       <span className="font-medium text-foreground">Bullish:</span> {eventContent.impact.bullish}
@@ -275,7 +276,7 @@ export default function EconomicCalendarEventDetail() {
                 <ContentMetric title="Market behavior">
                   <p className="text-muted-foreground">{eventContent.behavior}</p>
                 </ContentMetric>
-                <ContentMetric title="Affected instruments">
+                <ContentMetric title="Instruments">
                   <div className="flex flex-wrap gap-2">
                     {eventContent.instruments.map((item) => (
                       <DataBadge key={item} tone="warning">{item}</DataBadge>
@@ -286,7 +287,7 @@ export default function EconomicCalendarEventDetail() {
             </DetailSection>
 
             {sameTimeEvents.length > 0 ? (
-              <DetailSection title="Same Time Releases">
+              <DetailSection title="Same time">
                 <div className="space-y-1">
                   {sameTimeEvents.map((item) => (
                     <Link
@@ -322,12 +323,12 @@ export default function EconomicCalendarEventDetail() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No watched instruments are currently matched to this release.</p>
+                <p className="text-sm text-muted-foreground">No watched instruments matched.</p>
               )}
             </DetailSection>
 
             {sameSessionEvents.length > 0 ? (
-              <DetailSection title="Same Session Events">
+              <DetailSection title="Same session">
                 <div className="space-y-1">
                   {sameSessionEvents.map((item) => (
                     <Link
@@ -366,7 +367,7 @@ export default function EconomicCalendarEventDetail() {
                   </Button>
                 ) : null}
                 <Button variant="ghost" asChild className="justify-start">
-                  <Link to={backPath}>Return to calendar</Link>
+                  <Link to={backPath}>Back to calendar</Link>
                 </Button>
               </div>
             </DetailSection>
@@ -375,4 +376,16 @@ export default function EconomicCalendarEventDetail() {
       </div>
     </PageShell>
   );
+}
+
+export default function EconomicCalendarEventDetail() {
+  if (FEATURES.economicCalendar === "hidden") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (FEATURES.economicCalendar === "development") {
+    return <EconomicCalendarComingSoonPage />;
+  }
+
+  return <EconomicCalendarEventDetailLivePage />;
 }

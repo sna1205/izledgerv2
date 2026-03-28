@@ -28,14 +28,14 @@ export function WeeklyReviewContent({ review }: WeeklyReviewContentProps) {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <ReviewMetricCard label="Week" value={formatWeeklyReviewLabel(review.weekStart, review.weekEnd)} />
-        <ReviewMetricCard label="Weekly Rating" value={`${review.weeklyRating ?? 0}/10`} />
-        <ReviewMetricCard label="Risk Management" value={review.riskManagement ?? "Not recorded"} />
-        <ReviewMetricCard label="Next Goal Set" value={review.nextGoal ? "Yes" : "No"} />
+        <ReviewMetricCard label="Rating" value={`${review.weeklyRating ?? 0}/10`} />
+        <ReviewMetricCard label="Risk" value={review.riskManagement ?? "Not recorded"} />
+        <ReviewMetricCard label="Goal" value={review.nextGoal ? "Yes" : "No"} />
       </div>
 
       {macroEvents.length > 0 ? (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Major events that week</h3>
+          <h3 className="text-sm font-semibold text-foreground">Major events</h3>
           {macroEvents.slice(0, 6).map((event) => (
             <EconomicCalendarEventCard key={event.id} event={event} compact />
           ))}

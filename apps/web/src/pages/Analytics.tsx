@@ -24,7 +24,6 @@ import { AccountFilterSelect } from "@/features/accounts/components/AccountFilte
 import {
   EmotionsBreakdownChart,
   getBreakdownCategoryAccent,
-  getBreakdownColor,
   PairsBreakdownChart,
   SessionsBreakdownChart,
   SetupsBreakdownChart,
@@ -39,6 +38,7 @@ import { PageHeader, PageShell, SectionCard, SectionHeader } from "@/layouts/Pag
 import { TradingDayDrawer } from "@/features/trades/components/TradingDayDrawer";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -53,9 +53,10 @@ import { getAnalyticsBreakdowns, getAnalyticsCalendar } from "@/services/api/ana
 import { listTrades } from "@/services/api/trades";
 import { resolveAccountFilter, useAccountFilter } from "@/utils/account-filter";
 import {
-  formatCompactCurrencyDisplay,
-  formatCurrencyDisplay,
+  formatCompactMoneyDisplay,
+  formatCurrencyTotalsDisplay,
   formatDateDisplay,
+  formatMoneyDisplay,
   formatNumberDisplay,
   formatPercentageDisplay,
   normalizeAnalyticsBreakdownsResponse,
@@ -141,6 +142,29 @@ function calculatePlannedRR(trade: Trade) {
   }
 
   return Math.max(0, reward / risk);
+}
+
+function calculateRealizedR(trade: Trade) {
+  const riskAmount = trade.riskAmount ?? null;
+  const netPnl = trade.netPnl ?? trade.profit;
+
+  if (!riskAmount || riskAmount <= 0) {
+    return null;
+  }
+
+  return netPnl / riskAmount;
+}
+
+function calculateAveragePlannedRR(trades: Trade[]) {
+  const rrValues = trades
+    .map((trade) => calculatePlannedRR(trade))
+    .filter((value) => value > 0);
+
+  if (rrValues.length === 0) {
+    return 0;
+  }
+
+  return rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length;
 }
 
 function shortenLabel(label: string, maxLength = 14) {
@@ -248,7 +272,7 @@ function buildDailySummariesFromCalendar(days: NormalizedCalendarDay[]): DailySu
   }));
 }
 
-function buildBehaviorInsight(dailySummaries: DailySummary[]) {
+function buildBehaviorInsight(dailySummaries: DailySummary[], currency?: string | null) {
   if (dailySummaries.length === 0) {
     return "More trades needed for behavior insight.";
   }
@@ -258,7 +282,7 @@ function buildBehaviorInsight(dailySummaries: DailySummary[]) {
 
   if (busiestDay && busiestDay.trades >= Math.max(4, Math.ceil(averageTradesPerDay * 1.75))) {
     return busiestDay.profit < 0
-      ? `${busiestDay.fullDate} was your busiest day and closed ${formatCurrencyDisplay(busiestDay.profit)}.`
+      ? `${busiestDay.fullDate} was your busiest day and closed ${formatMoneyDisplay(busiestDay.profit, { currency, fallback: "--" })}.`
       : `${busiestDay.fullDate} had your most trades. Watch quality when volume rises.`;
   }
 
@@ -286,13 +310,13 @@ function computeMaxDrawdown(points: TrendPoint[]) {
 
 function buildPerformanceScore({
   winRate,
-  avgRR,
+  avgPlannedRR,
   dailySummaries,
   trend,
   totalGross,
 }: {
   winRate: number;
-  avgRR: number;
+  avgPlannedRR: number;
   dailySummaries: DailySummary[];
   trend: TrendPoint[];
   totalGross: number;
@@ -300,7 +324,7 @@ function buildPerformanceScore({
   const consistencyScore = dailySummaries.length > 0
     ? (dailySummaries.filter((day) => day.profit > 0).length / dailySummaries.length) * 100
     : 0;
-  const rrScore = Math.min(100, (avgRR / 3) * 100);
+  const rrScore = Math.min(100, (avgPlannedRR / 3) * 100);
   const maxDrawdown = computeMaxDrawdown(trend);
   const drawdownScore = totalGross > 0
     ? Math.max(0, 100 - (maxDrawdown / totalGross) * 100)
@@ -316,7 +340,7 @@ function buildPerformanceScore({
     score,
     factors: [
       { label: "Win rate", value: Math.round(winRate) },
-      { label: "Risk / reward", value: Math.round(rrScore) },
+      { label: "Planned RR", value: Math.round(rrScore) },
       { label: "Consistency", value: Math.round(consistencyScore) },
       { label: "Drawdown control", value: Math.round(drawdownScore) },
     ],
@@ -328,28 +352,53 @@ function buildAnalyticsSummaryFromTrades(trades: Trade[]) {
   const totalTrades = trades.length;
   const wins = trades.filter((trade) => trade.result === "Win").length;
   const losses = trades.filter((trade) => trade.result === "Loss").length;
-  const totalProfit = trades.reduce((sum, trade) => sum + trade.profit, 0);
-  const totalGross = trades
-    .filter((trade) => trade.profit > 0)
-    .reduce((sum, trade) => sum + trade.profit, 0);
-  const totalLoss = trades
-    .filter((trade) => trade.profit < 0)
-    .reduce((sum, trade) => sum + trade.profit, 0);
-  const rrValues = trades
-    .map((trade) => calculatePlannedRR(trade))
-    .filter((value) => value > 0);
+  const breakevens = trades.filter((trade) => trade.result === "Breakeven").length;
+  const currencyMap = trades.reduce((map, trade) => {
+    const currency = trade.accountCurrency?.trim().toUpperCase();
+
+    if (!currency) {
+      return map;
+    }
+
+    map.set(currency, (map.get(currency) ?? 0) + trade.profit);
+    return map;
+  }, new Map<string, number>());
+  const currencyTotals = Array.from(currencyMap.entries())
+    .map(([currency, totalProfit]) => ({
+      currency,
+      totalProfit: Number(totalProfit.toFixed(2)),
+    }))
+    .sort((left, right) => left.currency.localeCompare(right.currency));
+  const isMixedCurrency = currencyTotals.length > 1;
+  const totalProfit = isMixedCurrency ? null : trades.reduce((sum, trade) => sum + trade.profit, 0);
+  const totalGross = isMixedCurrency
+    ? null
+    : trades.filter((trade) => trade.profit > 0).reduce((sum, trade) => sum + trade.profit, 0);
+  const totalLoss = isMixedCurrency
+    ? null
+    : trades.filter((trade) => trade.profit < 0).reduce((sum, trade) => sum + trade.profit, 0);
+  const avgPlannedRR = calculateAveragePlannedRR(trades);
+  const realizedRValues = trades
+    .map((trade) => calculateRealizedR(trade))
+    .filter((value): value is number => value !== null);
 
   return {
     totalTrades,
     wins,
     losses,
+    breakevens,
     totalProfit,
     totalGross,
     totalLoss,
     winRate: totalTrades > 0 ? (wins / totalTrades) * 100 : 0,
-    avgRR: rrValues.length > 0
-      ? rrValues.reduce((sum, value) => sum + value, 0) / rrValues.length
-      : 0,
+    avgRR: avgPlannedRR,
+    avgPlannedRR,
+    avgRealizedR: realizedRValues.length > 0
+      ? realizedRValues.reduce((sum, value) => sum + value, 0) / realizedRValues.length
+      : null,
+    displayCurrency: currencyTotals.length === 1 ? currencyTotals[0]!.currency : null,
+    isMixedCurrency,
+    currencyTotals,
   };
 }
 
@@ -419,7 +468,13 @@ async function listAllTradesForAnalytics(accountId?: string) {
   return allTrades;
 }
 
-function TrendTooltip({ active, payload }: TooltipProps<ValueType, NameType>) {
+function TrendTooltip({
+  active,
+  payload,
+  currency,
+}: TooltipProps<ValueType, NameType> & {
+  currency?: string | null;
+}) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -434,8 +489,8 @@ function TrendTooltip({ active, payload }: TooltipProps<ValueType, NameType>) {
     <div className="min-w-[180px] rounded-2xl border border-border/70 bg-popover/96 px-4 py-3 text-xs text-popover-foreground shadow-[0_20px_50px_-24px_rgba(15,23,42,0.22)] backdrop-blur-xl dark:shadow-[0_20px_50px_-24px_rgba(1,8,24,0.88)]">
       <p className="font-medium text-foreground">{datum.fullDate}</p>
       <div className="mt-3 grid gap-1.5">
-        <p>Cumulative PnL: {formatCurrencyDisplay(datum.cumulativeProfit)}</p>
-        <p>Day PnL: {formatCurrencyDisplay(datum.dailyProfit)}</p>
+        <p>Cumulative PnL: {formatMoneyDisplay(datum.cumulativeProfit, { currency, fallback: "--" })}</p>
+        <p>Day PnL: {formatMoneyDisplay(datum.dailyProfit, { currency, fallback: "--" })}</p>
         <p>Trades: {formatNumberDisplay(datum.trades)}</p>
       </div>
     </div>
@@ -547,6 +602,7 @@ function BreakdownPanel({
   description,
   rows,
   loading,
+  currency,
   onInspect,
 }: {
   kind: BreakdownKind;
@@ -554,6 +610,7 @@ function BreakdownPanel({
   description?: string;
   rows: PerformanceRow[];
   loading: boolean;
+  currency?: string | null;
   onInspect: (row: PerformanceRow) => void;
 }) {
   const bestRow = pickBestRow(rows);
@@ -563,6 +620,7 @@ function BreakdownPanel({
   const weightedWinRate = totalTrades > 0
     ? rows.reduce((sum, row) => sum + ((row.winRate / 100) * row.trades), 0) / totalTrades * 100
     : 0;
+  const showLoadingState = loading && rows.length === 0;
 
   return (
     <SectionCard className="space-y-6 border-border/60 p-0">
@@ -573,17 +631,17 @@ function BreakdownPanel({
       <div className="grid gap-3 px-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-6">
         <BreakdownInsightMetric
           label="Best Performer"
-          value={bestRow ? `${bestRow.label} · ${formatCompactCurrencyDisplay(bestRow.profit)}` : "No data"}
+          value={bestRow ? `${bestRow.label} · ${formatCompactMoneyDisplay(bestRow.profit, currency)}` : "No data"}
           tone="success"
         />
         <BreakdownInsightMetric
           label="Worst Performer"
-          value={worstRow ? `${worstRow.label} · ${formatCompactCurrencyDisplay(worstRow.profit)}` : "No data"}
+          value={worstRow ? `${worstRow.label} · ${formatCompactMoneyDisplay(worstRow.profit, currency)}` : "No data"}
           tone="danger"
         />
         <BreakdownInsightMetric
           label="Total PnL"
-          value={formatCurrencyDisplay(totalProfit)}
+          value={formatMoneyDisplay(totalProfit, { currency, fallback: "--" })}
           tone={totalProfit > 0 ? "success" : totalProfit < 0 ? "danger" : "default"}
         />
         <BreakdownInsightMetric
@@ -593,8 +651,28 @@ function BreakdownPanel({
       </div>
 
       <div className="px-5 sm:px-6">
-        {loading ? (
-          <div className="h-[280px] animate-pulse rounded-3xl bg-muted/50" />
+        {showLoadingState ? (
+          <div className="h-[280px] rounded-3xl border border-border/50 bg-background/70 p-5">
+            <div className="grid h-full gap-4 md:grid-cols-[1.2fr_0.8fr]">
+              <div className="flex items-end gap-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton
+                    key={index}
+                    className="w-full rounded-[1.25rem]"
+                    style={{ height: `${35 + (index % 4) * 14}%` }}
+                  />
+                ))}
+              </div>
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="rounded-2xl border border-border/50 bg-background/70 px-4 py-4">
+                    <Skeleton className="h-3 w-20 rounded-md" />
+                    <Skeleton className="mt-2 h-4 w-28 rounded-md" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         ) : (
           <>
             {kind === "setup" ? <SetupsBreakdownChart rows={rows} onInspect={onInspect} /> : null}
@@ -651,7 +729,7 @@ function BreakdownPanel({
                   <TableCell className="text-right tabular text-foreground">{formatNumberDisplay(row.trades)}</TableCell>
                   <TableCell className="text-right tabular text-foreground">{formatPercentageDisplay(row.winRate)}</TableCell>
                   <TableCell className={cn("text-right font-medium tabular", getProfitTone(row.profit))}>
-                    {formatCurrencyDisplay(row.profit)}
+                    {formatMoneyDisplay(row.profit, { currency, fallback: "--" })}
                   </TableCell>
                 </TableRow>
               );
@@ -768,22 +846,30 @@ export default function Analytics() {
   const dayStats = useMemo(() => {
     const bestTrade = dayTrades.reduce<Trade | null>((best, trade) => (best === null || trade.profit > best.profit ? trade : best), null);
     const worstTrade = dayTrades.reduce<Trade | null>((worst, trade) => (worst === null || trade.profit < worst.profit ? trade : worst), null);
-    const avgRR = dayTrades.length > 0
-      ? dayTrades.reduce((sum, trade) => sum + calculatePlannedRR(trade), 0) / dayTrades.length
-      : 0;
+    const avgPlannedRR = calculateAveragePlannedRR(dayTrades);
+    const realizedRValues = dayTrades
+      .map((trade) => calculateRealizedR(trade))
+      .filter((value): value is number => value !== null);
+    const dayCurrency = dayTrades[0]?.accountCurrency ?? calendar.summary.displayCurrency ?? null;
 
     return {
       stats: [
         { label: "Win Rate", value: selectedDay ? formatPercentageDisplay(selectedDay.winRate) : "0.0%" },
-        { label: "Avg RR", value: `1:${formatNumberDisplay(avgRR, { minimumFractionDigits: 2 })}` },
+        { label: "Avg Planned RR", value: `1:${formatNumberDisplay(avgPlannedRR, { minimumFractionDigits: 2 })}` },
+        {
+          label: "Avg Realized R",
+          value: realizedRValues.length > 0
+            ? formatNumberDisplay(realizedRValues.reduce((sum, value) => sum + value, 0) / realizedRValues.length, { minimumFractionDigits: 2 })
+            : "--",
+        },
         {
           label: "Best Trade",
-          value: bestTrade ? formatCurrencyDisplay(bestTrade.profit) : "$0.00",
+          value: bestTrade ? formatMoneyDisplay(bestTrade.profit, { currency: dayCurrency, fallback: "--" }) : "--",
           tone: bestTrade && bestTrade.profit > 0 ? "success" : "default",
         },
         {
           label: "Worst Trade",
-          value: worstTrade ? formatCurrencyDisplay(worstTrade.profit) : "$0.00",
+          value: worstTrade ? formatMoneyDisplay(worstTrade.profit, { currency: dayCurrency, fallback: "--" }) : "--",
           tone: worstTrade && worstTrade.profit < 0 ? "danger" : "default",
         },
       ] as Array<{ label: string; value: string; tone?: "default" | "success" | "danger" }>,
@@ -811,6 +897,8 @@ export default function Analytics() {
       <PageErrorState
         title={pageError.title}
         description={pageError.description}
+        layout="page"
+        size="wide"
         onRetry={pageError.allowRetry ? () => {
           void Promise.all([breakdownsQuery.refetch(), calendarQuery.refetch(), detailedTradesQuery.refetch()]);
         } : undefined}
@@ -824,6 +912,11 @@ export default function Analytics() {
   const effectiveSummary = breakdowns.summary.totalTrades > 0 || allDetailedTrades.length === 0
     ? breakdowns.summary
     : fallbackSummary;
+  const analyticsCurrency = effectiveSummary.displayCurrency ?? calendar.summary.displayCurrency ?? null;
+  const isMixedCurrencyView = effectiveSummary.isMixedCurrency || calendar.summary.isMixedCurrency;
+  const currencyTotals = effectiveSummary.currencyTotals.length > 0
+    ? effectiveSummary.currencyTotals
+    : calendar.summary.currencyTotals;
   const setupRows = createPerformanceDataset(sortRowsByProfit(
     breakdowns.setupPerformance.length > 0
       ? breakdowns.setupPerformance
@@ -853,27 +946,27 @@ export default function Analytics() {
   const bestSetup = pickBestRow(setupRows);
   const worstSession = pickWorstRow(sessionRows);
   const mostTradedPair = pickMostTradedRow(pairRows);
-  const averageRR = allDetailedTrades.length > 0
-    ? allDetailedTrades.reduce((sum, trade) => sum + calculatePlannedRR(trade), 0) / allDetailedTrades.length
-    : effectiveSummary.avgRR;
+  const averagePlannedRR = allDetailedTrades.length > 0
+    ? calculateAveragePlannedRR(allDetailedTrades)
+    : effectiveSummary.avgPlannedRR;
   const performanceScore = buildPerformanceScore({
     winRate: effectiveSummary.winRate,
-    avgRR: averageRR,
+    avgPlannedRR: averagePlannedRR,
     dailySummaries,
     trend: trendPoints,
-    totalGross: effectiveSummary.totalGross,
+    totalGross: effectiveSummary.totalGross ?? 0,
   });
   const quickInsights = [
     bestSetup
-      ? `Best setup: ${bestSetup.label} ${formatCurrencyDisplay(bestSetup.profit)}`
+      ? `Best setup: ${bestSetup.label} ${formatMoneyDisplay(bestSetup.profit, { currency: analyticsCurrency, fallback: "--" })}`
       : "Best setup: No data",
     worstSession
-      ? `Weakest session: ${worstSession.label} ${formatCurrencyDisplay(worstSession.profit)}`
+      ? `Weakest session: ${worstSession.label} ${formatMoneyDisplay(worstSession.profit, { currency: analyticsCurrency, fallback: "--" })}`
       : "Weakest session: No data",
     mostTradedPair
       ? `Most traded pair: ${mostTradedPair.label} · ${formatNumberDisplay(mostTradedPair.trades)}`
       : "Most traded pair: No data",
-    buildBehaviorInsight(dailySummaries),
+    buildBehaviorInsight(dailySummaries, analyticsCurrency),
   ];
 
   const breakdownDefinitions: BreakdownDefinition[] = [
@@ -911,7 +1004,7 @@ export default function Analytics() {
     ? filterTradesForBreakdown(breakdownDrawer.kind, breakdownDrawer.label, allDetailedTrades)
     : EMPTY_TRADES;
 
-  const drawerStats = buildBreakdownDrawerStats(breakdownDrawerTrades);
+  const drawerStats = buildBreakdownDrawerStats(breakdownDrawerTrades, analyticsCurrency);
   const hasAnalyticsData = effectiveSummary.totalTrades > 0
     || calendar.summary.totalTrades > 0
     || allDetailedTrades.length > 0;
@@ -926,6 +1019,63 @@ export default function Analytics() {
       description: `${formatNumberDisplay(row.trades)} trades`,
       label: row.label,
     });
+  }
+
+  if (hasAnalyticsData && isMixedCurrencyView) {
+    return (
+      <PageShell size="wide">
+        <PageHeader
+          title="Analytics"
+          actions={(
+            <AccountFilterSelect
+              accounts={accounts ?? []}
+              value={resolvedAccountFilter}
+              onValueChange={setAccountFilter}
+              triggerClassName="h-10 min-w-[220px] rounded-2xl"
+            />
+          )}
+        />
+
+        <div className="grid gap-6 md:grid-cols-3">
+          <OverviewMetric label="Trades" value={formatNumberDisplay(effectiveSummary.totalTrades)} />
+          <OverviewMetric label="Win Rate" value={formatPercentageDisplay(effectiveSummary.winRate)} />
+          <OverviewMetric label="Scope" value="Mixed currencies" subtext={formatCurrencyTotalsDisplay(currencyTotals, "Select one account for PnL.")} />
+        </div>
+
+        <SectionCard className="border-border/60">
+          <SectionHeader
+            title="Select one account"
+            description="PnL is hidden in mixed-currency views."
+          />
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="rounded-3xl border border-border/60 bg-background/70 p-5 text-sm text-muted-foreground">
+              Pick one account to unlock the full view.
+              Current selection:
+              {" "}
+              {formatCurrencyTotalsDisplay(currencyTotals, "multiple currencies")}
+            </div>
+
+            <div className="rounded-3xl border border-border/60 bg-background/70 p-5">
+              <p className="text-xs text-muted-foreground">Per-currency totals</p>
+              <div className="mt-4 grid gap-3">
+                {currencyTotals.map((total) => (
+                  <div key={total.currency} className="rounded-2xl border border-border/50 bg-background/70 px-4 py-3">
+                    <p className="text-sm font-medium text-foreground">{total.currency}</p>
+                    <p className={cn("mt-2 text-lg font-semibold", total.totalProfit > 0 ? "text-success" : total.totalProfit < 0 ? "text-danger" : "text-foreground")}>
+                      {formatMoneyDisplay(total.totalProfit, {
+                        currency: total.currency,
+                        fallback: "--",
+                      })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      </PageShell>
+    );
   }
 
   return (
@@ -957,7 +1107,7 @@ export default function Analytics() {
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span>{formatNumberDisplay(effectiveSummary.totalTrades)} trades tracked</span>
                 <span className="hidden h-4 w-px bg-border/80 sm:block" />
-                <span>{formatCurrencyDisplay(effectiveSummary.totalProfit)} net</span>
+                <span>{formatMoneyDisplay(effectiveSummary.totalProfit ?? 0, { currency: analyticsCurrency, fallback: "--" })} net</span>
               </div>
             </div>
 
@@ -968,26 +1118,36 @@ export default function Analytics() {
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground">Net PnL</p>
-                        <p className={cn("mt-3 font-mono-price text-4xl font-semibold sm:text-5xl", getProfitTone(effectiveSummary.totalProfit))}>
-                          {formatCurrencyDisplay(effectiveSummary.totalProfit)}
+                        <p className={cn("mt-3 font-mono-price text-4xl font-semibold sm:text-5xl", getProfitTone(effectiveSummary.totalProfit ?? 0))}>
+                          {formatMoneyDisplay(effectiveSummary.totalProfit ?? 0, { currency: analyticsCurrency, fallback: "--" })}
                         </p>
                       </div>
                       <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground dark:bg-white/[0.03]">
                         <Sparkles className="h-4 w-4 text-primary" />
-                        {effectiveSummary.totalProfit > 0 ? "Positive expectancy" : effectiveSummary.totalProfit < 0 ? "Needs recovery" : "Flat performance"}
+                        {(effectiveSummary.totalProfit ?? 0) > 0 ? "Positive expectancy" : (effectiveSummary.totalProfit ?? 0) < 0 ? "Needs recovery" : "Flat performance"}
                       </div>
                     </div>
                   </div>
 
                   <div className="grid gap-3 border-b border-border/50 px-5 py-5 sm:grid-cols-3 sm:px-6">
                     <OverviewMetric label="Win Rate" value={formatPercentageDisplay(effectiveSummary.winRate)} />
-                    <OverviewMetric label="Avg RR" value={`1:${formatNumberDisplay(averageRR, { minimumFractionDigits: 2 })}`} />
+                    <OverviewMetric label="Avg Planned RR" value={`1:${formatNumberDisplay(averagePlannedRR, { minimumFractionDigits: 2 })}`} />
                     <OverviewMetric label="Trades" value={formatNumberDisplay(effectiveSummary.totalTrades)} />
                   </div>
 
                   <div className="px-2 pb-3 pt-4 sm:px-4">
                     {detailedTradesQuery.isLoading && trendPoints.length === 0 ? (
-                      <div className="h-[320px] animate-pulse rounded-3xl bg-muted/45" />
+                      <div className="h-[320px] rounded-3xl border border-border/50 bg-background/70 p-5">
+                        <div className="flex h-full items-end gap-3">
+                          {Array.from({ length: 8 }).map((_, index) => (
+                            <Skeleton
+                              key={index}
+                              className="w-full rounded-[1.35rem]"
+                              style={{ height: `${32 + ((index * 11) % 44)}%` }}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ) : trendPoints.length === 0 ? (
                       <EmptyChartState message={trendEmptyMessage} />
                     ) : (
@@ -1012,10 +1172,10 @@ export default function Analytics() {
                               tick={{ fill: AXIS_TEXT, fontSize: 12 }}
                               axisLine={false}
                               tickLine={false}
-                              tickFormatter={(value) => formatCompactCurrencyDisplay(value)}
+                              tickFormatter={(value) => formatCompactMoneyDisplay(value, analyticsCurrency)}
                             />
                             <ReferenceLine y={0} stroke={REFERENCE_LINE} />
-                            <Tooltip content={<TrendTooltip />} cursor={{ fill: CURSOR_FILL }} />
+                            <Tooltip content={<TrendTooltip currency={analyticsCurrency} />} cursor={{ fill: CURSOR_FILL }} />
                             <Area
                               type="monotone"
                               dataKey="cumulativeProfit"
@@ -1032,7 +1192,10 @@ export default function Analytics() {
 
                 <div className="space-y-6">
                   <SectionCard className="border-border/60">
-                    <SectionHeader title="Performance Score" />
+                    <SectionHeader
+                      title="Performance Score"
+                      description="Win rate, RR, consistency, and drawdown."
+                    />
 
                     <div className="mt-5 space-y-5">
                       <div className="flex items-end justify-between gap-4">
@@ -1042,7 +1205,7 @@ export default function Analytics() {
                         </div>
                         <div className="text-right text-sm text-muted-foreground">
                           <p>Max drawdown</p>
-                          <p className="mt-1 font-medium text-foreground">{formatCurrencyDisplay(performanceScore.maxDrawdown, { showPlus: false })}</p>
+                          <p className="mt-1 font-medium text-foreground">{formatMoneyDisplay(performanceScore.maxDrawdown, { currency: analyticsCurrency, fallback: "--", showPlus: false })}</p>
                         </div>
                       </div>
 
@@ -1092,7 +1255,8 @@ export default function Analytics() {
                       title={definition.label}
                       description={definition.description}
                       rows={definition.rows}
-                      loading={detailedTradesQuery.isLoading}
+                      loading={detailedTradesQuery.isLoading && definition.rows.length === 0}
+                      currency={analyticsCurrency}
                       onInspect={(row) => openBreakdownSlice(definition, row)}
                     />
                   </TabsContent>
@@ -1117,7 +1281,7 @@ export default function Analytics() {
                 />
 
                 <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                  <OverviewMetric label="PnL" value={formatCurrencyDisplay(calendar.summary.totalProfit)} />
+                  <OverviewMetric label="PnL" value={formatMoneyDisplay(calendar.summary.totalProfit ?? 0, { currency: analyticsCurrency, fallback: "--" })} />
                   <OverviewMetric label="Trades" value={formatNumberDisplay(calendar.summary.totalTrades)} />
                   <OverviewMetric label="Win Rate" value={formatPercentageDisplay(calendar.summary.winRate)} />
                 </div>
@@ -1146,6 +1310,7 @@ export default function Analytics() {
                               key={day.key}
                               day={day}
                               selected={selectedDayKey === day.key}
+                              currency={analyticsCurrency}
                               onClick={() => setSelectedDayKey(day.key)}
                             />
                           ))}
@@ -1157,7 +1322,7 @@ export default function Analytics() {
                             <p className="text-[11px] text-muted-foreground">{formatNumberDisplay(week.summary.tradeCount)} trades</p>
                           </div>
                           <p className={cn("mt-3 font-mono-price numeric-safe max-w-full text-lg font-semibold", getProfitTone(week.summary.totalProfit))}>
-                            {formatCurrencyDisplay(week.summary.totalProfit)}
+                            {formatMoneyDisplay(week.summary.totalProfit, { currency: analyticsCurrency, fallback: "--" })}
                           </p>
                           <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
                             <span>Win</span>
@@ -1178,6 +1343,7 @@ export default function Analytics() {
         day={selectedDay}
         trades={dayTrades}
         open={Boolean(selectedDay)}
+        currency={analyticsCurrency}
         onClose={() => setSelectedDayKey(null)}
         onTradeClick={(tradeId) => navigate(`/trades/${tradeId}`)}
         onViewDayAnalysis={() => navigate("/trades")}
@@ -1193,7 +1359,8 @@ export default function Analytics() {
         description={breakdownDrawer?.description ?? ""}
         stats={drawerStats}
         trades={breakdownDrawerTrades}
-        loading={detailedTradesQuery.isLoading || detailedTradesQuery.isFetching}
+        loading={detailedTradesQuery.isLoading && breakdownDrawerTrades.length === 0}
+        currency={analyticsCurrency}
         onClose={() => setBreakdownDrawer(null)}
         onTradeClick={(tradeId) => navigate(`/trades/${tradeId}`)}
         onViewAllTrades={() => navigate("/trades")}

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createAccountViaApi } from "./helpers.js";
 
 process.env.NODE_ENV = "test";
 process.env.STORAGE_ENABLED = "false";
@@ -38,18 +39,9 @@ test("cannot unset the only default account", async () => {
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const defaultAccount = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    const defaultAccount = await createAccountViaApi(app, sessionCookie, {
+      name: "Primary Default",
     });
-
-    assert.ok(defaultAccount, "Expected the default account created during registration.");
 
     const updateResponse = await app.inject({
       method: "PATCH",
@@ -97,37 +89,14 @@ test("promoting a new default account clears the previous default", async () => 
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const initialDefault = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    const initialDefault = await createAccountViaApi(app, sessionCookie, {
+      name: "Primary Default",
     });
-
-    assert.ok(initialDefault, "Expected the default account created during registration.");
-
-    const createAccountResponse = await app.inject({
-      method: "POST",
-      url: "/accounts",
-      headers: {
-        cookie: sessionCookie,
-      },
-      payload: {
-        name: "Secondary Account",
-        broker: "Manual",
-        type: "Personal",
-        balance: 500,
-        currency: "USD",
-      },
+    const secondaryAccount = await createAccountViaApi(app, sessionCookie, {
+      name: "Secondary Account",
+      balance: 500,
     });
-
-    assert.equal(createAccountResponse.statusCode, 201);
-
-    const secondaryAccountId = createAccountResponse.json().account.id as string;
+    const secondaryAccountId = secondaryAccount.id;
 
     const promoteResponse = await app.inject({
       method: "PATCH",
@@ -190,36 +159,14 @@ test("archiving the default account promotes the next active account and hides t
     assert.equal(registerResponse.statusCode, 201);
 
     const sessionCookie = getSessionCookie(registerResponse.headers["set-cookie"]);
-    const initialDefault = await prisma.account.findFirst({
-      where: {
-        user: {
-          username,
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
+    const initialDefault = await createAccountViaApi(app, sessionCookie, {
+      name: "Primary Default",
     });
-
-    assert.ok(initialDefault, "Expected the default account created during registration.");
-
-    const createAccountResponse = await app.inject({
-      method: "POST",
-      url: "/accounts",
-      headers: {
-        cookie: sessionCookie,
-      },
-      payload: {
-        name: "Secondary Account",
-        broker: "Manual",
-        type: "Personal",
-        balance: 500,
-        currency: "USD",
-      },
+    const secondaryAccount = await createAccountViaApi(app, sessionCookie, {
+      name: "Secondary Account",
+      balance: 500,
     });
-
-    assert.equal(createAccountResponse.statusCode, 201);
-    const secondaryAccountId = createAccountResponse.json().account.id as string;
+    const secondaryAccountId = secondaryAccount.id;
 
     const archiveResponse = await app.inject({
       method: "PATCH",

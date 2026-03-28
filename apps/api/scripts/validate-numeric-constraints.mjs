@@ -1,8 +1,10 @@
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { env } from "../src/config/env.ts";
 import { loadNumericIntegrityAudit } from "./lib/numeric-integrity.mjs";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  log: env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+});
 
 const numericConstraints = [
   { table: "accounts", constraint: "accounts_balance_range_chk" },

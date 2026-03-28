@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { FEATURES } from "@/config/features";
 import { useAuth } from "@/features/auth/auth-context";
 
 const baseItems = [
@@ -31,29 +32,24 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { user } = useAuth();
   const initials = user?.username?.slice(0, 2).toUpperCase() || "IZ";
+  const items = FEATURES.economicCalendar === "live"
+    ? baseItems
+    : baseItems.filter((item) => item.url !== "/economic-calendar");
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
         <div className="px-4 py-5">
           {!collapsed && (
-            <div className="surface-muted space-y-3 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h1 className="text-sm font-semibold tracking-tight text-sidebar-foreground">IZLedger</h1>
-                  <p className="text-xs text-muted-foreground">Trading Journal</p>
-                </div>
-                <div className="rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-                  Live
-                </div>
-              </div>
+            <div className="surface-muted px-4 py-4">
+              <h1 className="text-sm font-semibold tracking-tight text-sidebar-foreground">IZLedger</h1>
             </div>
           )}
         </div>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {baseItems.map((item) => (
+              {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink

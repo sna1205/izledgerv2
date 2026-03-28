@@ -7,8 +7,10 @@ Fastify + Prisma backend for the IZLedger trading journal.
 1. Copy envs:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
+
+`.env.local` is the only file-backed source of truth for local API runtime values. `.env` is intentionally non-runtime so local config cannot drift across two files.
 
 2. Start local services if needed:
 
@@ -35,6 +37,20 @@ Optional restore verification after a restore drill:
 npm run restore:verify
 ```
 
+Backup readiness and logical backup automation:
+
+```bash
+npm run backup:check
+npm run backup:logical
+```
+
+Read-only data cleanup audits and remediation planning:
+
+```bash
+npm run data:audit
+npm run data:plan
+```
+
 Manual screenshot cleanup and reconciliation:
 
 ```bash
@@ -53,7 +69,7 @@ npm run numeric:validate
 Persistence-critical release gate:
 
 ```bash
-npm run check:persistence:release
+npm run release:check
 ```
 
 Optional uniqueness audit before shipping setup/review scope constraints:
@@ -67,6 +83,13 @@ npm run uniqueness:backfill -- --apply
 
 ```bash
 npm run dev
+```
+
+Production-like local API boot after a build:
+
+```bash
+npm run build
+npm run start
 ```
 
 ## Main routes
@@ -104,14 +127,14 @@ npm run dev
 
 ## Notes
 
-- New users no longer receive seeded starter data.
+- New users no longer receive seeded starter data or an auto-created default account.
 - Screenshots are stored in S3-compatible object storage when enabled.
 - Session auth is cookie-based and intended for the companion SPA frontend.
 - Use `APP_URL` for the deployed frontend origin in production, such as `https://app.example.com`.
 - Keep `API_URL=https://api.example.com` aligned with the deployed API origin, and mirror the allowed frontend origin into `CORS_ALLOWED_ORIGINS`.
 - For `https://app.example.com` calling `https://api.example.com`, use `SESSION_COOKIE_SAME_SITE=lax` with `SESSION_COOKIE_SECURE=true`. If the frontend and backend are on different sites, switch `SESSION_COOKIE_SAME_SITE=none`.
 - Use `STORAGE_ENABLED=false` if screenshot storage is not configured yet.
-- Render deploys should run `npm run release:migrate` in a pre-deploy step and keep runtime start on `npm run start:server`.
+- Render deploys should run from the monorepo root, validate DB config before build and before `npm run release:migrate`, then keep runtime start on `npm run start:server` (`npm run start` locally).
 - `npm test` now boots a dedicated clean Postgres test volume before running the API suite.
 - Backup and restore runbooks live in `docs/backup-and-restore.md`.
 - Screenshot cleanup/reconciliation runbook lives in `docs/screenshot-storage-reconciliation.md`.

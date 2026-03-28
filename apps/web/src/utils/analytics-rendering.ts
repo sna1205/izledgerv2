@@ -16,6 +16,7 @@ type NormalizedDashboardTrade = {
   setupColor: string | null;
   result: Result | null;
   profit: number;
+  accountCurrency: string | null;
 };
 
 type NormalizedEquityPoint = {
@@ -34,7 +35,13 @@ export type NormalizedDashboardSummaryResponse = {
     todayTrades: number;
     totalTrades: number;
     winRate: number;
-    totalProfit: number;
+    totalProfit: number | null;
+    displayCurrency: string | null;
+    isMixedCurrency: boolean;
+    currencyTotals: Array<{
+      currency: string;
+      totalProfit: number;
+    }>;
   };
   recentTrades: NormalizedDashboardTrade[];
   equityCurve: NormalizedEquityPoint[];
@@ -55,11 +62,20 @@ export type NormalizedAnalyticsBreakdowns = {
     totalTrades: number;
     wins: number;
     losses: number;
-    totalProfit: number;
-    totalGross: number;
-    totalLoss: number;
+    breakevens: number;
+    totalProfit: number | null;
+    totalGross: number | null;
+    totalLoss: number | null;
     winRate: number;
     avgRR: number;
+    avgPlannedRR: number;
+    avgRealizedR: number | null;
+    displayCurrency: string | null;
+    isMixedCurrency: boolean;
+    currencyTotals: Array<{
+      currency: string;
+      totalProfit: number;
+    }>;
   };
   winLoss: Array<{
     key: string;
@@ -71,7 +87,7 @@ export type NormalizedAnalyticsBreakdowns = {
   sessionPerformance: NormalizedBreakdownRow[];
   emotionPerformance: NormalizedBreakdownRow[];
   pairPerformance: NormalizedBreakdownRow[];
-  accountPerformance: Array<NormalizedBreakdownRow & { accountId: string }>;
+  accountPerformance: Array<NormalizedBreakdownRow & { accountId: string; currency: string | null }>;
 };
 
 export type NormalizedCalendarDay = {
@@ -93,8 +109,14 @@ export type NormalizedAnalyticsCalendar = {
   monthLabel: string;
   summary: {
     totalTrades: number;
-    totalProfit: number;
+    totalProfit: number | null;
     winRate: number;
+    displayCurrency: string | null;
+    isMixedCurrency: boolean;
+    currencyTotals: Array<{
+      currency: string;
+      totalProfit: number;
+    }>;
   };
   days: NormalizedCalendarDay[];
   weeks: Array<{
@@ -133,6 +155,14 @@ function coerceNumber(value: unknown, fallback = 0) {
   }
 
   return fallback;
+}
+
+function coerceNullableNumber(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return coerceNumber(value);
 }
 
 function coerceInteger(value: unknown, fallback = 0) {
@@ -206,6 +236,15 @@ function isResult(value: unknown): value is Result {
 
 function isDirection(value: unknown): value is Direction {
   return value === "Buy" || value === "Sell";
+}
+
+function normalizeCurrencyCode(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return normalized || null;
 }
 
 function buildFallbackDate(month: string, index: number) {
@@ -306,6 +345,43 @@ export function formatCurrencyDisplay(
   return `${sign}$${formatted}`;
 }
 
+export function formatMoneyDisplay(
+  value: unknown,
+  options?: {
+    currency?: string | null;
+    fallback?: string;
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+    showPlus?: boolean;
+  },
+) {
+  const {
+    currency,
+    fallback = "--",
+    minimumFractionDigits = 2,
+    maximumFractionDigits = minimumFractionDigits,
+    showPlus = true,
+  } = options ?? {};
+  const numeric = coerceNumber(value, Number.NaN);
+
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  const sign = numeric < 0 ? "-" : showPlus && numeric > 0 ? "+" : "";
+  const formatted = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits,
+    maximumFractionDigits,
+  }).format(Math.abs(numeric));
+  const normalizedCurrency = normalizeCurrencyCode(currency);
+
+  if (!normalizedCurrency) {
+    return `${sign}$${formatted}`;
+  }
+
+  return `${sign}${normalizedCurrency} ${formatted}`;
+}
+
 export function formatCompactCurrencyDisplay(value: unknown, fallback = "$0") {
   const numeric = coerceNumber(value, Number.NaN);
 
@@ -320,6 +396,41 @@ export function formatCompactCurrencyDisplay(value: unknown, fallback = "$0") {
   }
 
   return `${numeric < 0 ? "-" : ""}$${absValue.toFixed(0)}`;
+}
+
+export function formatCompactMoneyDisplay(value: unknown, currency?: string | null, fallback = "--") {
+  const numeric = coerceNumber(value, Number.NaN);
+
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  const normalizedCurrency = normalizeCurrencyCode(currency);
+  const absValue = Math.abs(numeric);
+  const compactValue = absValue >= 1000 ? `${(absValue / 1000).toFixed(1)}k` : absValue.toFixed(0);
+  const sign = numeric < 0 ? "-" : "";
+
+  if (!normalizedCurrency) {
+    return `${sign}$${compactValue}`;
+  }
+
+  return `${sign}${normalizedCurrency} ${compactValue}`;
+}
+
+export function formatCurrencyTotalsDisplay(
+  totals: Array<{ currency: string; totalProfit: number }>,
+  fallback = "No PnL yet",
+) {
+  if (!totals.length) {
+    return fallback;
+  }
+
+  return totals
+    .map((total) => formatMoneyDisplay(total.totalProfit, {
+      currency: total.currency,
+      fallback: `${total.currency} 0.00`,
+    }))
+    .join(" · ");
 }
 
 export function formatDateDisplay(
@@ -354,7 +465,10 @@ export function normalizeDashboardSummaryResponse(payload: unknown): NormalizedD
       todayTrades: coerceInteger(summaryValue.todayTrades),
       totalTrades: coerceInteger(summaryValue.totalTrades),
       winRate: normalizePercent(summaryValue.winRate),
-      totalProfit: coerceNumber(summaryValue.totalProfit),
+      totalProfit: coerceNullableNumber(summaryValue.totalProfit),
+      displayCurrency: normalizeCurrencyCode(summaryValue.displayCurrency),
+      isMixedCurrency: coerceBoolean(summaryValue.isMixedCurrency),
+      currencyTotals: normalizeCurrencyTotals(summaryValue.currencyTotals),
     },
     recentTrades: recentTradesValue.map((item, index) => normalizeDashboardTrade(item, index)),
     equityCurve: equityCurveValue
@@ -376,6 +490,7 @@ function normalizeDashboardTrade(payload: unknown, index: number): NormalizedDas
     setupColor: coerceString(value.setupColor) || null,
     result: isResult(value.result) ? value.result : null,
     profit: coerceNumber(value.profit),
+    accountCurrency: normalizeCurrencyCode(value.accountCurrency),
   };
 }
 
@@ -408,11 +523,17 @@ export function normalizeAnalyticsBreakdownsResponse(payload: unknown): Normaliz
       totalTrades: coerceInteger(summaryValue.totalTrades),
       wins: coerceInteger(summaryValue.wins),
       losses: coerceInteger(summaryValue.losses),
-      totalProfit: coerceNumber(summaryValue.totalProfit),
-      totalGross: coerceNumber(summaryValue.totalGross),
-      totalLoss: coerceNumber(summaryValue.totalLoss),
+      breakevens: coerceInteger(summaryValue.breakevens),
+      totalProfit: coerceNullableNumber(summaryValue.totalProfit),
+      totalGross: coerceNullableNumber(summaryValue.totalGross),
+      totalLoss: coerceNullableNumber(summaryValue.totalLoss),
       winRate: normalizePercent(summaryValue.winRate),
       avgRR: normalizeRatio(summaryValue.avgRR),
+      avgPlannedRR: normalizeRatio(summaryValue.avgPlannedRR ?? summaryValue.avgRR),
+      avgRealizedR: coerceNullableNumber(summaryValue.avgRealizedR),
+      displayCurrency: normalizeCurrencyCode(summaryValue.displayCurrency),
+      isMixedCurrency: coerceBoolean(summaryValue.isMixedCurrency),
+      currencyTotals: normalizeCurrencyTotals(summaryValue.currencyTotals),
     },
     winLoss: normalizeWinLossRows(value.winLoss),
     setupPerformance: normalizeBreakdownRows(value.setupPerformance),
@@ -443,13 +564,29 @@ function normalizeBreakdownRows(payload: unknown): NormalizedBreakdownRow[] {
   });
 }
 
-function normalizeAccountRows(payload: unknown): Array<NormalizedBreakdownRow & { accountId: string }> {
+function normalizeAccountRows(payload: unknown): Array<NormalizedBreakdownRow & { accountId: string; currency: string | null }> {
   return normalizeBreakdownRows(payload).map((row, index) => {
     const source = Array.isArray(payload) && isRecord(payload[index]) ? payload[index] : {};
 
     return {
       ...row,
       accountId: coerceString(source.accountId, row.key),
+      currency: normalizeCurrencyCode(source.currency),
+    };
+  });
+}
+
+function normalizeCurrencyTotals(payload: unknown) {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.map((item) => {
+    const value = isRecord(item) ? item : {};
+
+    return {
+      currency: normalizeCurrencyCode(value.currency) ?? "UNKNOWN",
+      totalProfit: coerceNumber(value.totalProfit),
     };
   });
 }
@@ -490,8 +627,11 @@ export function normalizeAnalyticsCalendarResponse(payload: unknown, requestedMo
     }),
     summary: {
       totalTrades: coerceInteger(summaryValue.totalTrades),
-      totalProfit: coerceNumber(summaryValue.totalProfit),
+      totalProfit: coerceNullableNumber(summaryValue.totalProfit),
       winRate: normalizePercent(summaryValue.winRate),
+      displayCurrency: normalizeCurrencyCode(summaryValue.displayCurrency),
+      isMixedCurrency: coerceBoolean(summaryValue.isMixedCurrency),
+      currencyTotals: normalizeCurrencyTotals(summaryValue.currencyTotals),
     },
     days,
     weeks,

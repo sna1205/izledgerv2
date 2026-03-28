@@ -342,7 +342,7 @@ export default function LotCalculator() {
                       )}
                     >
                       <DollarSign className="h-4 w-4" />
-                      <span>Fixed $</span>
+                      <span>Fixed</span>
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">

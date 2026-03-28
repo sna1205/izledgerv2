@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { PageErrorState } from "@/components/PageErrorState";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FEATURES } from "@/config/features";
 import { PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
@@ -35,6 +37,7 @@ import { listTrades } from "@/services/api/trades";
 import { privateQueryKey } from "@/services/query-client";
 import { withMinimumDelay } from "@/utils/loading";
 import { getPageErrorState } from "@/utils/page-errors";
+import EconomicCalendarComingSoonPage from "@/pages/EconomicCalendarComingSoonPage";
 import {
   getEconomicEventRelevanceList,
   getLocalDateKey,
@@ -46,7 +49,7 @@ import {
 
 const RECENT_INSTRUMENT_LIMIT = 24;
 
-export default function EconomicCalendar() {
+function EconomicCalendarLivePage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
@@ -195,8 +198,8 @@ export default function EconomicCalendar() {
     return getNextImportantEconomicEvent(upcomingEvents, now);
   }, [filteredEvents, now, rangeState, timeZone]);
   const emptyDescription = viewMode === "upcoming"
-    ? `No upcoming macro events matched ${formatRangeLabel(rangeState)} with the current filters.`
-    : `No macro events matched ${formatRangeLabel(rangeState)} with the current filters.`;
+    ? `No upcoming events matched ${formatRangeLabel(rangeState)}.`
+    : `No events matched ${formatRangeLabel(rangeState)}.`;
 
   useUnauthorizedSessionGuard(eventsQuery.error, recentTradesQuery.error);
 
@@ -213,6 +216,8 @@ export default function EconomicCalendar() {
       <PageErrorState
         title={errorState.title}
         description={errorState.description}
+        layout="page"
+        size="wide"
         onRetry={errorState.allowRetry ? () => void eventsQuery.refetch() : undefined}
         isRetrying={eventsQuery.isFetching}
       />
@@ -251,8 +256,22 @@ export default function EconomicCalendar() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(300px,1fr)] lg:items-start">
         <div className="order-2 space-y-4 lg:order-1">
           {eventsQuery.isLoading && !eventsQuery.data ? (
-            <div className="border-b border-border/35 pb-4 text-sm text-muted-foreground">
-              Loading events for the selected period...
+            <div className="space-y-3" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <article key={index} className="surface space-y-3 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-14 rounded-full" />
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                  <Skeleton className="h-5 w-full max-w-[320px] rounded-md" />
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Skeleton className="h-4 w-24 rounded-md" />
+                    <Skeleton className="h-4 w-20 rounded-md" />
+                    <Skeleton className="h-4 w-28 rounded-md" />
+                  </div>
+                </article>
+              ))}
             </div>
           ) : (
             <EconomicCalendarTimeline
@@ -275,4 +294,16 @@ export default function EconomicCalendar() {
       </div>
     </PageShell>
   );
+}
+
+export default function EconomicCalendar() {
+  if (FEATURES.economicCalendar === "hidden") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (FEATURES.economicCalendar === "development") {
+    return <EconomicCalendarComingSoonPage />;
+  }
+
+  return <EconomicCalendarLivePage />;
 }

@@ -19,11 +19,16 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   app.post("/", { preHandler: authenticate }, async (request, reply) => {
     const body = parseOrThrow(createTradeSchema, request.body);
-    const trade = await createTrade(request.auth!.userId, {
+    const result = await createTrade(request.auth!.userId, {
       ...body,
       notes: body.notes ?? "",
+      checklistResponses: (body.checklistResponses ?? []).map((response) => ({
+        checklistRuleId: response.checklistRuleId,
+        checked: response.checked ?? false,
+        note: response.note ?? null,
+      })),
     });
-    reply.status(201).send({ trade });
+    reply.status(result.created ? 201 : 200).send({ trade: result.trade });
   });
 
   app.get("/:id", { preHandler: authenticate }, async (request) => {
@@ -35,7 +40,18 @@ export async function tradeRoutes(app: FastifyInstance) {
   app.patch("/:id", { preHandler: authenticate }, async (request) => {
     const params = parseOrThrow(tradeParamsSchema, request.params);
     const body = parseOrThrow(updateTradeSchema, request.body);
-    const trade = await updateTrade(request.auth!.userId, params.id, body);
+    const trade = await updateTrade(request.auth!.userId, params.id, {
+      ...body,
+      ...(body.checklistResponses !== undefined
+        ? {
+            checklistResponses: body.checklistResponses.map((response) => ({
+              checklistRuleId: response.checklistRuleId,
+              checked: response.checked ?? false,
+              note: response.note ?? null,
+            })),
+          }
+        : {}),
+    });
     return { trade };
   });
 
