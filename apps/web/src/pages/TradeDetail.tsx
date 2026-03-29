@@ -276,6 +276,7 @@ export default function TradeDetail() {
     onSuccess: async () => {
       removeTradeQueryData(queryClient, user.id, id);
       await invalidateTradeQueries(queryClient, user.id, id);
+      toast.success("Trade deleted.");
       navigate("/trades");
     },
     onError: (error) => {
@@ -631,13 +632,17 @@ export default function TradeDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
             <AlertDialogDescription>
-              This cannot be undone. Linked reviews stay in Reviews.
+              {`Delete ${trade.pair} from ${formatTradeDate(trade.date)}? This permanently removes the trade from your journal. Linked reviews stay in Reviews so your notes are preserved.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteTradeMutation.mutate()} disabled={deleteTradeMutation.isPending}>
-              {deleteTradeMutation.isPending ? "Deleting..." : "Delete"}
+            <AlertDialogAction
+              onClick={() => deleteTradeMutation.mutate()}
+              disabled={deleteTradeMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteTradeMutation.isPending ? "Deleting..." : "Delete Trade"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

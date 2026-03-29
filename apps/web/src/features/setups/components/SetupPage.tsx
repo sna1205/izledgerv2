@@ -9,7 +9,6 @@ import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -41,6 +40,7 @@ export function SetupPage() {
   const [editingSetup, setEditingSetup] = useState<SetupDefinition | null>(null);
   const [initialDialogTab, setInitialDialogTab] = useState<WorkspaceTab>("strategy");
   const [deleteTarget, setDeleteTarget] = useState<SetupListItem | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("all");
   const [sortBy, setSortBy] = useState<"createdAt" | "name">("createdAt");
@@ -128,10 +128,29 @@ export function SetupPage() {
     onSuccess: async () => {
       await invalidateData();
       toast.success("Setup deleted. Existing trade history was preserved.");
+      setDeleteError("");
       setDeleteTarget(null);
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not delete the setup right now.";
+      setDeleteError(message);
+      toast.error(message);
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (setupId: string) => updateSetup(setupId, { isArchived: true }),
+    onSuccess: async (result) => {
+      await invalidateData();
+      toast.success("Setup archived.");
+      setDeleteError("");
+
+      if (deleteTarget?.id === result.setup.id) {
+        setDeleteTarget(null);
+      }
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not archive the setup right now.";
       toast.error(message);
     },
   });
@@ -142,6 +161,11 @@ export function SetupPage() {
     setEditingSetup(setup);
     setInitialDialogTab(tab);
     setOpen(true);
+  };
+
+  const openDeleteDialog = (setup: SetupListItem) => {
+    setDeleteTarget(setup);
+    setDeleteError("");
   };
 
   useEffect(() => {
@@ -255,7 +279,7 @@ export function SetupPage() {
           <SetupList
             setups={setups}
             onEdit={(setup) => openEditModal(setup)}
-            onDelete={setDeleteTarget}
+            onDelete={openDeleteDialog}
           />
 
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -287,19 +311,50 @@ export function SetupPage() {
         onSaveStrategy={handleSaveStrategy}
       />
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(openState) => {
+          if (!openState) {
+            setDeleteTarget(null);
+            setDeleteError("");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Setup</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Existing trades keep their historical setup label and color snapshot.
+              {deleteTarget
+                ? `Delete "${deleteTarget.name}" only if no checklist rules still use it. Existing trades keep their historical setup label and color snapshot, so archive is the safer choice when you want to retire a setup without breaking history.`
+                : "Delete this setup only if no checklist rules still use it."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError ? <p className="text-sm text-destructive">{deleteError}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={deleteMutation.isPending || archiveMutation.isPending}>Cancel</AlertDialogCancel>
+            {!deleteTarget?.isArchived ? (
+              <Button
+                variant="outline"
+                onClick={() => deleteTarget && archiveMutation.mutate(deleteTarget.id)}
+                disabled={deleteMutation.isPending || archiveMutation.isPending}
+              >
+                {archiveMutation.isPending ? "Archiving..." : "Archive Instead"}
+              </Button>
+            ) : null}
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!deleteTarget) {
+                  return;
+                }
+
+                setDeleteError("");
+                deleteMutation.mutate(deleteTarget.id);
+              }}
+              disabled={deleteMutation.isPending || archiveMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

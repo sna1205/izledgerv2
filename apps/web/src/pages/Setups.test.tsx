@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Setups from "@/pages/Setups";
 import NewSetup from "@/pages/NewSetup";
+import { ApiError } from "@/services/api/client";
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
@@ -175,9 +176,9 @@ describe("setups color flow", () => {
     await screen.findByText("Breakout");
     fireEvent.click(screen.getByRole("link", { name: "New Setup" }));
 
-    await screen.findByText("Live Preview");
+    await screen.findByLabelText("Setup Name");
     fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Create" })[0]);
 
     await waitFor(() => {
       expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
@@ -208,12 +209,56 @@ describe("setups color flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
 
     await screen.findByDisplayValue("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Save Strategy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", expect.objectContaining({
         color: "#3B82F6",
       }));
+    });
+  });
+
+  it("keeps the delete dialog open and offers archiving when checklist rules block deletion", async () => {
+    apiMocks.deleteSetup.mockRejectedValue(
+      new ApiError(
+        "Setup cannot be deleted because checklist rules still reference it. Delete or re-scope those rules first, or archive the setup instead.",
+        409,
+        "SETUP_IN_USE_BY_CHECKLIST_RULES",
+      ),
+    );
+
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("button", { name: "Delete Breakout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Permanently" }));
+
+    expect(await screen.findByText("Setup cannot be deleted because checklist rules still reference it. Delete or re-scope those rules first, or archive the setup instead.")).toBeInTheDocument();
+    expect(screen.getByText("Delete Setup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive Instead" })).toBeInTheDocument();
+  });
+
+  it("archives a setup directly from the delete dialog", async () => {
+    apiMocks.updateSetup.mockResolvedValue({
+      setup: {
+        id: "setup-1",
+        name: "Breakout",
+        description: "Retest entry",
+        color: "#3B82F6",
+        isArchived: true,
+        createdAt: "2026-03-01T10:00:00.000Z",
+        updatedAt: "2026-03-04T10:00:00.000Z",
+      },
+    });
+
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("button", { name: "Delete Breakout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive Instead" }));
+
+    await waitFor(() => {
+      expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", { isArchived: true });
     });
   });
 });

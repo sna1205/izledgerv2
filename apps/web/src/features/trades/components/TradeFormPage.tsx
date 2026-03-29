@@ -1,4 +1,5 @@
 import { PageHeader, PageShell } from "@/layouts/PageShell";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import type { Account, SetupDefinition, Trade } from "@/types";
 import {
   TradeActionsBar,
@@ -116,6 +117,20 @@ export function TradeFormPage({
             setChecklistSelections={controller.setChecklistSelections}
           />
         </div>
+      </div>
+
+      <div className="sticky bottom-4 z-10 -mt-2 flex justify-end">
+        <FloatingActionPanel className="w-full xl:max-w-[420px]">
+          <TradeActionsBar
+            onCancel={onCancel}
+            onSave={controller.handleSave}
+            isSaving={isSaving}
+            isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
+            isDisabled={controller.isSaveBlocked}
+            saveLabel={editTrade ? "Update Trade" : "Save Trade"}
+            saveHint={controller.saveBlockReason}
+          />
+        </FloatingActionPanel>
       </div>
     </PageShell>
   );

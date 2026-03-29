@@ -538,7 +538,17 @@ function BreakdownInsightMetric({
   );
 }
 
-function AnalyticsEmptyDashboard({ onAddTrade }: { onAddTrade: () => void }) {
+function AnalyticsEmptyDashboard({
+  title,
+  description,
+  actionLabel,
+  onPrimaryAction,
+}: {
+  title: string;
+  description: string;
+  actionLabel: string;
+  onPrimaryAction: () => void;
+}) {
   return (
     <SectionCard className="overflow-hidden border-border/60 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.12),transparent_32%),linear-gradient(180deg,hsl(var(--card)),hsl(var(--card)))] p-0">
       <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(300px,0.58fr)] lg:p-8">
@@ -547,14 +557,14 @@ function AnalyticsEmptyDashboard({ onAddTrade }: { onAddTrade: () => void }) {
             <BarChart3 className="h-5 w-5" />
           </div>
           <div className="space-y-3">
-            <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">No trades yet</h2>
+            <h2 className="text-2xl font-semibold text-foreground sm:text-3xl">{title}</h2>
             <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-              {ANALYTICS_EMPTY_MESSAGE}
+              {description}
             </p>
           </div>
-          <Button className="rounded-2xl" onClick={onAddTrade}>
+          <Button className="rounded-2xl" onClick={onPrimaryAction}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Trade
+            {actionLabel}
           </Button>
         </div>
 
@@ -760,6 +770,7 @@ export default function Analytics() {
   });
 
   const accounts = accountsQuery.data;
+  const hasAccounts = (accounts?.length ?? 0) > 0;
   const resolvedAccountFilter = useMemo(
     () => resolveAccountFilter(accountFilter, accounts ?? []),
     [accountFilter, accounts],
@@ -1094,7 +1105,14 @@ export default function Analytics() {
         />
 
         {!hasAnalyticsData ? (
-          <AnalyticsEmptyDashboard onAddTrade={() => navigate("/trades")} />
+          <AnalyticsEmptyDashboard
+            title={hasAccounts ? "No trades yet" : "Add an account first"}
+            description={hasAccounts
+              ? ANALYTICS_EMPTY_MESSAGE
+              : "Analytics unlock after you create an account and log your first trade."}
+            actionLabel={hasAccounts ? "Add Trade" : "Add Account"}
+            onPrimaryAction={() => navigate(hasAccounts ? "/trades/new" : "/accounts")}
+          />
         ) : (
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as MainTab)} className="w-full">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

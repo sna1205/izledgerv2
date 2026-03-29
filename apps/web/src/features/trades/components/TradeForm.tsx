@@ -13,6 +13,7 @@ import { uploadTradeScreenshot } from "@/services/api/screenshots";
 import { ApiError } from "@/services/api/client";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
 import { TradeChecklistCard } from "@/features/checklist/components/TradeChecklistCard";
+import { cn } from "@/utils/class-names";
 import { ResultBadge } from "./ResultBadge";
 import { InstrumentSelect } from "./InstrumentSelect";
 import type {
@@ -310,6 +311,42 @@ export function useTradeFormController({
   ).length;
   const completedChecklistCount = checklistRules.filter((rule) => checklistSelections[rule.id]?.checked).length;
   const isChecklistStrictlyBlocked = !editTrade && checklistMode === "strict" && incompleteRequiredChecklistCount > 0;
+  const saveBlockReason = useMemo(() => {
+    if (accounts.length === 0) {
+      return "Add an account before saving this trade.";
+    }
+
+    if (!form.accountId) {
+      return "Choose an account to save this trade.";
+    }
+
+    if (derivedDirection === null) {
+      return directionError ?? "Enter entry and stop loss to calculate the trade direction.";
+    }
+
+    if (parsedTakeProfit === null) {
+      return "Enter a take profit to finish the trade plan.";
+    }
+
+    if (derivedResult === null) {
+      return "Enter PnL to calculate the trade result.";
+    }
+
+    if (isChecklistStrictlyBlocked) {
+      return `${incompleteRequiredChecklistCount} required pre-trade item${incompleteRequiredChecklistCount === 1 ? "" : "s"} still need attention.`;
+    }
+
+    return null;
+  }, [
+    accounts.length,
+    derivedDirection,
+    derivedResult,
+    directionError,
+    form.accountId,
+    incompleteRequiredChecklistCount,
+    isChecklistStrictlyBlocked,
+    parsedTakeProfit,
+  ]);
 
   useEffect(() => {
     if (!isActive || !form.accountId) {
@@ -464,6 +501,7 @@ export function useTradeFormController({
     completedChecklistCount,
     incompleteRequiredChecklistCount,
     isChecklistStrictlyBlocked,
+    saveBlockReason,
     draftScreenshots,
     setDraftScreenshots,
     isUploadingDraftScreenshots,
@@ -472,6 +510,7 @@ export function useTradeFormController({
     setChecklistSelections,
     isSaveBlocked:
       accounts.length === 0
+      || !form.accountId
       || derivedResult === null
       || derivedDirection === null
       || parsedTakeProfit === null
@@ -894,6 +933,7 @@ type TradeActionsBarProps = {
   isUploadingDraftScreenshots: boolean;
   isDisabled: boolean;
   saveLabel: string;
+  saveHint?: string | null;
   className?: string;
 };
 
@@ -904,20 +944,24 @@ export function TradeActionsBar({
   isUploadingDraftScreenshots,
   isDisabled,
   saveLabel,
+  saveHint,
   className,
 }: TradeActionsBarProps) {
   return (
-    <div className={className ?? "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"}>
-      <Button className="w-full sm:w-auto" variant="outline" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button
-        onClick={() => void onSave()}
-        className="w-full sm:w-auto"
-        disabled={isSaving || isUploadingDraftScreenshots || isDisabled}
-      >
-        {isUploadingDraftScreenshots ? "Uploading screenshots..." : isSaving ? "Saving..." : saveLabel}
-      </Button>
+    <div className={cn("space-y-2", className)}>
+      {saveHint ? <p className="text-sm text-muted-foreground">{saveHint}</p> : null}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button className="w-full sm:w-auto" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => void onSave()}
+          className="w-full sm:w-auto"
+          disabled={isSaving || isUploadingDraftScreenshots || isDisabled}
+        >
+          {isUploadingDraftScreenshots ? "Uploading screenshots..." : isSaving ? "Saving..." : saveLabel}
+        </Button>
+      </div>
     </div>
   );
 }

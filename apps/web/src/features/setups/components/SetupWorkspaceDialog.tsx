@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { DataBadge } from "@/components/DataBadge";
@@ -121,15 +122,19 @@ export function SetupWorkspaceDialog({
           </TabsContent>
         </Tabs>
 
-        <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          {activeTab === "strategy" ? (
-            <Button onClick={() => void handleSaveStrategy()} disabled={isSavingStrategy}>
-              {isSavingStrategy ? "Saving..." : "Save"}
-            </Button>
-          ) : null}
+        <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+          <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[260px]">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+              {activeTab === "strategy" ? (
+                <Button onClick={() => void handleSaveStrategy()} disabled={isSavingStrategy}>
+                  {isSavingStrategy ? "Saving..." : "Save"}
+                </Button>
+              ) : null}
+            </div>
+          </FloatingActionPanel>
         </div>
       </DialogContent>
     </Dialog>

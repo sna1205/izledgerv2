@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -91,7 +92,7 @@ function RuleEditorDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[90svh] w-[calc(100vw-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editingRule ? "Edit item" : "New item"}</DialogTitle>
           <DialogDescription>Keep it short and specific.</DialogDescription>
@@ -146,15 +147,19 @@ function RuleEditorDialog({
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={onSave} disabled={isSaving}>
-              {isSaving ? "Saving..." : editingRule ? "Save Item" : "Add Item"}
-            </Button>
-          </div>
+        <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+          <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[260px]">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button onClick={onSave} disabled={isSaving}>
+                {isSaving ? "Saving..." : editingRule ? "Save Item" : "Add Item"}
+              </Button>
+            </div>
+          </FloatingActionPanel>
         </div>
       </DialogContent>
     </Dialog>

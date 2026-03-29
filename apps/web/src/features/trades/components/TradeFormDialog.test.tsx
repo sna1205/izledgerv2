@@ -201,10 +201,12 @@ function Harness({
   saveImpl = vi.fn(),
   editTrade,
   setupsOverride = setups,
+  accountsOverride = accounts,
 }: {
   saveImpl?: (payload: Parameters<NonNullable<React.ComponentProps<typeof TradeFormDialog>["onSave"]>>[0]) => Promise<void> | void;
   editTrade?: Trade | null;
   setupsOverride?: SetupDefinition[];
+  accountsOverride?: Account[];
 }) {
   const [open, setOpen] = useState(true);
 
@@ -214,7 +216,7 @@ function Harness({
       onOpenChange={setOpen}
       onSave={saveImpl}
       editTrade={editTrade}
-      accounts={accounts}
+      accounts={accountsOverride}
       setups={setupsOverride}
     />
   );
@@ -440,7 +442,7 @@ describe("TradeFormDialog", () => {
 
     await waitFor(() => {
       expect(within(getReadonlyField("Direction")).getByText("Auto")).toBeInTheDocument();
-      expect(screen.getByText("Stop Loss must be above or below Entry to determine trade direction")).toBeInTheDocument();
+      expect(screen.getAllByText("Stop Loss must be above or below Entry to determine trade direction")).not.toHaveLength(0);
     });
   });
 
@@ -449,10 +451,15 @@ describe("TradeFormDialog", () => {
 
     expect(within(getReadonlyField("Result")).getByText("Auto")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Trade" })).toBeDisabled();
+    expect(screen.getByText("Enter entry and stop loss to calculate the trade direction.")).toBeInTheDocument();
 
     fireEvent.change(getInputByLabel("Entry"), { target: { value: "100" } });
     fireEvent.change(getInputByLabel("Stop Loss"), { target: { value: "99" } });
     fireEvent.change(getInputByLabel("Take Profit"), { target: { value: "105" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("Enter PnL to calculate the trade result.")).toBeInTheDocument();
+    });
 
     fireEvent.change(getProfitInput(), { target: { value: "42.5" } });
 
@@ -479,6 +486,13 @@ describe("TradeFormDialog", () => {
       expect(within(getReadonlyField("Result")).getByText("Auto")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Save Trade" })).toBeDisabled();
     });
+  });
+
+  it("explains the account prerequisite when no accounts are available", () => {
+    renderWithProviders(<Harness accountsOverride={[]} />);
+
+    expect(screen.getByRole("button", { name: "Save Trade" })).toBeDisabled();
+    expect(screen.getByText("Add an account before saving this trade.")).toBeInTheDocument();
   });
 
   it("submits the recomputed result from profit", async () => {

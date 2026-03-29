@@ -235,8 +235,28 @@ describe("dashboard rendering", () => {
 
     expect(screen.getByText("Win Rate: 0.0%")).toBeInTheDocument();
     expect(screen.getByText("Total PnL: $0.00")).toBeInTheDocument();
-    expect(screen.getByText("Add a trade to see equity.")).toBeInTheDocument();
+    expect(screen.getByText("Add your first trade to see your equity curve.")).toBeInTheDocument();
     expect(screen.getByText("No recent trades yet")).toBeInTheDocument();
+  });
+
+  it("guides beginners to add an account before the first trade", async () => {
+    apiMocks.listAccounts.mockResolvedValue({ items: [] });
+    apiMocks.getDashboardSummary.mockResolvedValue({
+      summary: {
+        todayTrades: 0,
+        totalTrades: 0,
+        winRate: 0,
+        totalProfit: 0,
+      },
+      recentTrades: [],
+      equityCurve: [],
+    });
+
+    renderPage(<Dashboard />);
+
+    await screen.findByText("No accounts yet");
+
+    expect(screen.getAllByRole("link", { name: "Add account" })).not.toHaveLength(0);
   });
 
   it("normalizes malformed dashboard payloads without rendering crashes", async () => {
@@ -359,6 +379,38 @@ describe("analytics rendering", () => {
 
     await screen.findByRole("heading", { name: "No trades yet" });
     expect(screen.getByRole("button", { name: "Add Trade" })).toBeInTheDocument();
+  });
+
+  it("guides beginners to add an account before analytics can unlock", async () => {
+    apiMocks.listAccounts.mockResolvedValue({ items: [] });
+    apiMocks.getAnalyticsBreakdowns.mockResolvedValue({
+      summary: {
+        totalTrades: 0,
+        wins: 0,
+        losses: 0,
+        totalProfit: 0,
+        totalGross: 0,
+        totalLoss: 0,
+        winRate: 0,
+        avgRR: 0,
+      },
+      winLoss: [],
+      setupPerformance: [],
+      sessionPerformance: [],
+      emotionPerformance: [],
+      pairPerformance: [],
+      accountPerformance: [],
+    });
+    apiMocks.getAnalyticsCalendar.mockResolvedValue({
+      month: "2026-03",
+      days: [],
+      weeks: [],
+    });
+
+    renderPage(<Analytics />);
+
+    await screen.findByRole("heading", { name: "Add an account first" });
+    expect(screen.getByRole("button", { name: "Add Account" })).toBeInTheDocument();
   });
 
   it("renders analytics from detailed trades when the summary payload is empty", async () => {
@@ -957,7 +1009,7 @@ describe("analytics rendering", () => {
     renderPage(<Analytics />);
 
     await screen.findByText("Performance Score");
-    expect(screen.getByText("A heuristic blend of win rate, planned RR, consistency, and drawdown control.")).toBeInTheDocument();
+    expect(screen.getByText("Win rate, RR, consistency, and drawdown.")).toBeInTheDocument();
     expect(screen.getByText("1:2.00")).toBeInTheDocument();
   });
 

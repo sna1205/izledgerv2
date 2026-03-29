@@ -147,6 +147,7 @@ export default function Dashboard() {
   const dashboard = summaryQuery.data ?? normalizeDashboardSummaryResponse(null);
   const summary = dashboard.summary;
   const recentTrades = dashboard.recentTrades;
+  const hasAccounts = (accounts?.length ?? 0) > 0;
   const currentEquity = equityCurve[equityCurve.length - 1]?.equity ?? 0;
   const totalPnlValue = summary.isMixedCurrency
     ? "Mixed"
@@ -225,14 +226,16 @@ export default function Dashboard() {
           <div className="mt-6">
             <EmptyState
               icon={Activity}
-              title="No trades yet"
-              description="Add a trade to see equity."
+              title={hasAccounts ? "No trades yet" : "No accounts yet"}
+              description={hasAccounts
+                ? "Add your first trade to see your equity curve."
+                : "Add an account first so you can start logging trades."}
               action={(
                 <Link
-                  to="/trades"
+                  to={hasAccounts ? "/trades/new" : "/accounts"}
                   className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm"
                 >
-                  Add trade
+                  {hasAccounts ? "Add trade" : "Add account"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               )}
@@ -328,14 +331,16 @@ export default function Dashboard() {
           <div className="mt-6">
             <EmptyState
               icon={Activity}
-              title="No recent trades yet"
-              description="Add a trade to get started."
+              title={hasAccounts ? "No recent trades yet" : "Add an account first"}
+              description={hasAccounts
+                ? "Add your first trade to start building your journal."
+                : "Create an account before you add your first trade."}
               action={(
                 <Link
-                  to="/trades"
+                  to={hasAccounts ? "/trades/new" : "/accounts"}
                   className="inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-background/85 px-4 py-2 text-sm font-medium text-foreground"
                 >
-                  Open Trades
+                  {hasAccounts ? "Add Trade" : "Add Account"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               )}

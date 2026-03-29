@@ -6,6 +6,7 @@ import { DataBadge } from "@/components/DataBadge";
 import { PageErrorState } from "@/components/PageErrorState";
 import { SetupWorkspaceSkeleton } from "@/components/skeletons/SetupWorkspaceSkeleton";
 import { Button } from "@/components/ui/button";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/sonner";
 import { PageHeader, PageShell } from "@/layouts/PageShell";
@@ -214,7 +215,7 @@ export function SetupCreatePage() {
       </Tabs>
 
       <div className="sticky bottom-4 z-10 -mt-2 flex justify-end">
-        <div className="rounded-2xl border border-border bg-background/95 p-2 shadow-lg backdrop-blur">
+        <FloatingActionPanel>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button variant="outline" onClick={() => navigate("/setups")}>
               Cancel
@@ -225,7 +226,7 @@ export function SetupCreatePage() {
               </Button>
             ) : null}
           </div>
-        </div>
+        </FloatingActionPanel>
       </div>
     </PageShell>
   );

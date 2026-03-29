@@ -1,10 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Landmark } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { TradeFormSkeleton } from "@/components/skeletons/TradeFormSkeleton";
+import { Button } from "@/components/ui/button";
 import { TradeFormPage } from "@/features/trades/components/TradeFormPage";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { PageShell } from "@/layouts/PageShell";
 import { ApiError } from "@/services/api/client";
 import { listAccounts } from "@/services/api/accounts";
 import { listSetups } from "@/services/api/setups";
@@ -73,6 +77,23 @@ export default function NewTrade() {
 
   if (isLoading) {
     return <TradeFormSkeleton />;
+  }
+
+  if ((accountsQuery.data ?? []).length === 0) {
+    return (
+      <PageShell size="wide">
+        <EmptyState
+          icon={Landmark}
+          title="Add your first account before logging a trade"
+          description="Trades need an account so IZLedger can track currency, performance, and analytics correctly."
+          action={(
+            <Button onClick={() => navigate("/accounts")}>
+              Add Account
+            </Button>
+          )}
+        />
+      </PageShell>
+    );
   }
 
   if (hasError) {

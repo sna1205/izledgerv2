@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import type { Account, SetupDefinition, Trade } from "@/types";
 import {
   TradeActionsBar,
@@ -92,15 +93,19 @@ export function TradeFormDialog({
           />
         </div>
 
-        <TradeActionsBar
-          className="pt-4"
-          onCancel={() => onOpenChange(false)}
-          onSave={controller.handleSave}
-          isSaving={isSaving}
-          isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
-          isDisabled={controller.isSaveBlocked}
-          saveLabel={controller.activeTrade ? "Update Trade" : "Save Trade"}
-        />
+        <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+          <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[320px]">
+            <TradeActionsBar
+              onCancel={() => onOpenChange(false)}
+              onSave={controller.handleSave}
+              isSaving={isSaving}
+              isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
+              isDisabled={controller.isSaveBlocked}
+              saveLabel={controller.activeTrade ? "Update Trade" : "Save Trade"}
+              saveHint={controller.saveBlockReason}
+            />
+          </FloatingActionPanel>
+        </div>
       </DialogContent>
     </Dialog>
   );
