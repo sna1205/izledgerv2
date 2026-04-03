@@ -76,7 +76,9 @@ export function buildSharedTradeView(params: {
     session: trade.session || null,
     emotion: trade.emotion || null,
     notes: settings.showNotes ? (trade.notes || null) : null,
-    screenshots: settings.showScreenshots ? trade.screenshots : [],
+    screenshots: settings.showScreenshots
+      ? (trade.screenshotAssets?.map((asset) => asset.url) ?? trade.screenshots)
+      : [],
   };
 }
 

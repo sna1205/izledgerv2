@@ -280,4 +280,26 @@ describe("ShareTradeModal", () => {
     expect(copiedBlob).toBeInstanceOf(Blob);
     expect(copiedBlob.type).toBe("image/png");
   });
+
+  it("retries export without screenshots when the first render fails", async () => {
+    shareMocks.getTradeShares.mockResolvedValue({ items: [] });
+    vi.mocked(toBlob)
+      .mockRejectedValueOnce(new Error("foreignObject render failed"))
+      .mockResolvedValueOnce(new Blob(["png-data"], { type: "image/png" }));
+
+    const anchorClickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    render(
+      <ShareTradeModal open onOpenChange={vi.fn()} trade={trade} accountName="Primary" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Image Export" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Download Image" }));
+
+    await waitFor(() => {
+      expect(toBlob).toHaveBeenCalledTimes(2);
+      expect(anchorClickSpy).toHaveBeenCalled();
+      expect(shareMocks.toast.success).toHaveBeenCalledWith("Image downloaded");
+    });
+  });
 });

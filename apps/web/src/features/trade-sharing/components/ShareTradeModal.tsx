@@ -110,6 +110,7 @@ export function ShareTradeModal({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [expiresAtInput, setExpiresAtInput] = useState("");
   const exportCardRef = useRef<HTMLDivElement | null>(null);
+  const exportFallbackCardRef = useRef<HTMLDivElement | null>(null);
   const clipboardItemCtor =
     typeof globalThis !== "undefined" && "ClipboardItem" in globalThis
       ? globalThis.ClipboardItem
@@ -122,6 +123,13 @@ export function ShareTradeModal({
   const previewTrade = useMemo(
     () => buildSharedTradeView({ trade, settings, accountName }),
     [accountName, settings, trade],
+  );
+  const screenshotlessPreviewTrade = useMemo(
+    () => ({
+      ...previewTrade,
+      screenshots: [],
+    }),
+    [previewTrade],
   );
   const shareRecord = shareHistory[0] ?? null;
 
@@ -231,12 +239,12 @@ export function ShareTradeModal({
     }
   }
 
-  async function generateTradeShareBlob() {
-    if (!exportCardRef.current) {
+  async function renderTradeShareBlob(node: HTMLDivElement | null) {
+    if (!node) {
       throw new Error("Share card ref is missing.");
     }
 
-    const blob = await toBlob(exportCardRef.current, {
+    const blob = await toBlob(node, {
       cacheBust: true,
       pixelRatio: 2,
       canvasWidth: 1080,
@@ -251,6 +259,14 @@ export function ShareTradeModal({
     }
 
     return new Blob([blob], { type: "image/png" });
+  }
+
+  async function generateTradeShareBlob() {
+    try {
+      return await renderTradeShareBlob(exportCardRef.current);
+    } catch {
+      return renderTradeShareBlob(exportFallbackCardRef.current);
+    }
   }
 
   async function handleDownloadImage() {
@@ -541,7 +557,10 @@ export function ShareTradeModal({
 
             <div className="pointer-events-none absolute -left-[9999px] top-0 opacity-0" aria-hidden="true">
               <div ref={exportCardRef} className="w-[1080px]">
-                <ShareTradeCard trade={previewTrade} />
+                <ShareTradeCard trade={previewTrade} exportMode />
+              </div>
+              <div ref={exportFallbackCardRef} className="w-[1080px]">
+                <ShareTradeCard trade={screenshotlessPreviewTrade} exportMode />
               </div>
             </div>
           </section>

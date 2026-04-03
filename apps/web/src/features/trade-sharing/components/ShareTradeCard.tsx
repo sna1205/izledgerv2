@@ -5,12 +5,19 @@ import { cn } from "@/utils/class-names";
 function DetailPill({
   label,
   value,
+  exportMode = false,
 }: {
   label: string;
   value: string;
+  exportMode?: boolean;
 }) {
   return (
-    <div className="rounded-[20px] border border-white/65 bg-white/80 px-4 py-3 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.45)] backdrop-blur dark:border-white/10 dark:bg-white/5">
+    <div
+      className={cn(
+        "rounded-[20px] border border-white/65 bg-white/80 px-4 py-3 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-white/5",
+        exportMode ? "" : "backdrop-blur",
+      )}
+    >
       <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">{value}</p>
     </div>
@@ -20,9 +27,11 @@ function DetailPill({
 export function ShareTradeCard({
   trade,
   className,
+  exportMode = false,
 }: {
   trade: SharedTradeView;
   className?: string;
+  exportMode?: boolean;
 }) {
   const detailItems = [
     trade.entry !== null ? { label: "Entry", value: formatPrice(trade.entry) } : null,
@@ -60,7 +69,12 @@ export function ShareTradeCard({
       <div className="relative space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/75 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.24em] text-slate-600 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+            <div
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/75 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.24em] text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
+                exportMode ? "" : "backdrop-blur",
+              )}
+            >
               <ShieldCheck className="h-3.5 w-3.5" />
               IZLedger Shared Trade
             </div>
@@ -81,12 +95,17 @@ export function ShareTradeCard({
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {detailItems.map((item) => (
-            <DetailPill key={item.label} label={item.label} value={item.value} />
+            <DetailPill key={item.label} label={item.label} value={item.value} exportMode={exportMode} />
           ))}
         </div>
 
         {trade.notes ? (
-          <section className="rounded-[28px] border border-white/70 bg-white/78 p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.45)] backdrop-blur dark:border-white/10 dark:bg-white/5">
+          <section
+            className={cn(
+              "rounded-[28px] border border-white/70 bg-white/78 p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-white/5",
+              exportMode ? "" : "backdrop-blur",
+            )}
+          >
             <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Notes</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{trade.notes}</p>
           </section>
