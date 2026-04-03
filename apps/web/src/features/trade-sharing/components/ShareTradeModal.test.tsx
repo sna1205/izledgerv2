@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toBlob } from "html-to-image";
 import { ShareTradeModal } from "@/features/trade-sharing/components/ShareTradeModal";
 
 const shareMocks = vi.hoisted(() => ({
@@ -131,6 +132,11 @@ describe("ShareTradeModal", () => {
     shareMocks.revokeTradeShare.mockReset();
     shareMocks.toast.success.mockReset();
     shareMocks.toast.error.mockReset();
+    vi.mocked(toBlob).mockReset();
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => "blob:trade-share"),
+      revokeObjectURL: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -147,7 +153,7 @@ describe("ShareTradeModal", () => {
       <ShareTradeModal open onOpenChange={vi.fn()} trade={trade} accountName="Primary" />,
     );
 
-    await screen.findByText("No active public link exists for this trade yet.");
+    await screen.findByText("No public link yet.");
 
     fireEvent.change(screen.getByLabelText("Link expiration"), {
       target: {
@@ -155,7 +161,7 @@ describe("ShareTradeModal", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Generate public link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate link" }));
 
     await waitFor(() => {
       expect(shareMocks.createTradeShare).toHaveBeenCalledWith("trade-1", expect.objectContaining({
@@ -205,5 +211,73 @@ describe("ShareTradeModal", () => {
 
     expect(screen.getAllByText("Revoked").length).toBeGreaterThan(0);
     expect(shareMocks.toast.success).toHaveBeenCalledWith("Shared link revoked.");
+  });
+
+  it("downloads a png image without revoking the object url immediately", async () => {
+    shareMocks.getTradeShares.mockResolvedValue({ items: [] });
+    vi.mocked(toBlob).mockResolvedValue(new Blob(["png-data"], { type: "image/png" }));
+
+    const createObjectURLSpy = vi.mocked(URL.createObjectURL);
+    const revokeObjectURLSpy = vi.mocked(URL.revokeObjectURL);
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const anchorClickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    render(
+      <ShareTradeModal open onOpenChange={vi.fn()} trade={trade} accountName="Primary" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Image Export" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Download Image" }));
+
+    await waitFor(() => {
+      expect(toBlob).toHaveBeenCalled();
+      expect(anchorClickSpy).toHaveBeenCalled();
+      expect(createObjectURLSpy).toHaveBeenCalled();
+      expect(shareMocks.toast.success).toHaveBeenCalledWith("Image downloaded");
+    });
+
+    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+  });
+
+  it("copies a generated png image to the clipboard", async () => {
+    shareMocks.getTradeShares.mockResolvedValue({ items: [] });
+    vi.mocked(toBlob).mockResolvedValue(new Blob(["png-data"]));
+
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    const clipboardItem = vi.fn((items: Record<string, Blob>) => items);
+
+    Object.assign(navigator, {
+      clipboard: {
+        write: clipboardWrite,
+        writeText: vi.fn(),
+      },
+    });
+    Object.assign(globalThis, {
+      ClipboardItem: clipboardItem,
+    });
+
+    render(
+      <ShareTradeModal open onOpenChange={vi.fn()} trade={trade} accountName="Primary" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Image Export" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Copy Image" }));
+
+    await waitFor(() => {
+      expect(clipboardItem).toHaveBeenCalledWith({
+        "image/png": expect.any(Blob),
+      });
+      expect(clipboardWrite).toHaveBeenCalledWith([
+        {
+          "image/png": expect.any(Blob),
+        },
+      ]);
+      expect(shareMocks.toast.success).toHaveBeenCalledWith("Image copied to clipboard");
+    });
+
+    const copiedBlob = clipboardItem.mock.calls[0]?.[0]?.["image/png"];
+    expect(copiedBlob).toBeInstanceOf(Blob);
+    expect(copiedBlob.type).toBe("image/png");
   });
 });

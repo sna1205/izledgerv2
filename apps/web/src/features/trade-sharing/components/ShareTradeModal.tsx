@@ -110,10 +110,13 @@ export function ShareTradeModal({
   const [linkError, setLinkError] = useState<string | null>(null);
   const [expiresAtInput, setExpiresAtInput] = useState("");
   const exportCardRef = useRef<HTMLDivElement | null>(null);
+  const clipboardItemCtor =
+    typeof globalThis !== "undefined" && "ClipboardItem" in globalThis
+      ? globalThis.ClipboardItem
+      : null;
   const canCopyImage =
-    typeof window !== "undefined" &&
-    "ClipboardItem" in window &&
     typeof navigator !== "undefined" &&
+    clipboardItemCtor !== null &&
     Boolean(navigator.clipboard?.write);
 
   const previewTrade = useMemo(
@@ -243,7 +246,11 @@ export function ShareTradeModal({
       throw new Error("Image blob generation failed.");
     }
 
-    return blob;
+    if (blob.type === "image/png") {
+      return blob;
+    }
+
+    return new Blob([blob], { type: "image/png" });
   }
 
   async function handleDownloadImage() {
@@ -260,8 +267,13 @@ export function ShareTradeModal({
 
       link.href = objectUrl;
       link.download = buildTradeShareFileName(previewTrade);
+      link.style.display = "none";
+      document.body.append(link);
       link.click();
-      URL.revokeObjectURL(objectUrl);
+      link.remove();
+      window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+      }, 1000);
       toast.success("Image downloaded");
     } catch (error) {
       const message =
@@ -289,7 +301,7 @@ export function ShareTradeModal({
     try {
       const blob = await generateTradeShareBlob();
       await navigator.clipboard.write([
-        new ClipboardItem({
+        new clipboardItemCtor({
           "image/png": blob,
         }),
       ]);
