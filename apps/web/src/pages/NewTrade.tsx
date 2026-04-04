@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Landmark } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { TradeFormSkeleton } from "@/components/skeletons/TradeFormSkeleton";
@@ -32,7 +32,9 @@ function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>
 export default function NewTrade() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+  const prefillSetupId = (location.state as { prefillSetupId?: string } | null)?.prefillSetupId ?? null;
 
   const accountsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "accounts", "active"),
@@ -129,6 +131,7 @@ export default function NewTrade() {
       onComplete={() => navigate("/trades")}
       accounts={accountsQuery.data ?? []}
       setups={setupsQuery.data ?? []}
+      initialSetupId={prefillSetupId}
       isSaving={saveTradeMutation.isPending}
       onScreenshotsChange={(trade) => {
         void syncTradeScreenshotQueryData(queryClient, user.id, trade);

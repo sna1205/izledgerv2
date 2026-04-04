@@ -90,6 +90,7 @@ const detailPageTitles: Array<{ match: (pathname: string) => boolean; title: str
   { match: (pathname) => pathname.endsWith("/edit") && pathname.startsWith("/trades/"), title: "Edit Trade" },
   { match: (pathname) => pathname.startsWith("/trades/"), title: "Trade Details" },
   { match: (pathname) => pathname === "/setups/new", title: "New Setup" },
+  { match: (pathname) => pathname.startsWith("/setups/"), title: "Edit Setup" },
   { match: (pathname) => pathname.startsWith("/settings"), title: "Settings" },
 ];
 

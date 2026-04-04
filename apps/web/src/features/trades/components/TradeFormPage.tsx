@@ -19,6 +19,7 @@ interface TradeFormPageProps {
   onComplete: (trade: Trade | null) => void;
   accounts: Account[];
   setups: SetupDefinition[];
+  initialSetupId?: string | null;
   editTrade?: Trade | null;
   isSaving?: boolean;
   onScreenshotsChange?: (trade: Trade) => void;
@@ -30,6 +31,7 @@ export function TradeFormPage({
   onComplete,
   accounts,
   setups,
+  initialSetupId = null,
   editTrade,
   isSaving = false,
   onScreenshotsChange,
@@ -40,6 +42,7 @@ export function TradeFormPage({
     editTrade,
     accounts,
     setups,
+    initialSetupId,
     onScreenshotsChange,
     onComplete,
   });

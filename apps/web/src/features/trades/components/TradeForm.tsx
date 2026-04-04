@@ -100,6 +100,7 @@ type TradeFormSharedProps = {
   editTrade?: Trade | null;
   accounts: Account[];
   setups: SetupDefinition[];
+  initialSetupId?: string | null;
   isSaving?: boolean;
   onScreenshotsChange?: (trade: Trade) => void;
   onCancel: () => void;
@@ -152,17 +153,25 @@ function buildEmptyForm(accounts: Account[]): TradeFormValue {
   };
 }
 
+function buildPrefilledForm(accounts: Account[], initialSetupId?: string | null): TradeFormValue {
+  return {
+    ...buildEmptyForm(accounts),
+    setupId: initialSetupId ?? "__none",
+  };
+}
+
 export function useTradeFormController({
   isActive = true,
   onSave,
   editTrade,
   accounts,
   setups,
+  initialSetupId,
   onScreenshotsChange,
   onComplete,
 }: Omit<TradeFormSharedProps, "isSaving" | "onCancel">) {
   const { user } = useAuth();
-  const [form, setForm] = useState<TradeFormValue>(() => buildEmptyForm(accounts));
+  const [form, setForm] = useState<TradeFormValue>(() => buildPrefilledForm(accounts, initialSetupId));
   const [checklistSelections, setChecklistSelections] = useState<Record<string, { checked: boolean }>>({});
   const [createdTrade, setCreatedTrade] = useState<Trade | null>(null);
   const [draftScreenshots, setDraftScreenshots] = useState<File[]>([]);
@@ -231,8 +240,8 @@ export function useTradeFormController({
       return;
     }
 
-    setForm(buildEmptyForm(accounts));
-  }, [accounts, editTrade, isActive]);
+    setForm(buildPrefilledForm(accounts, initialSetupId));
+  }, [accounts, editTrade, initialSetupId, isActive]);
 
   useEffect(() => {
     if (isActive) {

@@ -79,7 +79,7 @@ function getProtectedBootFallback(pathname: string) {
   }
 
   if (pathname.startsWith("/setups")) {
-    if (pathname === "/setups/new") {
+    if (pathname === "/setups/new" || pathname.startsWith("/setups/")) {
       return {
         pageTitleWidth: "w-24",
         content: <SetupWorkspaceSkeleton />,
@@ -160,6 +160,7 @@ function AppRoutes() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
             <Route path="/setups/new" element={<NewSetup />} />
+            <Route path="/setups/:id" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/new" element={<NewTrade />} />

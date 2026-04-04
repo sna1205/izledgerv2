@@ -5,7 +5,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Setups from "@/pages/Setups";
 import NewSetup from "@/pages/NewSetup";
-import { ApiError } from "@/services/api/client";
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
@@ -21,6 +20,11 @@ const apiMocks = vi.hoisted(() => ({
   createSetup: vi.fn(),
   updateSetup: vi.fn(),
   deleteSetup: vi.fn(),
+  createChecklistRule: vi.fn(),
+  updateChecklistRule: vi.fn(),
+  deleteChecklistRule: vi.fn(),
+  toggleChecklistRuleActive: vi.fn(),
+  reorderChecklistRules: vi.fn(),
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -32,6 +36,14 @@ vi.mock("@/services/api/setups", () => ({
   createSetup: apiMocks.createSetup,
   updateSetup: apiMocks.updateSetup,
   deleteSetup: apiMocks.deleteSetup,
+}));
+
+vi.mock("@/services/api/checklist-rules", () => ({
+  createChecklistRule: apiMocks.createChecklistRule,
+  updateChecklistRule: apiMocks.updateChecklistRule,
+  deleteChecklistRule: apiMocks.deleteChecklistRule,
+  toggleChecklistRuleActive: apiMocks.toggleChecklistRuleActive,
+  reorderChecklistRules: apiMocks.reorderChecklistRules,
 }));
 
 vi.mock("@/components/ui/sonner", () => ({
@@ -109,6 +121,7 @@ function renderPage() {
         <Routes>
           <Route path="/setups" element={<Setups />} />
           <Route path="/setups/new" element={<NewSetup />} />
+          <Route path="/setups/:id" element={<NewSetup />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -120,8 +133,33 @@ beforeEach(() => {
   apiMocks.createSetup.mockReset();
   apiMocks.updateSetup.mockReset();
   apiMocks.deleteSetup.mockReset();
+  apiMocks.createChecklistRule.mockReset();
+  apiMocks.updateChecklistRule.mockReset();
+  apiMocks.deleteChecklistRule.mockReset();
+  apiMocks.toggleChecklistRuleActive.mockReset();
+  apiMocks.reorderChecklistRules.mockReset();
   apiMocks.toast.success.mockReset();
   apiMocks.toast.error.mockReset();
+
+  apiMocks.createChecklistRule.mockResolvedValue({
+    rule: {
+      id: "rule-created",
+      title: "Wait for confirmation candle",
+      description: null,
+      isRequired: false,
+      isActive: true,
+      sortOrder: 0,
+      scopeType: "setup",
+      setupId: "setup-3",
+      accountId: null,
+      createdAt: "2026-03-03T10:05:00.000Z",
+      updatedAt: "2026-03-03T10:05:00.000Z",
+    },
+  });
+  apiMocks.updateChecklistRule.mockResolvedValue({ rule: null });
+  apiMocks.deleteChecklistRule.mockResolvedValue(undefined);
+  apiMocks.toggleChecklistRuleActive.mockResolvedValue({ rule: null });
+  apiMocks.reorderChecklistRules.mockResolvedValue({ items: [] });
 
   apiMocks.listSetups.mockResolvedValue({
     items: [
@@ -129,6 +167,24 @@ beforeEach(() => {
         id: "setup-1",
         name: "Breakout",
         description: "Retest entry",
+        entryLogic: "Wait for breakout and reclaim.",
+        confirmationLogic: "Accept only with displacement.",
+        invalidationLogic: "Cancel if price loses the reclaimed level.",
+        preTradeChecklist: [
+          {
+            id: "rule-1",
+            title: "Bias aligned",
+            description: null,
+            isRequired: true,
+            isActive: true,
+            sortOrder: 0,
+            scopeType: "setup",
+            setupId: "setup-1",
+            accountId: null,
+            createdAt: "2026-03-01T10:00:00.000Z",
+            updatedAt: "2026-03-01T10:00:00.000Z",
+          },
+        ],
         color: "#3B82F6",
         isArchived: false,
         tradeCount: 12,
@@ -139,6 +195,10 @@ beforeEach(() => {
         id: "setup-2",
         name: "Reversal",
         description: "Fade into liquidity",
+        entryLogic: "Look for exhaustion at external liquidity.",
+        confirmationLogic: "",
+        invalidationLogic: "",
+        preTradeChecklist: [],
         color: "#10B981",
         isArchived: false,
         tradeCount: 8,
@@ -178,7 +238,7 @@ describe("setups color flow", () => {
 
     await screen.findByLabelText("Setup Name");
     fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Create" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
 
     await waitFor(() => {
       expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
@@ -209,7 +269,7 @@ describe("setups color flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
 
     await screen.findByDisplayValue("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save Setup" })[0]);
 
     await waitFor(() => {
       expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", expect.objectContaining({
@@ -218,27 +278,7 @@ describe("setups color flow", () => {
     });
   });
 
-  it("keeps the delete dialog open and offers archiving when checklist rules block deletion", async () => {
-    apiMocks.deleteSetup.mockRejectedValue(
-      new ApiError(
-        "Setup cannot be deleted because checklist rules still reference it. Delete or re-scope those rules first, or archive the setup instead.",
-        409,
-        "SETUP_IN_USE_BY_CHECKLIST_RULES",
-      ),
-    );
-
-    renderPage();
-
-    await screen.findByText("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Breakout" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete Permanently" }));
-
-    expect(await screen.findByText("Setup cannot be deleted because checklist rules still reference it. Delete or re-scope those rules first, or archive the setup instead.")).toBeInTheDocument();
-    expect(screen.getByText("Delete Setup")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Archive Instead" })).toBeInTheDocument();
-  });
-
-  it("archives a setup directly from the delete dialog", async () => {
+  it("shows fast-scanning card content and archives from quick actions", async () => {
     apiMocks.updateSetup.mockResolvedValue({
       setup: {
         id: "setup-1",
@@ -254,11 +294,99 @@ describe("setups color flow", () => {
     renderPage();
 
     await screen.findByText("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Breakout" }));
-    fireEvent.click(screen.getByRole("button", { name: "Archive Instead" }));
+    expect(screen.getByText("1 rule")).toBeInTheDocument();
+    expect(screen.getByText((_content, element) => element?.textContent === "Used in 12 trades")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archive Breakout" }));
 
     await waitFor(() => {
       expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", { isArchived: true });
+    });
+  });
+
+  it("keeps checklist items local until the first setup save, then persists them in sequence", async () => {
+    apiMocks.createSetup.mockResolvedValue({
+      setup: {
+        id: "setup-3",
+        name: "Momentum",
+        description: "",
+        entryLogic: "",
+        confirmationLogic: "",
+        invalidationLogic: "",
+        notes: "",
+        color: "#F59E0B",
+        isArchived: false,
+        preTradeChecklist: [],
+        tradeCount: 0,
+        createdAt: "2026-03-03T10:00:00.000Z",
+        updatedAt: "2026-03-03T10:00:00.000Z",
+      },
+    });
+
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("link", { name: "New Setup" }));
+
+    await screen.findByLabelText("Setup Name");
+    fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
+    fireEvent.click(screen.getByRole("button", { name: /Pre-trade Checklist/i }));
+
+    await screen.findByLabelText("Add a pre-trade rule");
+    fireEvent.change(screen.getByLabelText("Add a pre-trade rule"), { target: { value: "Wait for confirmation candle" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(apiMocks.createChecklistRule).not.toHaveBeenCalled();
+    expect(apiMocks.reorderChecklistRules).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
+
+    await waitFor(() => {
+      expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
+      expect(apiMocks.createChecklistRule).toHaveBeenCalledTimes(1);
+      expect(apiMocks.reorderChecklistRules).toHaveBeenCalledWith(["rule-created"]);
+    });
+
+    expect(apiMocks.createChecklistRule).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Wait for confirmation candle",
+      setupId: "setup-3",
+    }));
+    expect(apiMocks.createSetup.mock.invocationCallOrder[0]).toBeLessThan(apiMocks.createChecklistRule.mock.invocationCallOrder[0]);
+  });
+
+  it("duplicates a setup from the list and recreates its checklist", async () => {
+    apiMocks.createSetup.mockResolvedValue({
+      setup: {
+        id: "setup-3",
+        name: "Breakout Copy",
+        description: "Retest entry",
+        entryLogic: "Wait for breakout and reclaim.",
+        confirmationLogic: "Accept only with displacement.",
+        invalidationLogic: "Cancel if price loses the reclaimed level.",
+        notes: "",
+        color: "#3B82F6",
+        isArchived: false,
+        preTradeChecklist: [],
+        tradeCount: 0,
+        createdAt: "2026-03-05T10:00:00.000Z",
+        updatedAt: "2026-03-05T10:00:00.000Z",
+      },
+    });
+
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate Breakout" }));
+
+    await waitFor(() => {
+      expect(apiMocks.createSetup).toHaveBeenCalledWith(expect.objectContaining({
+        name: "Breakout Copy",
+        description: "Retest entry",
+      }));
+      expect(apiMocks.createChecklistRule).toHaveBeenCalledWith(expect.objectContaining({
+        title: "Bias aligned",
+        setupId: "setup-3",
+      }));
+      expect(apiMocks.reorderChecklistRules).toHaveBeenCalledWith(["rule-created"]);
     });
   });
 });

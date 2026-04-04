@@ -1,50 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers3, Plus } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PaginationControls } from "@/components/PaginationControls";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import { PageHeader, PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { SetupList } from "@/features/setups/components/SetupList";
 import { SetupToolbar } from "@/features/setups/components/SetupToolbar";
-import { SetupWorkspaceDialog, type WorkspaceTab } from "@/features/setups/components/SetupWorkspaceDialog";
+import { buildDuplicateSetupName, sanitizeChecklistItemsForDuplication } from "@/features/setups/setup-duplication";
+import { createChecklistRule, reorderChecklistRules } from "@/services/api/checklist-rules";
 import { ApiError } from "@/services/api/client";
-import { deleteSetup, listSetups, updateSetup, type SetupListItem } from "@/services/api/setups";
+import { createSetup, listSetups, updateSetup, type SetupListItem } from "@/services/api/setups";
 import { privateQueryKey } from "@/services/query-client";
 import { getPageErrorState } from "@/utils/page-errors";
 import { withMinimumDelay } from "@/utils/loading";
-import type { SetupDefinition } from "@/types";
 
 const SETUPS_PAGE_SIZE = 12;
 
 export function SetupPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [open, setOpen] = useState(false);
-  const [editingSetup, setEditingSetup] = useState<SetupDefinition | null>(null);
-  const [initialDialogTab, setInitialDialogTab] = useState<WorkspaceTab>("strategy");
-  const [deleteTarget, setDeleteTarget] = useState<SetupListItem | null>(null);
-  const [deleteError, setDeleteError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("all");
-  const [sortBy, setSortBy] = useState<"createdAt" | "name">("createdAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
   const setupsQuery = useQuery({
@@ -53,16 +37,16 @@ export function SetupPage() {
       status: statusFilter,
       page,
       pageSize: SETUPS_PAGE_SIZE,
-      sortBy,
-      sortOrder,
+      sortBy: "createdAt",
+      sortOrder: "desc",
     }),
     queryFn: async () => withMinimumDelay(() => listSetups({
       search,
       status: statusFilter,
       page,
       pageSize: SETUPS_PAGE_SIZE,
-      sortBy,
-      sortOrder,
+      sortBy: "createdAt",
+      sortOrder: "desc",
     })),
     placeholderData: keepPreviousData,
   });
@@ -81,73 +65,11 @@ export function SetupPage() {
     ]);
   };
 
-  const saveMutation = useMutation({
-    mutationFn: async ({ setupId, payload }: {
-      setupId: string | null;
-      payload: {
-        name: string;
-        description: string;
-        entryLogic: string | null;
-        confirmationLogic: string | null;
-        invalidationLogic: string | null;
-        notes: string | null;
-        color: string;
-        isArchived: boolean;
-      };
-    }) => updateSetup(setupId as string, payload),
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not save the setup right now.";
-      toast.error(message);
-    },
-  });
-
-  const handleSaveStrategy = async (
-    setupId: string | null,
-    payload: {
-      name: string;
-      description: string;
-      entryLogic: string | null;
-      confirmationLogic: string | null;
-      invalidationLogic: string | null;
-      notes: string | null;
-      color: string;
-      isArchived: boolean;
-    },
-  ) => {
-    const response = await saveMutation.mutateAsync({
-      setupId,
-      payload,
-    });
-
-    await invalidateData();
-    return response.setup;
-  };
-
-  const deleteMutation = useMutation({
-    mutationFn: async (setupId: string) => deleteSetup(setupId),
-    onSuccess: async () => {
-      await invalidateData();
-      toast.success("Setup deleted. Existing trade history was preserved.");
-      setDeleteError("");
-      setDeleteTarget(null);
-    },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not delete the setup right now.";
-      setDeleteError(message);
-      toast.error(message);
-    },
-  });
-
   const archiveMutation = useMutation({
     mutationFn: async (setupId: string) => updateSetup(setupId, { isArchived: true }),
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       await invalidateData();
       toast.success("Setup archived.");
-      setDeleteError("");
-
-      if (deleteTarget?.id === result.setup.id) {
-        setDeleteTarget(null);
-      }
     },
     onError: (error) => {
       const message = error instanceof ApiError ? error.message : "Could not archive the setup right now.";
@@ -155,43 +77,63 @@ export function SetupPage() {
     },
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: async (setup: SetupListItem) => {
+      const duplicatedName = buildDuplicateSetupName(setup.name, setups.map((item) => item.name));
+      const duplicatedSetup = await createSetup({
+        name: duplicatedName,
+        description: setup.description,
+        entryLogic: setup.entryLogic,
+        confirmationLogic: setup.confirmationLogic,
+        invalidationLogic: setup.invalidationLogic,
+        notes: setup.notes,
+        color: setup.color ?? undefined,
+        isArchived: false,
+      });
+
+      const checklistItems = sanitizeChecklistItemsForDuplication(
+        (setup.preTradeChecklist ?? []).map((item) => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          isRequired: item.isRequired,
+          isActive: item.isActive,
+          sortOrder: item.sortOrder,
+          isLocalOnly: false,
+          setupId: item.setupId,
+          accountId: item.accountId,
+        })),
+      );
+
+      if (checklistItems.length > 0) {
+        const createdRules = await Promise.all(
+          checklistItems.map((item) => createChecklistRule({
+            title: item.title,
+            description: item.description,
+            isRequired: item.isRequired,
+            isActive: item.isActive,
+            setupId: duplicatedSetup.setup.id,
+            accountId: null,
+          })),
+        );
+
+        await reorderChecklistRules(createdRules.map((result) => result.rule.id));
+      }
+
+      return duplicatedSetup.setup;
+    },
+    onSuccess: async (setup) => {
+      await invalidateData();
+      toast.success("Setup duplicated.");
+      navigate(`/setups/${setup.id}`);
+    },
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : "Could not duplicate the setup right now.";
+      toast.error(message);
+    },
+  });
+
   useUnauthorizedSessionGuard(setupsQuery.error);
-
-  const openEditModal = (setup: SetupDefinition, tab: WorkspaceTab = "strategy") => {
-    setEditingSetup(setup);
-    setInitialDialogTab(tab);
-    setOpen(true);
-  };
-
-  const openDeleteDialog = (setup: SetupListItem) => {
-    setDeleteTarget(setup);
-    setDeleteError("");
-  };
-
-  useEffect(() => {
-    if (setupsQuery.isLoading || setups.length === 0) {
-      return;
-    }
-
-    const setupId = searchParams.get("setup");
-
-    if (!setupId) {
-      return;
-    }
-
-    const targetSetup = setups.find((item) => item.id === setupId);
-
-    if (!targetSetup) {
-      setSearchParams({}, { replace: true });
-      return;
-    }
-
-    const requestedTab = searchParams.get("tab") === "pre-trade" ? "pre-trade" : "strategy";
-    setEditingSetup(targetSetup);
-    setInitialDialogTab(requestedTab);
-    setOpen(true);
-    setSearchParams({}, { replace: true });
-  }, [searchParams, setSearchParams, setups, setupsQuery.isLoading]);
 
   if (setupsQuery.isLoading && !setupsQuery.data) {
     return <SetupsSkeleton />;
@@ -223,7 +165,7 @@ export function SetupPage() {
   return (
     <PageShell size="wide">
       <PageHeader
-        title="Setups"
+        title="Your Setups"
         actions={(
           <Button asChild>
             <Link to="/setups/new">
@@ -245,41 +187,54 @@ export function SetupPage() {
           setStatusFilter(value);
           setPage(1);
         }}
-        sortBy={sortBy}
-        onSortByChange={(value) => {
-          setSortBy(value);
-          setPage(1);
-        }}
-        sortOrder={sortOrder}
-        onSortOrderChange={(value) => {
-          setSortOrder(value);
-          setPage(1);
-        }}
         totalSetups={totalSetups}
       />
 
       {totalSetups === 0 ? (
-        <EmptyState
-          icon={Layers3}
-          title={hasActiveFilters ? "No setups match" : "No setups yet"}
-          description={hasActiveFilters
-            ? "Try a broader search."
-            : "Create a setup to tag trades and checklist items."}
-          action={!hasActiveFilters ? (
-            <Button asChild>
-              <Link to="/setups/new">
-                <Plus className="h-4 w-4" />
-                New Setup
-              </Link>
-            </Button>
+        <div className="space-y-6">
+          <EmptyState
+            icon={Layers3}
+            title={hasActiveFilters ? "No setups match" : "Create your first trading rule system"}
+            description={hasActiveFilters
+              ? "Try a broader search."
+              : "Build a setup once, then reuse it with clear rules and pre-trade discipline."}
+            action={!hasActiveFilters ? (
+              <Button asChild>
+                <Link to="/setups/new">
+                  <Plus className="h-4 w-4" />
+                  New Setup
+                </Link>
+              </Button>
+            ) : null}
+          />
+
+          {!hasActiveFilters ? (
+            <section className="rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-sm">
+              <p className="text-label">Example Setup</p>
+              <div className="mt-4 rounded-[24px] border border-border/60 bg-background/70 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold text-foreground">London Liquidity Sweep</p>
+                    <p className="text-sm text-muted-foreground">Fade the initial sweep once price reclaims structure and confirms displacement.</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-700">Active</span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3 text-sm text-muted-foreground">
+                  <span>Key rules: sweep, reclaim, displacement</span>
+                  <span>Checklist: 5 rules</span>
+                  <span>Used in 24 trades</span>
+                </div>
+              </div>
+            </section>
           ) : null}
-        />
+        </div>
       ) : (
         <div className="space-y-6">
           <SetupList
             setups={setups}
-            onEdit={(setup) => openEditModal(setup)}
-            onDelete={openDeleteDialog}
+            onEdit={(setup) => navigate(`/setups/${setup.id}`)}
+            onArchive={(setup) => archiveMutation.mutate(setup.id)}
+            onDuplicate={(setup) => duplicateMutation.mutate(setup)}
           />
 
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -293,71 +248,6 @@ export function SetupPage() {
           </div>
         </div>
       )}
-
-      <SetupWorkspaceDialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-
-          if (!nextOpen) {
-            setEditingSetup(null);
-            setInitialDialogTab("strategy");
-          }
-        }}
-        setup={editingSetup}
-        setups={setups}
-        initialTab={initialDialogTab}
-        isSavingStrategy={saveMutation.isPending}
-        onSaveStrategy={handleSaveStrategy}
-      />
-
-      <AlertDialog
-        open={Boolean(deleteTarget)}
-        onOpenChange={(openState) => {
-          if (!openState) {
-            setDeleteTarget(null);
-            setDeleteError("");
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Setup</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget
-                ? `Delete "${deleteTarget.name}" only if no checklist rules still use it. Existing trades keep their historical setup label and color snapshot, so archive is the safer choice when you want to retire a setup without breaking history.`
-                : "Delete this setup only if no checklist rules still use it."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {deleteError ? <p className="text-sm text-destructive">{deleteError}</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending || archiveMutation.isPending}>Cancel</AlertDialogCancel>
-            {!deleteTarget?.isArchived ? (
-              <Button
-                variant="outline"
-                onClick={() => deleteTarget && archiveMutation.mutate(deleteTarget.id)}
-                disabled={deleteMutation.isPending || archiveMutation.isPending}
-              >
-                {archiveMutation.isPending ? "Archiving..." : "Archive Instead"}
-              </Button>
-            ) : null}
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!deleteTarget) {
-                  return;
-                }
-
-                setDeleteError("");
-                deleteMutation.mutate(deleteTarget.id);
-              }}
-              disabled={deleteMutation.isPending || archiveMutation.isPending}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </PageShell>
   );
 }
