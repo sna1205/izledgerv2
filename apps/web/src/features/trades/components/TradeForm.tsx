@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { GlobalDateSelector } from "@/components/GlobalDateSelector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -564,7 +565,7 @@ export function TradeCoreFields({
 
         <FieldContainer>
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
-          <Input type="date" value={form.date} onChange={(event) => updateField("date", event.target.value)} />
+          <GlobalDateSelector value={form.date} onChange={(value) => updateField("date", value)} />
         </FieldContainer>
 
         <FieldContainer>

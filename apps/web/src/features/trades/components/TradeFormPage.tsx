@@ -46,20 +46,8 @@ export function TradeFormPage({
 
   return (
     <PageShell size="wide">
-      <PageHeader
-        title={editTrade ? "Edit Trade" : "New Trade"}
-        actions={(
-          <TradeActionsBar
-            onCancel={onCancel}
-            onSave={controller.handleSave}
-            isSaving={isSaving}
-            isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
-            isDisabled={controller.isSaveBlocked}
-            saveLabel={editTrade ? "Update Trade" : "Save"}
-          />
-        )}
-      />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <PageHeader title={editTrade ? "Edit Trade" : "New Trade"} />
+      <div className="grid gap-6 pb-28 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <TradeCoreFields
             form={controller.form}
@@ -119,8 +107,8 @@ export function TradeFormPage({
         </div>
       </div>
 
-      <div className="sticky bottom-4 z-10 -mt-2 flex justify-end">
-        <FloatingActionPanel className="w-full xl:max-w-[420px]">
+      <div className="fixed bottom-4 right-4 z-40 w-[calc(100vw-2rem)] sm:w-auto">
+        <FloatingActionPanel className="ml-auto w-full sm:min-w-[320px] sm:max-w-[420px]">
           <TradeActionsBar
             onCancel={onCancel}
             onSave={controller.handleSave}

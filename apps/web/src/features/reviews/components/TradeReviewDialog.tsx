@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -211,13 +212,17 @@ export function TradeReviewDialog({
           </div>
         </div>
 
-        <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
-          <Button className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={isSaving}>
-            {isSaving ? "Saving..." : review ? "Save Review" : "Create Review"}
-          </Button>
+        <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+          <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[300px]">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={isSaving}>
+                {isSaving ? "Saving..." : review ? "Save Review" : "Create Review"}
+              </Button>
+            </div>
+          </FloatingActionPanel>
         </div>
       </DialogContent>
     </Dialog>

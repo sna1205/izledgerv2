@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 import { Activity, ArrowRight, CalendarDays, Target, Wallet } from "lucide-react";
-import { AccountFilterSelect } from "@/features/accounts/components/AccountFilterSelect";
 import { DataBadge } from "@/components/DataBadge";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { EmptyState } from "@/components/EmptyState";
@@ -167,14 +166,6 @@ export default function Dashboard() {
     <PageShell size="wide">
       <PageHeader
         title="Dashboard"
-        actions={(
-          <AccountFilterSelect
-            accounts={accounts ?? []}
-            value={resolvedAccountFilter}
-            onValueChange={setAccountFilter}
-            triggerClassName="h-10 min-w-[220px] rounded-2xl"
-          />
-        )}
       />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">

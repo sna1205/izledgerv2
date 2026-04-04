@@ -7,7 +7,7 @@ export function FloatingActionPanel({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-2xl border border-border bg-background/95 p-2 shadow-lg backdrop-blur", className)}
+      className={cn("bg-transparent p-0 shadow-none backdrop-blur-0", className)}
       {...props}
     />
   );

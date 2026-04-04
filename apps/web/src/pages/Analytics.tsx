@@ -20,7 +20,6 @@ import {
 import type { TooltipProps } from "recharts";
 import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { useNavigate } from "react-router-dom";
-import { AccountFilterSelect } from "@/features/accounts/components/AccountFilterSelect";
 import {
   EmotionsBreakdownChart,
   getBreakdownCategoryAccent,
@@ -1037,14 +1036,6 @@ export default function Analytics() {
       <PageShell size="wide">
         <PageHeader
           title="Analytics"
-          actions={(
-            <AccountFilterSelect
-              accounts={accounts ?? []}
-              value={resolvedAccountFilter}
-              onValueChange={setAccountFilter}
-              triggerClassName="h-10 min-w-[220px] rounded-2xl"
-            />
-          )}
         />
 
         <div className="grid gap-6 md:grid-cols-3">
@@ -1094,14 +1085,6 @@ export default function Analytics() {
       <PageShell size="wide">
         <PageHeader
           title="Analytics"
-          actions={(
-            <AccountFilterSelect
-              accounts={accounts ?? []}
-              value={resolvedAccountFilter}
-              onValueChange={setAccountFilter}
-              triggerClassName="h-10 min-w-[220px] rounded-2xl"
-            />
-          )}
         />
 
         {!hasAnalyticsData ? (

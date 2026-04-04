@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { DataBadge } from "@/components/DataBadge";
 import { PageErrorState } from "@/components/PageErrorState";
 import { SetupWorkspaceSkeleton } from "@/components/skeletons/SetupWorkspaceSkeleton";
@@ -155,25 +154,7 @@ export function SetupCreatePage() {
 
   return (
     <PageShell size="wide">
-      <PageHeader
-        title={currentSetup ? currentSetup.name : "New Setup"}
-        actions={(
-          <>
-            <Button asChild variant="outline">
-              <Link to="/setups">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Setups
-              </Link>
-            </Button>
-            {activeTab === "strategy" ? (
-              <Button onClick={() => void handleSaveStrategy()} disabled={saveMutation.isPending}>
-                <Plus className="h-4 w-4" />
-                {saveMutation.isPending ? "Saving..." : currentSetup ? "Save" : "Create"}
-              </Button>
-            ) : null}
-          </>
-        )}
-      />
+      <PageHeader title={currentSetup ? currentSetup.name : "New Setup"} />
 
       <div className="rounded-[32px] border border-border bg-card/70 p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -195,7 +176,7 @@ export function SetupCreatePage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)} className="space-y-6 pb-28">
         <TabsContent value="strategy" className="space-y-6">
           <SetupForm
             form={form}
@@ -214,8 +195,8 @@ export function SetupCreatePage() {
         </TabsContent>
       </Tabs>
 
-      <div className="sticky bottom-4 z-10 -mt-2 flex justify-end">
-        <FloatingActionPanel>
+      <div className="fixed bottom-4 right-4 z-40 w-[calc(100vw-2rem)] sm:w-auto">
+        <FloatingActionPanel className="ml-auto w-full sm:min-w-[280px]">
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button variant="outline" onClick={() => navigate("/setups")}>
               Cancel

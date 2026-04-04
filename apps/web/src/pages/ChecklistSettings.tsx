@@ -7,6 +7,7 @@ import { PageErrorState } from "@/components/PageErrorState";
 import { ChecklistSettingsSkeleton } from "@/components/skeletons/ChecklistSettingsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -541,13 +542,17 @@ export default function ChecklistSettings() {
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void handleSubmit()} disabled={saveRuleMutation.isPending}>
-              {saveRuleMutation.isPending ? "Saving..." : editingRule ? "Save changes" : "Create rule"}
-            </Button>
+          <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+            <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[280px]">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void handleSubmit()} disabled={saveRuleMutation.isPending}>
+                  {saveRuleMutation.isPending ? "Saving..." : editingRule ? "Save changes" : "Create rule"}
+                </Button>
+              </div>
+            </FloatingActionPanel>
           </div>
         </DialogContent>
       </Dialog>
