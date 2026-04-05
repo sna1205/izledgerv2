@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { GlobalDateSelector } from "@/components/GlobalDateSelector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +14,7 @@ import { uploadTradeScreenshot } from "@/services/api/screenshots";
 import { ApiError } from "@/services/api/client";
 import { ScreenshotUpload } from "@/features/screenshots/components/ScreenshotUpload";
 import { TradeChecklistCard } from "@/features/checklist/components/TradeChecklistCard";
+import { cn } from "@/utils/class-names";
 import { ResultBadge } from "./ResultBadge";
 import { InstrumentSelect } from "./InstrumentSelect";
 import type {
@@ -98,6 +100,7 @@ type TradeFormSharedProps = {
   editTrade?: Trade | null;
   accounts: Account[];
   setups: SetupDefinition[];
+  initialSetupId?: string | null;
   isSaving?: boolean;
   onScreenshotsChange?: (trade: Trade) => void;
   onCancel: () => void;
@@ -150,17 +153,25 @@ function buildEmptyForm(accounts: Account[]): TradeFormValue {
   };
 }
 
+function buildPrefilledForm(accounts: Account[], initialSetupId?: string | null): TradeFormValue {
+  return {
+    ...buildEmptyForm(accounts),
+    setupId: initialSetupId ?? "__none",
+  };
+}
+
 export function useTradeFormController({
   isActive = true,
   onSave,
   editTrade,
   accounts,
   setups,
+  initialSetupId,
   onScreenshotsChange,
   onComplete,
 }: Omit<TradeFormSharedProps, "isSaving" | "onCancel">) {
   const { user } = useAuth();
-  const [form, setForm] = useState<TradeFormValue>(() => buildEmptyForm(accounts));
+  const [form, setForm] = useState<TradeFormValue>(() => buildPrefilledForm(accounts, initialSetupId));
   const [checklistSelections, setChecklistSelections] = useState<Record<string, { checked: boolean }>>({});
   const [createdTrade, setCreatedTrade] = useState<Trade | null>(null);
   const [draftScreenshots, setDraftScreenshots] = useState<File[]>([]);
@@ -229,8 +240,8 @@ export function useTradeFormController({
       return;
     }
 
-    setForm(buildEmptyForm(accounts));
-  }, [accounts, editTrade, isActive]);
+    setForm(buildPrefilledForm(accounts, initialSetupId));
+  }, [accounts, editTrade, initialSetupId, isActive]);
 
   useEffect(() => {
     if (isActive) {
@@ -310,6 +321,42 @@ export function useTradeFormController({
   ).length;
   const completedChecklistCount = checklistRules.filter((rule) => checklistSelections[rule.id]?.checked).length;
   const isChecklistStrictlyBlocked = !editTrade && checklistMode === "strict" && incompleteRequiredChecklistCount > 0;
+  const saveBlockReason = useMemo(() => {
+    if (accounts.length === 0) {
+      return "Add an account before saving this trade.";
+    }
+
+    if (!form.accountId) {
+      return "Choose an account to save this trade.";
+    }
+
+    if (derivedDirection === null) {
+      return directionError ?? "Enter entry and stop loss to calculate the trade direction.";
+    }
+
+    if (parsedTakeProfit === null) {
+      return "Enter a take profit to finish the trade plan.";
+    }
+
+    if (derivedResult === null) {
+      return "Enter PnL to calculate the trade result.";
+    }
+
+    if (isChecklistStrictlyBlocked) {
+      return `${incompleteRequiredChecklistCount} required pre-trade item${incompleteRequiredChecklistCount === 1 ? "" : "s"} still need attention.`;
+    }
+
+    return null;
+  }, [
+    accounts.length,
+    derivedDirection,
+    derivedResult,
+    directionError,
+    form.accountId,
+    incompleteRequiredChecklistCount,
+    isChecklistStrictlyBlocked,
+    parsedTakeProfit,
+  ]);
 
   useEffect(() => {
     if (!isActive || !form.accountId) {
@@ -464,6 +511,7 @@ export function useTradeFormController({
     completedChecklistCount,
     incompleteRequiredChecklistCount,
     isChecklistStrictlyBlocked,
+    saveBlockReason,
     draftScreenshots,
     setDraftScreenshots,
     isUploadingDraftScreenshots,
@@ -472,6 +520,7 @@ export function useTradeFormController({
     setChecklistSelections,
     isSaveBlocked:
       accounts.length === 0
+      || !form.accountId
       || derivedResult === null
       || derivedDirection === null
       || parsedTakeProfit === null
@@ -525,7 +574,7 @@ export function TradeCoreFields({
 
         <FieldContainer>
           <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
-          <Input type="date" value={form.date} onChange={(event) => updateField("date", event.target.value)} />
+          <GlobalDateSelector value={form.date} onChange={(value) => updateField("date", value)} />
         </FieldContainer>
 
         <FieldContainer>
@@ -894,6 +943,7 @@ type TradeActionsBarProps = {
   isUploadingDraftScreenshots: boolean;
   isDisabled: boolean;
   saveLabel: string;
+  saveHint?: string | null;
   className?: string;
 };
 
@@ -904,20 +954,24 @@ export function TradeActionsBar({
   isUploadingDraftScreenshots,
   isDisabled,
   saveLabel,
+  saveHint,
   className,
 }: TradeActionsBarProps) {
   return (
-    <div className={className ?? "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"}>
-      <Button className="w-full sm:w-auto" variant="outline" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button
-        onClick={() => void onSave()}
-        className="w-full sm:w-auto"
-        disabled={isSaving || isUploadingDraftScreenshots || isDisabled}
-      >
-        {isUploadingDraftScreenshots ? "Uploading screenshots..." : isSaving ? "Saving..." : saveLabel}
-      </Button>
+    <div className={cn("space-y-2", className)}>
+      {saveHint ? <p className="text-sm text-muted-foreground">{saveHint}</p> : null}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button className="w-full sm:w-auto" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => void onSave()}
+          className="w-full sm:w-auto"
+          disabled={isSaving || isUploadingDraftScreenshots || isDisabled}
+        >
+          {isUploadingDraftScreenshots ? "Uploading screenshots..." : isSaving ? "Saving..." : saveLabel}
+        </Button>
+      </div>
     </div>
   );
 }

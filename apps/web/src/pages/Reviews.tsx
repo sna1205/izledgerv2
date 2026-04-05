@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import { ArrowRight, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { GlobalDateSelector } from "@/components/GlobalDateSelector";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PageHeader, PageShell, SectionCard } from "@/layouts/PageShell";
 import { ProfitDisplay } from "@/features/trades/components/ProfitDisplay";
@@ -21,6 +22,7 @@ import { TradeReviewDialog } from "@/features/reviews/components/TradeReviewDial
 import { ReviewsSkeleton } from "@/components/skeletons/ReviewsSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -1046,7 +1048,10 @@ export default function Reviews() {
             <div className="grid gap-4">
               <div className="space-y-2">
                 <Label className="text-label">Review Date</Label>
-                <Input type="date" value={dailyForm.reviewDate} onChange={(event) => setDailyForm((current) => ({ ...current, reviewDate: event.target.value }))} />
+                <GlobalDateSelector
+                  value={dailyForm.reviewDate}
+                  onChange={(value) => setDailyForm((current) => ({ ...current, reviewDate: value }))}
+                />
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
@@ -1094,11 +1099,17 @@ export default function Reviews() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-label">Week Start</Label>
-                  <Input type="date" value={weeklyForm.weekStart} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekStart: event.target.value }))} />
+                  <GlobalDateSelector
+                    value={weeklyForm.weekStart}
+                    onChange={(value) => setWeeklyForm((current) => ({ ...current, weekStart: value }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-label">Week End</Label>
-                  <Input type="date" value={weeklyForm.weekEnd} onChange={(event) => setWeeklyForm((current) => ({ ...current, weekEnd: event.target.value }))} />
+                  <GlobalDateSelector
+                    value={weeklyForm.weekEnd}
+                    onChange={(value) => setWeeklyForm((current) => ({ ...current, weekEnd: value }))}
+                  />
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1135,13 +1146,17 @@ export default function Reviews() {
             </div>
           )}
 
-          <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => dailyWeeklyMutation.mutate()} disabled={dailyWeeklyMutation.isPending}>
-              {dailyWeeklyMutation.isPending ? "Saving..." : editingReview ? "Save Changes" : "Save Review"}
-            </Button>
+          <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+            <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[300px]">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => dailyWeeklyMutation.mutate()} disabled={dailyWeeklyMutation.isPending}>
+                  {dailyWeeklyMutation.isPending ? "Saving..." : editingReview ? "Save Changes" : "Save Review"}
+                </Button>
+              </div>
+            </FloatingActionPanel>
           </div>
         </DialogContent>
       </Dialog>

@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Setups from "@/pages/Setups";
 import NewSetup from "@/pages/NewSetup";
+import SetupDetail from "@/pages/SetupDetail";
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
@@ -17,9 +18,15 @@ vi.mock("@/features/auth/auth-context", () => ({
 
 const apiMocks = vi.hoisted(() => ({
   listSetups: vi.fn(),
+  listTrades: vi.fn(),
   createSetup: vi.fn(),
   updateSetup: vi.fn(),
   deleteSetup: vi.fn(),
+  createChecklistRule: vi.fn(),
+  updateChecklistRule: vi.fn(),
+  deleteChecklistRule: vi.fn(),
+  toggleChecklistRuleActive: vi.fn(),
+  reorderChecklistRules: vi.fn(),
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -31,6 +38,18 @@ vi.mock("@/services/api/setups", () => ({
   createSetup: apiMocks.createSetup,
   updateSetup: apiMocks.updateSetup,
   deleteSetup: apiMocks.deleteSetup,
+}));
+
+vi.mock("@/services/api/trades", () => ({
+  listTrades: apiMocks.listTrades,
+}));
+
+vi.mock("@/services/api/checklist-rules", () => ({
+  createChecklistRule: apiMocks.createChecklistRule,
+  updateChecklistRule: apiMocks.updateChecklistRule,
+  deleteChecklistRule: apiMocks.deleteChecklistRule,
+  toggleChecklistRuleActive: apiMocks.toggleChecklistRuleActive,
+  reorderChecklistRules: apiMocks.reorderChecklistRules,
 }));
 
 vi.mock("@/components/ui/sonner", () => ({
@@ -108,6 +127,8 @@ function renderPage() {
         <Routes>
           <Route path="/setups" element={<Setups />} />
           <Route path="/setups/new" element={<NewSetup />} />
+          <Route path="/setups/:id" element={<SetupDetail />} />
+          <Route path="/setups/:id/edit" element={<NewSetup />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -117,10 +138,47 @@ function renderPage() {
 beforeEach(() => {
   apiMocks.listSetups.mockReset();
   apiMocks.createSetup.mockReset();
+  apiMocks.listTrades.mockReset();
   apiMocks.updateSetup.mockReset();
   apiMocks.deleteSetup.mockReset();
+  apiMocks.createChecklistRule.mockReset();
+  apiMocks.updateChecklistRule.mockReset();
+  apiMocks.deleteChecklistRule.mockReset();
+  apiMocks.toggleChecklistRuleActive.mockReset();
+  apiMocks.reorderChecklistRules.mockReset();
   apiMocks.toast.success.mockReset();
   apiMocks.toast.error.mockReset();
+
+  apiMocks.createChecklistRule.mockResolvedValue({
+    rule: {
+      id: "rule-created",
+      title: "Wait for confirmation candle",
+      description: null,
+      isRequired: false,
+      isActive: true,
+      sortOrder: 0,
+      scopeType: "setup",
+      setupId: "setup-3",
+      accountId: null,
+      createdAt: "2026-03-03T10:05:00.000Z",
+      updatedAt: "2026-03-03T10:05:00.000Z",
+    },
+  });
+  apiMocks.updateChecklistRule.mockResolvedValue({ rule: null });
+  apiMocks.deleteChecklistRule.mockResolvedValue(undefined);
+  apiMocks.toggleChecklistRuleActive.mockResolvedValue({ rule: null });
+  apiMocks.reorderChecklistRules.mockResolvedValue({ items: [] });
+  apiMocks.listTrades.mockResolvedValue({
+    items: [],
+    pagination: {
+      page: 1,
+      pageSize: 8,
+      total: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+  });
 
   apiMocks.listSetups.mockResolvedValue({
     items: [
@@ -128,6 +186,24 @@ beforeEach(() => {
         id: "setup-1",
         name: "Breakout",
         description: "Retest entry",
+        entryLogic: "Wait for breakout and reclaim.",
+        confirmationLogic: "Accept only with displacement.",
+        invalidationLogic: "Cancel if price loses the reclaimed level.",
+        preTradeChecklist: [
+          {
+            id: "rule-1",
+            title: "Bias aligned",
+            description: null,
+            isRequired: true,
+            isActive: true,
+            sortOrder: 0,
+            scopeType: "setup",
+            setupId: "setup-1",
+            accountId: null,
+            createdAt: "2026-03-01T10:00:00.000Z",
+            updatedAt: "2026-03-01T10:00:00.000Z",
+          },
+        ],
         color: "#3B82F6",
         isArchived: false,
         tradeCount: 12,
@@ -138,6 +214,10 @@ beforeEach(() => {
         id: "setup-2",
         name: "Reversal",
         description: "Fade into liquidity",
+        entryLogic: "Look for exhaustion at external liquidity.",
+        confirmationLogic: "",
+        invalidationLogic: "",
+        preTradeChecklist: [],
         color: "#10B981",
         isArchived: false,
         tradeCount: 8,
@@ -175,9 +255,12 @@ describe("setups color flow", () => {
     await screen.findByText("Breakout");
     fireEvent.click(screen.getByRole("link", { name: "New Setup" }));
 
-    await screen.findByText("Live Preview");
+    await screen.findByLabelText("Setup Name");
     fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Setup" }));
 
     await waitFor(() => {
       expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
@@ -208,12 +291,103 @@ describe("setups color flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
 
     await screen.findByDisplayValue("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Save Strategy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update Setup" }));
 
     await waitFor(() => {
       expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", expect.objectContaining({
         color: "#3B82F6",
       }));
     });
+  });
+
+  it("shows fast-scanning card content and deletes from quick actions", async () => {
+    apiMocks.deleteSetup.mockResolvedValue(undefined);
+
+    renderPage();
+
+    await screen.findByText("Breakout");
+    expect(screen.getAllByText("Rules").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Breakout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete setup" }));
+
+    await waitFor(() => {
+      expect(apiMocks.deleteSetup).toHaveBeenCalledWith("setup-1");
+    });
+  });
+
+  it("keeps checklist items local until the first setup save, then persists them in sequence", async () => {
+    apiMocks.createSetup.mockResolvedValue({
+      setup: {
+        id: "setup-3",
+        name: "Momentum",
+        description: "",
+        entryLogic: "",
+        confirmationLogic: "",
+        invalidationLogic: "",
+        notes: "",
+        color: "#F59E0B",
+        isArchived: false,
+        preTradeChecklist: [],
+        tradeCount: 0,
+        createdAt: "2026-03-03T10:00:00.000Z",
+        updatedAt: "2026-03-03T10:00:00.000Z",
+      },
+    });
+
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("link", { name: "New Setup" }));
+
+    await screen.findByLabelText("Setup Name");
+    fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: /Checklist/ }));
+
+    await screen.findByLabelText("Add a pre-trade rule");
+    fireEvent.change(screen.getByLabelText("Add a pre-trade rule"), { target: { value: "Wait for confirmation candle" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(apiMocks.createChecklistRule).not.toHaveBeenCalled();
+    expect(apiMocks.reorderChecklistRules).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Setup" }));
+
+    await waitFor(() => {
+      expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
+      expect(apiMocks.createChecklistRule).toHaveBeenCalledTimes(1);
+      expect(apiMocks.reorderChecklistRules).toHaveBeenCalledWith(["rule-created"]);
+    });
+
+    expect(apiMocks.createChecklistRule).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Wait for confirmation candle",
+      setupId: "setup-3",
+    }));
+    expect(apiMocks.createSetup.mock.invocationCallOrder[0]).toBeLessThan(apiMocks.createChecklistRule.mock.invocationCallOrder[0]);
+  });
+
+  it("navigates to the wizard edit route from the list", async () => {
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
+
+    await screen.findByText("Edit Setup");
+    expect(screen.getByRole("button", { name: /Update Setup/i })).toBeInTheDocument();
+  });
+
+  it("opens the setup detail page when the setup card is clicked", async () => {
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("link", { name: "Open Breakout" }));
+
+    expect(await screen.findByRole("heading", { name: "Breakout" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Use Setup/i })).toBeInTheDocument();
   });
 });

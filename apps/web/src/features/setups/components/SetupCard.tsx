@@ -1,5 +1,5 @@
+import { Link } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
-import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
 import type { SetupListItem } from "@/services/api/setups";
 import { hexToRgb } from "@/utils/badge-colors";
@@ -9,16 +9,9 @@ import { normalizeSetupColor } from "@/types";
 
 const FALLBACK_SETUP_COLOR = "#10B981";
 
-const descriptionClampStyle = {
+const clampStyle = {
   display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical" as const,
-  overflow: "hidden",
-};
-
-const ruleClampStyle = {
-  display: "-webkit-box",
-  WebkitLineClamp: 3,
+  WebkitLineClamp: 1,
   WebkitBoxOrient: "vertical" as const,
   overflow: "hidden",
 };
@@ -27,21 +20,8 @@ function resolveDisplayColor(color: string | null | undefined) {
   return normalizeSetupColor(color) ?? FALLBACK_SETUP_COLOR;
 }
 
-function buildRuleGroups(setup: SetupListItem) {
-  return [
-    {
-      label: "Entry",
-      value: setup.entryLogic?.trim() ?? "",
-    },
-    {
-      label: "Confirmation",
-      value: setup.confirmationLogic?.trim() ?? "",
-    },
-    {
-      label: "Invalidation",
-      value: setup.invalidationLogic?.trim() ?? "",
-    },
-  ].filter((item) => item.value.length > 0);
+function getRuleCount(setup: SetupListItem) {
+  return [setup.entryLogic, setup.confirmationLogic, setup.invalidationLogic].filter((item) => item?.trim()).length;
 }
 
 export function SetupCard({
@@ -57,99 +37,87 @@ export function SetupCard({
 }) {
   const accentColor = resolveDisplayColor(setup.color);
   const accentRgb = hexToRgb(accentColor);
-  const ruleGroups = buildRuleGroups(setup);
+  const summary = setup.description.trim() || "No summary yet.";
+  const ruleCount = getRuleCount(setup);
   const tradeCount = setup.tradeCount ?? 0;
 
   return (
     <section
       className={cn(
-        "group relative overflow-hidden rounded-[30px] border border-border/70 bg-card/90 p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-border hover:shadow-lg",
-        setup.isArchived && "bg-card/75",
+        "group relative cursor-pointer overflow-hidden rounded-[30px] border border-border/60 bg-card/90 p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-border hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className,
       )}
       style={accentRgb ? {
-        backgroundImage: `radial-gradient(circle at top right, rgba(${accentRgb.red}, ${accentRgb.green}, ${accentRgb.blue}, 0.16), transparent 42%)`,
+        backgroundImage: `radial-gradient(circle at top right, rgba(${accentRgb.red}, ${accentRgb.green}, ${accentRgb.blue}, 0.14), transparent 40%)`,
       } : undefined}
     >
-      <div
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-1.5"
-        style={{ backgroundColor: accentColor }}
+      <Link
+        to={`/setups/${setup.id}`}
+        aria-label={`Open ${setup.name}`}
+        className="absolute inset-0 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       />
 
-      <div className="flex h-full flex-col gap-5 pl-2">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <DataBadge tone={setup.isArchived ? "warning" : "primary"}>
-                {setup.isArchived ? "Archived" : "Active"}
-              </DataBadge>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">{setup.name}</h2>
-              <p className="text-sm leading-6 text-muted-foreground" style={descriptionClampStyle}>
-                {setup.description.trim() || "No summary yet."}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-            <Button variant="outline" size="icon" aria-label={`Edit ${setup.name}`} onClick={() => onEdit(setup)}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={`Delete ${setup.name}`}
-              className="text-destructive hover:text-destructive"
-              onClick={() => onDelete(setup)}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-3">
+          <div className="flex items-center gap-3">
+            <span
+              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs font-medium text-foreground"
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="rounded-[26px] border border-border/60 bg-background/65 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-label">Rules</p>
-            <span className="text-xs text-muted-foreground">
-              {ruleGroups.length > 0 ? `${ruleGroups.length} sections` : "Add rules"}
+              <span
+                aria-hidden="true"
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: accentColor }}
+              />
+              {setup.isArchived ? `Archived · ${accentColor}` : accentColor}
             </span>
           </div>
 
-          {ruleGroups.length > 0 ? (
-            <div className="space-y-3">
-              {ruleGroups.map((group) => (
-                <div key={group.label} className="rounded-[20px] border border-border/50 bg-card/70 px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{group.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-foreground/90" style={ruleClampStyle}>
-                    {group.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm leading-6 text-muted-foreground">
-              No rules yet.
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">{setup.name}</h2>
+            <p className="text-sm leading-6 text-muted-foreground" style={clampStyle}>
+              {summary}
             </p>
-          )}
+          </div>
         </div>
 
-        <div className="mt-auto flex items-end justify-between gap-4 border-t border-border/60 pt-4">
-          <div className="space-y-1">
-            <p className="text-label">Usage</p>
-            <p className="text-sm font-medium text-foreground">
-              {formatNumberDisplay(tradeCount)} {tradeCount === 1 ? "trade tagged" : "trades tagged"}
-            </p>
-          </div>
+        <div className="relative z-10 flex items-center gap-1 rounded-full border border-border/60 bg-background/90 p-1 shadow-sm opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Edit ${setup.name}`}
+            className="h-9 rounded-full px-3 hover:bg-foreground/[0.06]"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(setup);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Delete ${setup.name}`}
+            className="h-9 rounded-full px-3 text-muted-foreground hover:bg-destructive/8 hover:text-destructive"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(setup);
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </Button>
+        </div>
+      </div>
 
-          <div className="text-right">
-            <p className="text-label">Updated</p>
-            <p className="text-sm text-muted-foreground">
-              {new Date(setup.updatedAt).toLocaleDateString("en-US")}
-            </p>
-          </div>
+      <div className="mt-8 flex items-center justify-between gap-3 border-t border-border/50 pt-4 text-sm">
+        <div>
+          <p className="text-muted-foreground">Rules</p>
+          <p className="mt-1 font-semibold text-foreground">{ruleCount}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-muted-foreground">Usage</p>
+          <p className="mt-1 font-semibold text-foreground">{formatNumberDisplay(tradeCount)}</p>
         </div>
       </div>
     </section>

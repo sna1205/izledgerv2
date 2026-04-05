@@ -1,10 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Landmark } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { TradeFormSkeleton } from "@/components/skeletons/TradeFormSkeleton";
+import { Button } from "@/components/ui/button";
 import { TradeFormPage } from "@/features/trades/components/TradeFormPage";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
+import { PageShell } from "@/layouts/PageShell";
 import { ApiError } from "@/services/api/client";
 import { listAccounts } from "@/services/api/accounts";
 import { listSetups } from "@/services/api/setups";
@@ -28,7 +32,9 @@ function invalidateJournalQueries(queryClient: ReturnType<typeof useQueryClient>
 export default function NewTrade() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+  const prefillSetupId = (location.state as { prefillSetupId?: string } | null)?.prefillSetupId ?? null;
 
   const accountsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "accounts", "active"),
@@ -75,6 +81,23 @@ export default function NewTrade() {
     return <TradeFormSkeleton />;
   }
 
+  if ((accountsQuery.data ?? []).length === 0) {
+    return (
+      <PageShell size="wide">
+        <EmptyState
+          icon={Landmark}
+          title="Add your first account before logging a trade"
+          description="Trades need an account so IZLedger can track currency, performance, and analytics correctly."
+          action={(
+            <Button onClick={() => navigate("/accounts")}>
+              Add Account
+            </Button>
+          )}
+        />
+      </PageShell>
+    );
+  }
+
   if (hasError) {
     const errorState = getPageErrorState(pageError, {
       unavailableTitle: "Trade form unavailable",
@@ -108,6 +131,7 @@ export default function NewTrade() {
       onComplete={() => navigate("/trades")}
       accounts={accountsQuery.data ?? []}
       setups={setupsQuery.data ?? []}
+      initialSetupId={prefillSetupId}
       isSaving={saveTradeMutation.isPending}
       onScreenshotsChange={(trade) => {
         void syncTradeScreenshotQueryData(queryClient, user.id, trade);

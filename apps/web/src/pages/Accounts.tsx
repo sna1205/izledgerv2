@@ -10,12 +10,12 @@ import { StatCard } from "@/components/StatCard";
 import { DataBadge } from "@/components/DataBadge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -116,6 +116,7 @@ export default function Accounts() {
   const [open, setOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [form, setForm] = useState<AccountFormState>(emptyForm);
   const [formError, setFormError] = useState("");
 
@@ -197,10 +198,12 @@ export default function Accounts() {
     onSuccess: async () => {
       await invalidateAccountData();
       toast.success("Account deleted.");
+      setDeleteError("");
       setDeleteTarget(null);
     },
     onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not delete the account right now.";
+      const message = getAccountApiErrorMessage(error, "Could not delete the account right now.");
+      setDeleteError(message);
       toast.error(message);
     },
   });
@@ -210,6 +213,11 @@ export default function Accounts() {
     onSuccess: async (_result, variables) => {
       await invalidateAccountData();
       toast.success(variables.isArchived ? "Account archived." : "Account restored.");
+      setDeleteError("");
+
+      if (variables.isArchived && deleteTarget?.id === variables.accountId) {
+        setDeleteTarget(null);
+      }
     },
     onError: (error) => {
       const message = getAccountApiErrorMessage(error, "Could not update the account right now.");
@@ -259,6 +267,11 @@ export default function Accounts() {
     setForm(emptyForm);
     setFormError("");
     setOpen(true);
+  };
+
+  const openDeleteDialog = (account: Account) => {
+    setDeleteTarget(account);
+    setDeleteError("");
   };
 
   const openEditModal = (account: Account) => {
@@ -401,7 +414,7 @@ export default function Accounts() {
                         <Pencil className="h-4 w-4" />
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(account)}>
+                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => openDeleteDialog(account)}>
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
@@ -434,11 +447,20 @@ export default function Accounts() {
                   </div>
 
                   <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-muted-foreground">
-                      {account.isArchived
-                        ? "Archived accounts are hidden from active account selectors."
-                        : `Created ${new Date(account.createdAt).toLocaleDateString("en-US")}`}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {account.isArchived
+                          ? "Archived accounts are hidden from active account selectors."
+                          : `Created ${new Date(account.createdAt).toLocaleDateString("en-US")}`}
+                      </p>
+                      {!account.isArchived ? (
+                        <p className="text-xs text-muted-foreground">
+                          {(primaryPerformance?.trades ?? 0) > 0
+                            ? "This account already has journal history. Archive it when you retire it. Delete is best for unused accounts."
+                            : "Delete is best for unused accounts. Archive keeps the account out of selectors while preserving history if you need it later."}
+                        </p>
+                      ) : null}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {!account.isArchived ? (
                         <>
@@ -565,32 +587,69 @@ export default function Accounts() {
             </div>
 
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          </div>
 
-            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveAccount} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : editingAccount ? "Save Changes" : "Create Account"}
-              </Button>
-            </div>
+          <div className="sticky bottom-0 z-10 flex justify-end pb-1 pt-4">
+            <FloatingActionPanel className="w-full sm:w-auto sm:min-w-[280px]">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveAccount} disabled={saveMutation.isPending}>
+                  {saveMutation.isPending ? "Saving..." : editingAccount ? "Save Changes" : "Create Account"}
+                </Button>
+              </div>
+            </FloatingActionPanel>
           </div>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(openState) => !openState && setDeleteTarget(null)}>
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(openState) => {
+          if (!openState) {
+            setDeleteTarget(null);
+            setDeleteError("");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Account</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the account only when no trades still reference it. If trade history exists, archive the account instead.
+              {deleteTarget
+                ? `Delete "${deleteTarget.name}" only if it has never been used by trades or checklist rules. If you want to keep journal history but remove it from active use, archive it instead.`
+                : "Delete this account only if it has never been used by trades or checklist rules."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError ? (
+            <p className="text-sm text-destructive">{deleteError}</p>
+          ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)} disabled={deleteMutation.isPending}>
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={deleteMutation.isPending || archiveMutation.isPending}>Cancel</AlertDialogCancel>
+            {!deleteTarget?.isArchived ? (
+              <Button
+                variant="outline"
+                onClick={() => deleteTarget && archiveMutation.mutate({ accountId: deleteTarget.id, isArchived: true })}
+                disabled={deleteMutation.isPending || archiveMutation.isPending}
+              >
+                {archiveMutation.isPending ? "Archiving..." : "Archive Instead"}
+              </Button>
+            ) : null}
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!deleteTarget) {
+                  return;
+                }
+
+                setDeleteError("");
+                deleteMutation.mutate(deleteTarget.id);
+              }}
+              disabled={deleteMutation.isPending || archiveMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

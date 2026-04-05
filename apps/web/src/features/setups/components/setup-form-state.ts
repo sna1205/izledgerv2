@@ -11,6 +11,13 @@ export type StrategyFormState = {
   isArchived: boolean;
 };
 
+export type SetupRuleType = "entry" | "confirmation" | "invalidation";
+
+export type SetupRuleDraft = {
+  type: SetupRuleType;
+  value: string;
+};
+
 export type SetupStrategyPayload = {
   name: string;
   description: string;
@@ -60,4 +67,44 @@ export function toStrategyPayload(form: StrategyFormState): SetupStrategyPayload
     color: resolveDisplayColor(form.color),
     isArchived: form.isArchived,
   };
+}
+
+export function buildRuleDrafts(form: StrategyFormState): SetupRuleDraft[] {
+  return [
+    form.entryLogic.trim() ? { type: "entry", value: form.entryLogic } : null,
+    form.confirmationLogic.trim() ? { type: "confirmation", value: form.confirmationLogic } : null,
+    form.invalidationLogic.trim() ? { type: "invalidation", value: form.invalidationLogic } : null,
+  ].filter((item): item is SetupRuleDraft => Boolean(item));
+}
+
+export function getUnusedRuleTypes(form: StrategyFormState) {
+  const usedTypes = new Set(buildRuleDrafts(form).map((rule) => rule.type));
+
+  return (["entry", "confirmation", "invalidation"] as const).filter((type) => !usedTypes.has(type));
+}
+
+export function readRuleValue(form: StrategyFormState, type: SetupRuleType) {
+  switch (type) {
+    case "entry":
+      return form.entryLogic;
+    case "confirmation":
+      return form.confirmationLogic;
+    case "invalidation":
+      return form.invalidationLogic;
+  }
+}
+
+export function writeRuleValue(
+  form: StrategyFormState,
+  type: SetupRuleType,
+  value: string,
+): StrategyFormState {
+  switch (type) {
+    case "entry":
+      return { ...form, entryLogic: value };
+    case "confirmation":
+      return { ...form, confirmationLogic: value };
+    case "invalidation":
+      return { ...form, invalidationLogic: value };
+  }
 }

@@ -171,7 +171,9 @@ export default function Trades() {
   const trades = visibleTrades ?? EMPTY_TRADES;
   const totalTradePages = tradesQuery.data?.pagination.totalPages ?? 1;
   const totalTrades = tradesQuery.data?.pagination.total ?? 0;
+  const hasAccounts = (accounts?.length ?? 0) > 0;
   const hasActiveFilters = resolvedAccountFilter !== "all" || sessionFilter !== "all" || setupFilter !== "all" || emotionFilter !== "all";
+  const deleteTradeTarget = deleteId ? trades.find((trade) => trade.id === deleteId) ?? null : null;
 
   const tradeReviewQueries = useQueries({
     queries: (visibleTrades ?? []).map((trade) => ({
@@ -307,9 +309,9 @@ export default function Trades() {
       <PageHeader
         title="Trades"
         actions={(
-          <Button onClick={() => navigate("/trades/new")}>
+          <Button onClick={() => navigate(hasAccounts ? "/trades/new" : "/accounts")}>
             <Plus className="h-4 w-4" />
-            New Trade
+            {hasAccounts ? "New Trade" : "Add Account"}
           </Button>
         )}
       />
@@ -419,14 +421,16 @@ export default function Trades() {
             {totalTrades === 0 ? (
               <EmptyState
                 icon={LayoutList}
-                title={hasActiveFilters ? "No trades match these filters" : "No trades logged yet"}
+                title={hasActiveFilters ? "No trades match these filters" : hasAccounts ? "No trades logged yet" : "Add an account first"}
                 description={hasActiveFilters
                   ? "Try wider filters."
-                  : "Add a trade to get started."}
+                  : hasAccounts
+                    ? "Add your first trade to get started."
+                    : "Create an account before you log your first trade."}
                 action={!hasActiveFilters ? (
-                  <Button onClick={() => navigate("/trades/new")}>
+                  <Button onClick={() => navigate(hasAccounts ? "/trades/new" : "/accounts")}>
                     <Plus className="h-4 w-4" />
-                    Add trade
+                    {hasAccounts ? "Add trade" : "Add account"}
                   </Button>
                 ) : null}
               />
@@ -545,10 +549,18 @@ export default function Trades() {
             {totalTrades === 0 ? (
               <EmptyState
                 icon={Images}
-                title={hasActiveFilters ? "No trades match these filters" : "Screenbook is empty"}
+                title={hasActiveFilters ? "No trades match these filters" : hasAccounts ? "Screenbook is empty" : "Add an account first"}
                 description={hasActiveFilters
                   ? "Try wider filters."
-                  : "Add screenshots to trades."}
+                  : hasAccounts
+                    ? "Add trades with screenshots to build your screenbook."
+                    : "Create an account before you start saving trade screenshots."}
+                action={!hasActiveFilters ? (
+                  <Button onClick={() => navigate(hasAccounts ? "/trades/new" : "/accounts")}>
+                    <Plus className="h-4 w-4" />
+                    {hasAccounts ? "Add trade" : "Add account"}
+                  </Button>
+                ) : null}
               />
             ) : (
               <SectionCard>
@@ -675,13 +687,19 @@ export default function Trades() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Trade</AlertDialogTitle>
             <AlertDialogDescription>
-              This cannot be undone. Linked reviews stay in Reviews.
+              {deleteTradeTarget
+                ? `Delete ${deleteTradeTarget.pair} from ${formatTradeDate(deleteTradeTarget.date)}? This permanently removes the trade from your journal. Linked reviews stay in Reviews so your notes are preserved.`
+                : "This permanently removes the trade from your journal. Linked reviews stay in Reviews so your notes are preserved."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && deleteTradeMutation.mutate(deleteId)} disabled={deleteTradeMutation.isPending}>
-              {deleteTradeMutation.isPending ? "Deleting..." : "Delete"}
+            <AlertDialogAction
+              onClick={() => deleteId && deleteTradeMutation.mutate(deleteId)}
+              disabled={deleteTradeMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteTradeMutation.isPending ? "Deleting..." : "Delete Trade"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

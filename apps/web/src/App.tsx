@@ -32,6 +32,7 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Setups = lazy(() => import("./pages/Setups"));
 const NewSetup = lazy(() => import("./pages/NewSetup"));
+const SetupDetail = lazy(() => import("./pages/SetupDetail"));
 const Reviews = lazy(() => import("./pages/Reviews"));
 const LotCalculator = lazy(() => import("./pages/LotCalculator"));
 const Login = lazy(() => import("./pages/Login"));
@@ -79,7 +80,7 @@ function getProtectedBootFallback(pathname: string) {
   }
 
   if (pathname.startsWith("/setups")) {
-    if (pathname === "/setups/new") {
+    if (pathname === "/setups/new" || pathname.startsWith("/setups/")) {
       return {
         pageTitleWidth: "w-24",
         content: <SetupWorkspaceSkeleton />,
@@ -160,6 +161,8 @@ function AppRoutes() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
             <Route path="/setups/new" element={<NewSetup />} />
+            <Route path="/setups/:id" element={<SetupDetail />} />
+            <Route path="/setups/:id/edit" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/new" element={<NewTrade />} />

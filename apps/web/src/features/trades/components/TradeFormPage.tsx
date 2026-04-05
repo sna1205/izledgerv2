@@ -1,4 +1,5 @@
 import { PageHeader, PageShell } from "@/layouts/PageShell";
+import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
 import type { Account, SetupDefinition, Trade } from "@/types";
 import {
   TradeActionsBar,
@@ -18,6 +19,7 @@ interface TradeFormPageProps {
   onComplete: (trade: Trade | null) => void;
   accounts: Account[];
   setups: SetupDefinition[];
+  initialSetupId?: string | null;
   editTrade?: Trade | null;
   isSaving?: boolean;
   onScreenshotsChange?: (trade: Trade) => void;
@@ -29,6 +31,7 @@ export function TradeFormPage({
   onComplete,
   accounts,
   setups,
+  initialSetupId = null,
   editTrade,
   isSaving = false,
   onScreenshotsChange,
@@ -39,26 +42,15 @@ export function TradeFormPage({
     editTrade,
     accounts,
     setups,
+    initialSetupId,
     onScreenshotsChange,
     onComplete,
   });
 
   return (
     <PageShell size="wide">
-      <PageHeader
-        title={editTrade ? "Edit Trade" : "New Trade"}
-        actions={(
-          <TradeActionsBar
-            onCancel={onCancel}
-            onSave={controller.handleSave}
-            isSaving={isSaving}
-            isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
-            isDisabled={controller.isSaveBlocked}
-            saveLabel={editTrade ? "Update Trade" : "Save"}
-          />
-        )}
-      />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <PageHeader title={editTrade ? "Edit Trade" : "New Trade"} />
+      <div className="grid gap-6 pb-28 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <TradeCoreFields
             form={controller.form}
@@ -116,6 +108,20 @@ export function TradeFormPage({
             setChecklistSelections={controller.setChecklistSelections}
           />
         </div>
+      </div>
+
+      <div className="fixed bottom-4 right-4 z-40 w-[calc(100vw-2rem)] sm:w-auto">
+        <FloatingActionPanel className="ml-auto w-full sm:min-w-[320px] sm:max-w-[420px]">
+          <TradeActionsBar
+            onCancel={onCancel}
+            onSave={controller.handleSave}
+            isSaving={isSaving}
+            isUploadingDraftScreenshots={controller.isUploadingDraftScreenshots}
+            isDisabled={controller.isSaveBlocked}
+            saveLabel={editTrade ? "Update Trade" : "Save Trade"}
+            saveHint={controller.saveBlockReason}
+          />
+        </FloatingActionPanel>
       </div>
     </PageShell>
   );
