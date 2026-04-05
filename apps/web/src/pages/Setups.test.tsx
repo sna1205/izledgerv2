@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Setups from "@/pages/Setups";
 import NewSetup from "@/pages/NewSetup";
+import SetupDetail from "@/pages/SetupDetail";
 
 vi.mock("@/features/auth/auth-context", () => ({
   useAuth: () => ({
@@ -17,6 +18,7 @@ vi.mock("@/features/auth/auth-context", () => ({
 
 const apiMocks = vi.hoisted(() => ({
   listSetups: vi.fn(),
+  listTrades: vi.fn(),
   createSetup: vi.fn(),
   updateSetup: vi.fn(),
   deleteSetup: vi.fn(),
@@ -36,6 +38,10 @@ vi.mock("@/services/api/setups", () => ({
   createSetup: apiMocks.createSetup,
   updateSetup: apiMocks.updateSetup,
   deleteSetup: apiMocks.deleteSetup,
+}));
+
+vi.mock("@/services/api/trades", () => ({
+  listTrades: apiMocks.listTrades,
 }));
 
 vi.mock("@/services/api/checklist-rules", () => ({
@@ -121,7 +127,7 @@ function renderPage() {
         <Routes>
           <Route path="/setups" element={<Setups />} />
           <Route path="/setups/new" element={<NewSetup />} />
-          <Route path="/setups/:id" element={<NewSetup />} />
+          <Route path="/setups/:id" element={<SetupDetail />} />
           <Route path="/setups/:id/edit" element={<NewSetup />} />
         </Routes>
       </MemoryRouter>
@@ -132,6 +138,7 @@ function renderPage() {
 beforeEach(() => {
   apiMocks.listSetups.mockReset();
   apiMocks.createSetup.mockReset();
+  apiMocks.listTrades.mockReset();
   apiMocks.updateSetup.mockReset();
   apiMocks.deleteSetup.mockReset();
   apiMocks.createChecklistRule.mockReset();
@@ -161,6 +168,17 @@ beforeEach(() => {
   apiMocks.deleteChecklistRule.mockResolvedValue(undefined);
   apiMocks.toggleChecklistRuleActive.mockResolvedValue({ rule: null });
   apiMocks.reorderChecklistRules.mockResolvedValue({ items: [] });
+  apiMocks.listTrades.mockResolvedValue({
+    items: [],
+    pagination: {
+      page: 1,
+      pageSize: 8,
+      total: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+  });
 
   apiMocks.listSetups.mockResolvedValue({
     items: [
@@ -361,5 +379,15 @@ describe("setups color flow", () => {
 
     await screen.findByText("Edit Setup");
     expect(screen.getByRole("button", { name: /Update Setup/i })).toBeInTheDocument();
+  });
+
+  it("opens the setup detail page when the setup card is clicked", async () => {
+    renderPage();
+
+    await screen.findByText("Breakout");
+    fireEvent.click(screen.getByRole("link", { name: "Open Breakout" }));
+
+    expect(await screen.findByRole("heading", { name: "Breakout" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Use Setup/i })).toBeInTheDocument();
   });
 });

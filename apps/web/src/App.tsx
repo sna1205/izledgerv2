@@ -32,6 +32,7 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Setups = lazy(() => import("./pages/Setups"));
 const NewSetup = lazy(() => import("./pages/NewSetup"));
+const SetupDetail = lazy(() => import("./pages/SetupDetail"));
 const Reviews = lazy(() => import("./pages/Reviews"));
 const LotCalculator = lazy(() => import("./pages/LotCalculator"));
 const Login = lazy(() => import("./pages/Login"));
@@ -160,7 +161,7 @@ function AppRoutes() {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/setups" element={<Setups />} />
             <Route path="/setups/new" element={<NewSetup />} />
-            <Route path="/setups/:id" element={<NewSetup />} />
+            <Route path="/setups/:id" element={<SetupDetail />} />
             <Route path="/setups/:id/edit" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/trades" element={<Trades />} />

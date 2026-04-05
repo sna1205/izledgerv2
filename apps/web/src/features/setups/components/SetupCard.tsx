@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SetupListItem } from "@/services/api/setups";
@@ -42,16 +43,6 @@ export function SetupCard({
 
   return (
     <section
-      role="link"
-      tabIndex={0}
-      aria-label={`Open ${setup.name}`}
-      onClick={() => onEdit(setup)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onEdit(setup);
-        }
-      }}
       className={cn(
         "group relative cursor-pointer overflow-hidden rounded-[30px] border border-border/60 bg-card/90 p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-border hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className,
@@ -60,6 +51,12 @@ export function SetupCard({
         backgroundImage: `radial-gradient(circle at top right, rgba(${accentRgb.red}, ${accentRgb.green}, ${accentRgb.blue}, 0.14), transparent 40%)`,
       } : undefined}
     >
+      <Link
+        to={`/setups/${setup.id}`}
+        aria-label={`Open ${setup.name}`}
+        className="absolute inset-0 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      />
+
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-3">
           <div className="flex items-center gap-3">
@@ -83,7 +80,7 @@ export function SetupCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/90 p-1 shadow-sm opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+        <div className="relative z-10 flex items-center gap-1 rounded-full border border-border/60 bg-background/90 p-1 shadow-sm opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
           <Button
             variant="ghost"
             size="sm"
