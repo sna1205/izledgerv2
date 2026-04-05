@@ -6,32 +6,39 @@ import { DataBadge } from "@/components/DataBadge";
 import { PageErrorState } from "@/components/PageErrorState";
 import { SetupWorkspaceSkeleton } from "@/components/skeletons/SetupWorkspaceSkeleton";
 import { Button } from "@/components/ui/button";
-import { FloatingActionPanel } from "@/components/ui/floating-action-panel";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/sonner";
 import { PageHeader, PageShell } from "@/layouts/PageShell";
 import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
-import { SetupBuilderChecklistStep } from "@/features/setups/components/SetupBuilderChecklistStep";
+import { SetupBasicInfoStep } from "@/features/setups/components/SetupBasicInfoStep";
 import {
   buildChecklistDraftItems,
+  SetupPreTradeSection,
   type SetupChecklistDraftItem,
 } from "@/features/setups/components/SetupPreTradeSection";
 import { SetupReviewStep } from "@/features/setups/components/SetupReviewStep";
-import { SetupBuilderSidebar, type SetupBuilderStepId } from "@/features/setups/components/SetupBuilderSidebar";
-import { SetupBuilderStrategyStep } from "@/features/setups/components/SetupBuilderStrategyStep";
-import { SetupBuilderSummaryRail } from "@/features/setups/components/SetupBuilderSummaryRail";
+import { SetupRulesStep } from "@/features/setups/components/SetupRulesStep";
 import {
+  SetupWizardStepper,
+  type SetupWizardStep,
+  type SetupWizardStepId,
+} from "@/features/setups/components/SetupWizardStepper";
+import {
+  buildRuleDrafts,
   buildStrategyForm,
   buildUniqueFormColor,
   resolveDisplayColor,
+  readRuleValue,
   toStrategyPayload,
+  writeRuleValue,
+  type SetupRuleType,
   type SetupStrategyPayload,
   type StrategyFormState,
 } from "@/features/setups/components/setup-form-state";
 import { ApiError } from "@/services/api/client";
 import { createChecklistRule, reorderChecklistRules } from "@/services/api/checklist-rules";
 import { createSetup, listSetups, updateSetup } from "@/services/api/setups";
-import { buildDuplicateSetupName, sanitizeChecklistItemsForDuplication } from "@/features/setups/setup-duplication";
 import { SETUP_TEMPLATE_PRESETS } from "@/features/setups/setup-presets";
 import { privateQueryKey } from "@/services/query-client";
 import { getPageErrorState } from "@/utils/page-errors";
@@ -46,14 +53,14 @@ type BuilderDraftMetadata = {
 };
 
 type BuilderDraftState = {
-  step: SetupBuilderStepId;
+  step: SetupWizardStepId;
   form: StrategyFormState;
   checklistItems: SetupChecklistDraftItem[];
   metadata: BuilderDraftMetadata;
 };
 
 type StoredBuilderDraft = {
-  step: SetupBuilderStepId;
+  step: SetupWizardStepId;
   form: StrategyFormState;
   checklistItems: SetupChecklistDraftItem[];
   metadata?: Partial<BuilderDraftMetadata>;
@@ -75,7 +82,7 @@ function createDraftState(
   metadataOverrides: Partial<BuilderDraftMetadata> = {},
 ): BuilderDraftState {
   return {
-    step: "strategy",
+    step: "basic",
     form: EMPTY_STRATEGY_FORM,
     checklistItems: [],
     metadata: {
@@ -138,6 +145,32 @@ function buildDraftSignature(form: StrategyFormState, checklistItems: SetupCheck
   });
 }
 
+const WIZARD_STEPS: SetupWizardStep[] = [
+  { id: "basic", label: "Basic Info" },
+  { id: "rules", label: "Rules" },
+  { id: "checklist", label: "Checklist" },
+  { id: "review", label: "Review" },
+];
+
+const STEP_DETAILS: Record<SetupWizardStepId, { title: string; subtitle?: string }> = {
+  basic: {
+    title: "Basic Info",
+    subtitle: "Name the setup and keep the core context together.",
+  },
+  rules: {
+    title: "Rules",
+    subtitle: "Keep the trigger, confirmation, and invalidation easy to scan.",
+  },
+  checklist: {
+    title: "Checklist",
+    subtitle: "Build a compact pre-trade list that is quick to review.",
+  },
+  review: {
+    title: "Review",
+    subtitle: "Check the final structure before saving.",
+  },
+};
+
 export function SetupCreatePage() {
   const navigate = useNavigate();
   const { id: routeSetupId } = useParams<{ id?: string }>();
@@ -150,6 +183,7 @@ export function SetupCreatePage() {
   const [persistedSignature, setPersistedSignature] = useState("");
   const [isHydratingDraft, setIsHydratingDraft] = useState(true);
   const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
+  const [visibleRuleTypes, setVisibleRuleTypes] = useState<SetupRuleType[]>([]);
   const storageKey = getDraftStorageKey(routeSetupId);
 
   const setupsQuery = useQuery({
@@ -196,49 +230,12 @@ export function SetupCreatePage() {
     },
   });
 
-  const duplicateMutation = useMutation({
-    mutationFn: async () => {
-      const duplicateName = buildDuplicateSetupName(draft.form.name, setups.map((setup) => setup.name));
-      const duplicatedSetup = await createSetup({
-        ...strategyPayload,
-        name: duplicateName,
-        isArchived: false,
-      });
-      const duplicatedChecklistItems = sanitizeChecklistItemsForDuplication(draft.checklistItems);
-
-      if (duplicatedChecklistItems.length > 0) {
-        const createdRules = await Promise.all(
-          duplicatedChecklistItems.map((item) => createChecklistRule({
-            title: item.title,
-            description: item.description,
-            isRequired: item.isRequired,
-            isActive: item.isActive,
-            setupId: duplicatedSetup.setup.id,
-            accountId: null,
-          })),
-        );
-
-        await reorderChecklistRules(createdRules.map((result) => result.rule.id));
-      }
-
-      return duplicatedSetup.setup;
-    },
-    onSuccess: async (setup) => {
-      await invalidateData();
-      toast.success("Setup duplicated.");
-      navigate(`/setups/${setup.id}`);
-    },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not duplicate the setup right now.";
-      toast.error(message);
-    },
-  });
-
   useEffect(() => {
     setHydratedKey(null);
     setCurrentSetup(null);
     setIsHydratingDraft(true);
     setHasAttemptedSave(false);
+    setVisibleRuleTypes([]);
     setDraft(createDraftState());
     setPersistedSignature("");
   }, [routeSetupId, storageKey]);
@@ -263,7 +260,7 @@ export function SetupCreatePage() {
       setCurrentSetup(matchedSetup);
       setPersistedSignature(buildDraftSignature(baseForm, baseChecklistItems));
       setDraft(createDraftState({
-        step: cachedDraft?.step ?? "strategy",
+        step: cachedDraft?.step ?? "basic",
         form: cachedDraft?.form ?? baseForm,
         checklistItems: cachedDraft?.checklistItems ?? baseChecklistItems,
       }, {
@@ -280,7 +277,7 @@ export function SetupCreatePage() {
     const baseForm = cachedDraft?.form ?? buildStrategyForm(null, setups);
 
     setDraft(createDraftState({
-      step: cachedDraft?.step ?? "strategy",
+      step: cachedDraft?.step ?? "basic",
       form: baseForm,
       checklistItems: cachedDraft?.checklistItems ?? [],
     }, {
@@ -326,9 +323,6 @@ export function SetupCreatePage() {
 
   const previewColor = resolveDisplayColor(draft.form.color);
   const formColorLabel = normalizeSetupColor(draft.form.color) ?? previewColor;
-  const checklistCount = draft.checklistItems.length;
-  const activeChecklistCount = draft.checklistItems.filter((rule) => rule.isActive).length;
-  const requiredChecklistCount = draft.checklistItems.filter((rule) => rule.isRequired).length;
   const saveStateLabel = saveMutation.isPending
     ? "Saving setup..."
     : draft.metadata.dirty
@@ -347,6 +341,22 @@ export function SetupCreatePage() {
     checklistItems: draft.checklistItems,
     dirty: draft.metadata.dirty,
   }), [draft.checklistItems, draft.form, draft.metadata.dirty, draft.step]);
+
+  useEffect(() => {
+    const populatedTypes = buildRuleDrafts(draft.form).map((rule) => rule.type);
+
+    setVisibleRuleTypes((current) => {
+      const merged = [...current];
+
+      for (const type of populatedTypes) {
+        if (!merged.includes(type)) {
+          merged.push(type);
+        }
+      }
+
+      return merged;
+    });
+  }, [draft.form]);
 
   useEffect(() => {
     if (hydratedKey !== storageKey || isHydratingDraft) {
@@ -444,7 +454,7 @@ export function SetupCreatePage() {
     if (!isNameValid) {
       if (intent !== "autosave") {
         setHasAttemptedSave(true);
-        setDraft((current) => ({ ...current, step: "strategy" }));
+        setDraft((current) => ({ ...current, step: "basic" }));
       }
       return null;
     }
@@ -463,7 +473,7 @@ export function SetupCreatePage() {
     const nextForm = buildStrategyForm(savedSetup, nextSetups);
     const savedAt = Date.now();
     const nextDraft = createDraftState({
-      step: !currentSetup && intent === "save" ? "pre-trade" : draft.step,
+      step: draft.step,
       form: nextForm,
       checklistItems: reconciledChecklistItems,
     }, {
@@ -482,13 +492,13 @@ export function SetupCreatePage() {
     window.localStorage.setItem(nextStorageKey, JSON.stringify(toStoredBuilderDraft(nextDraft)));
 
     if (!currentSetup && intent === "save") {
-      navigate(`/setups/${savedSetup.id}`, { replace: true });
-      toast.success("Strategy saved. You can add setup-specific pre-trade items now.");
+      navigate(`/setups/${savedSetup.id}/edit`, { replace: true });
+      toast.success("Setup created.");
       return savedSetup;
     }
 
     if (intent === "save") {
-      toast.success("Strategy updated.");
+      toast.success("Setup updated.");
     }
 
     return savedSetup;
@@ -507,41 +517,6 @@ export function SetupCreatePage() {
   }, [currentSetup?.id, draft.metadata.dirty, isHydratingDraft, isNameValid, saveMutation.isPending, strategySignature]);
 
   const handleSaveStrategy = () => persistBuilder({ intent: "save" });
-
-  const handleSaveAndCreateTrade = async () => {
-    const savedSetup = await persistBuilder({ intent: "save-and-trade" });
-    const targetSetupId = savedSetup?.id ?? currentSetup?.id ?? routeSetupId ?? null;
-
-    if (!targetSetupId) {
-      return;
-    }
-
-    navigate("/trades/new", {
-      state: { prefillSetupId: targetSetupId },
-    });
-  };
-
-  const handleUseInTrade = () => {
-    const targetSetupId = currentSetup?.id ?? routeSetupId ?? null;
-
-    if (!targetSetupId) {
-      return;
-    }
-
-    navigate("/trades/new", {
-      state: { prefillSetupId: targetSetupId },
-    });
-  };
-
-  const handleDuplicateSetup = () => {
-    if (!draft.form.name.trim()) {
-      setHasAttemptedSave(true);
-      setDraft((current) => ({ ...current, step: "strategy" }));
-      return;
-    }
-
-    duplicateMutation.mutate();
-  };
 
   const handleApplyTemplate = (templateId: string) => {
     const template = SETUP_TEMPLATE_PRESETS.find((item) => item.id === templateId);
@@ -570,7 +545,7 @@ export function SetupCreatePage() {
       const baseChecklistItems = buildChecklistDraftItems(currentSetup.preTradeChecklist ?? []);
 
       setDraft(createDraftState({
-        step: "strategy",
+        step: "basic",
         form: baseForm,
         checklistItems: baseChecklistItems,
       }, {
@@ -586,13 +561,102 @@ export function SetupCreatePage() {
     }
 
     setDraft(createDraftState({
-      step: "strategy",
+      step: "basic",
       form: buildStrategyForm(null, setups),
       checklistItems: [],
     }));
     setPersistedSignature("");
     setHasAttemptedSave(false);
     toast.success("Draft cleared.");
+  };
+
+  const rules = useMemo(() => visibleRuleTypes.map((type) => ({
+    type,
+    value: readRuleValue(draft.form, type),
+  })), [draft.form, visibleRuleTypes]);
+  const availableRuleTypes = useMemo(
+    () => (["entry", "confirmation", "invalidation"] as const).filter((type) => !visibleRuleTypes.includes(type)),
+    [visibleRuleTypes],
+  );
+  const activeStepIndex = WIZARD_STEPS.findIndex((step) => step.id === draft.step);
+  const isFinalStep = draft.step === "review";
+  const canContinueFromCurrentStep = (
+    draft.step === "basic"
+      ? isNameValid
+      : true
+  );
+  const currentStepDetails = STEP_DETAILS[draft.step];
+
+  const handleAddRule = () => {
+    const nextType = availableRuleTypes[0];
+
+    if (!nextType) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      form: writeRuleValue(current.form, nextType, readRuleValue(current.form, nextType) || ""),
+    }));
+    setVisibleRuleTypes((current) => [...current, nextType]);
+  };
+
+  const handleRuleChange = (type: SetupRuleType, value: string) => {
+    setDraft((current) => ({
+      ...current,
+      form: writeRuleValue(current.form, type, value),
+    }));
+  };
+
+  const handleRuleTypeChange = (currentType: SetupRuleType, nextType: SetupRuleType) => {
+    if (currentType === nextType) {
+      return;
+    }
+
+    setDraft((current) => {
+      const currentValue = readRuleValue(current.form, currentType);
+      const nextValue = readRuleValue(current.form, nextType);
+      let nextForm = writeRuleValue(current.form, currentType, nextValue);
+      nextForm = writeRuleValue(nextForm, nextType, currentValue);
+      return {
+        ...current,
+        form: nextForm,
+      };
+    });
+    setVisibleRuleTypes((current) => current.map((type) => (type === currentType ? nextType : type)));
+  };
+
+  const handleRemoveRule = (type: SetupRuleType) => {
+    setDraft((current) => ({
+      ...current,
+      form: writeRuleValue(current.form, type, ""),
+    }));
+    setVisibleRuleTypes((current) => current.filter((item) => item !== type));
+  };
+
+  const handleNextStep = () => {
+    if (draft.step === "basic" && !isNameValid) {
+      setHasAttemptedSave(true);
+      return;
+    }
+
+    const nextStep = WIZARD_STEPS[activeStepIndex + 1];
+
+    if (!nextStep) {
+      return;
+    }
+
+    setDraft((current) => ({ ...current, step: nextStep.id }));
+  };
+
+  const handlePreviousStep = () => {
+    const previousStep = WIZARD_STEPS[activeStepIndex - 1];
+
+    if (!previousStep) {
+      return;
+    }
+
+    setDraft((current) => ({ ...current, step: previousStep.id }));
   };
 
   if (setupsQuery.isLoading && !setupsQuery.data) {
@@ -638,7 +702,8 @@ export function SetupCreatePage() {
   return (
     <PageShell size="wide">
       <PageHeader
-        title={currentSetup ? currentSetup.name : "New Setup"}
+        eyebrow={currentSetup ? "Edit Setup" : "New Setup"}
+        title={currentSetup ? currentSetup.name : "Create a Setup"}
         actions={(
           <>
             <Button variant="ghost" onClick={() => navigate("/setups")}>
@@ -648,7 +713,7 @@ export function SetupCreatePage() {
             <Button
               variant="ghost"
               onClick={handleClearDraft}
-              disabled={saveMutation.isPending || duplicateMutation.isPending}
+              disabled={saveMutation.isPending}
             >
               Clear Draft
             </Button>
@@ -656,154 +721,153 @@ export function SetupCreatePage() {
         )}
       />
 
-      <div className="rounded-[28px] border border-border bg-card/70 p-4">
+      <section className="rounded-[30px] border border-border/60 bg-[hsl(var(--muted)/0.22)] px-5 py-5 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <DataBadge tone={draft.form.isArchived ? "warning" : "primary"}>
             {draft.form.isArchived ? "Archived" : "Active"}
           </DataBadge>
-          <DataBadge tone="neutral">{currentSetup ? "Saved setup" : "Draft setup"}</DataBadge>
           <DataBadge tone="neutral">{saveStateLabel}</DataBadge>
           {draft.metadata.recoveredFromCache ? (
             <DataBadge tone="neutral">Recovered draft</DataBadge>
           ) : null}
         </div>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)_340px] lg:items-start">
-        <SetupBuilderSidebar
-          activeStep={draft.step}
-          onStepChange={(nextStep) => setDraft((current) => ({ ...current, step: nextStep }))}
-          saveStateLabel={saveStateLabel}
-        />
-
-        <div className="min-w-0 space-y-5">
-          {draft.step === "strategy" ? (
-            <SetupBuilderStrategyStep
-              form={draft.form}
-              validationErrors={validationErrors}
-              onFormChange={(updater) => {
-                setDraft((current) => ({
-                  ...current,
-                  form: updater(current.form),
-                }));
-              }}
-              previewColor={previewColor}
-              formColorLabel={formColorLabel}
-              onRegenerateColor={() => setDraft((current) => ({
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">{draft.form.name.trim() || "Untitled setup"}</p>
+            {draft.form.description.trim() ? (
+              <p className="mt-1 text-sm text-muted-foreground">{draft.form.description.trim()}</p>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="h-10 w-10 rounded-2xl border border-black/5 shadow-sm ring-1 ring-black/5"
+              style={{ backgroundColor: previewColor }}
+            />
+            <button
+              type="button"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setDraft((current) => ({
                 ...current,
                 form: {
                   ...current.form,
                   color: buildUniqueFormColor(setups, currentSetup?.id),
                 },
               }))}
-              onApplyTemplate={handleApplyTemplate}
-            />
-          ) : null}
-
-          {draft.step === "pre-trade" ? (
-            <SetupBuilderChecklistStep
-              setupId={currentSetup?.id ?? null}
-              items={draft.checklistItems}
-              onItemsChange={(updater) => {
-                setDraft((current) => ({
-                  ...current,
-                  checklistItems: updater(current.checklistItems),
-                }));
-              }}
-            />
-          ) : null}
-
-          {draft.step === "review" ? (
-            <SetupReviewStep
-              form={draft.form}
-              checklistItems={draft.checklistItems}
-              canUseInTrade={Boolean(currentSetup?.id)}
-              onUseInTrade={handleUseInTrade}
-            />
-          ) : null}
+            >
+              {formColorLabel}
+            </button>
+          </div>
         </div>
+      </section>
 
-        <SetupBuilderSummaryRail
-          name={draft.form.name}
-          description={draft.form.description}
-          entryLogic={draft.form.entryLogic}
-          confirmationLogic={draft.form.confirmationLogic}
-          invalidationLogic={draft.form.invalidationLogic}
-          notes={draft.form.notes}
-          previewColor={previewColor}
-          formColorLabel={formColorLabel}
-          isArchived={draft.form.isArchived}
-          checklistCount={checklistCount}
-          activeChecklistCount={activeChecklistCount}
-          requiredChecklistCount={requiredChecklistCount}
-          saveStateLabel={saveStateLabel}
-          isSaving={saveMutation.isPending || duplicateMutation.isPending}
-          isDisabled={false}
-          showSavedActions={Boolean(currentSetup?.id)}
-          primaryButtonLabel={currentSetup ? "Save Setup" : "Create Setup"}
-          secondaryButtonLabel="Save & Create Trade"
-          onSave={() => void handleSaveStrategy()}
-          onSaveAndCreateTrade={() => void handleSaveAndCreateTrade()}
-          onDuplicate={handleDuplicateSetup}
-          onUseInTrade={handleUseInTrade}
-          onColorChange={(value) => setDraft((current) => ({
-            ...current,
-            form: { ...current.form, color: value },
-          }))}
-          onRegenerateColor={() => setDraft((current) => ({
-            ...current,
-            form: {
-              ...current.form,
-              color: buildUniqueFormColor(setups, currentSetup?.id),
-            },
-          }))}
-          onStatusChange={(nextArchived) => setDraft((current) => ({
-            ...current,
-            form: { ...current.form, isArchived: nextArchived },
-          }))}
+      <div className="mx-auto max-w-4xl space-y-6">
+        <SetupWizardStepper
+          steps={WIZARD_STEPS}
+          activeStep={draft.step}
+          onStepChange={(nextStep) => setDraft((current) => ({ ...current, step: nextStep }))}
         />
-      </div>
 
-      <div className="fixed bottom-4 right-4 z-40 w-[calc(100vw-2rem)] lg:hidden">
-        <FloatingActionPanel className="ml-auto w-full rounded-[28px] border border-border bg-card/95 p-4 shadow-lg backdrop-blur">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-label">Save State</p>
-                <p className="mt-1 text-sm font-medium text-foreground">{saveStateLabel}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">{checklistCount} checklist {checklistCount === 1 ? "item" : "items"}</p>
-                <p className="text-xs text-muted-foreground">{activeChecklistCount} active, {requiredChecklistCount} required</p>
-              </div>
-            </div>
+        <section className="page-enter min-w-0 overflow-hidden rounded-[32px] border border-border/60 bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.14))]">
+          <div className="border-b border-border/50 px-5 py-5 sm:px-6">
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              {currentStepDetails.title}
+            </p>
+            {currentStepDetails.subtitle ? (
+              <p className="mt-1 text-sm text-muted-foreground">{currentStepDetails.subtitle}</p>
+            ) : null}
+          </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button className="flex-1" onClick={() => void handleSaveStrategy()} disabled={saveMutation.isPending || duplicateMutation.isPending}>
-                {saveMutation.isPending ? "Saving..." : currentSetup ? "Save Setup" : "Create Setup"}
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => void handleSaveAndCreateTrade()}
-                disabled={saveMutation.isPending || duplicateMutation.isPending}
-              >
-                {saveMutation.isPending ? "Saving..." : "Save & Create Trade"}
-              </Button>
-            </div>
+          <div className="px-5 py-5 sm:px-6 sm:py-6">
+            {draft.step === "basic" ? (
+              <SetupBasicInfoStep
+                form={draft.form}
+                validationErrors={validationErrors}
+                onFormChange={(updater) => {
+                  setDraft((current) => ({
+                    ...current,
+                    form: updater(current.form),
+                  }));
+                }}
+                onApplyTemplate={handleApplyTemplate}
+              />
+            ) : null}
 
-            {currentSetup?.id ? (
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="ghost" onClick={handleDuplicateSetup} disabled={saveMutation.isPending || duplicateMutation.isPending}>
-                  {duplicateMutation.isPending ? "Duplicating..." : "Duplicate"}
-                </Button>
-                <Button variant="ghost" onClick={handleUseInTrade} disabled={saveMutation.isPending || duplicateMutation.isPending}>
-                  Use in Trade
-                </Button>
+            {draft.step === "rules" ? (
+              <SetupRulesStep
+                rules={rules}
+                availableRuleTypes={availableRuleTypes}
+                onAddRule={handleAddRule}
+                onRuleChange={handleRuleChange}
+                onRuleTypeChange={handleRuleTypeChange}
+                onRemoveRule={handleRemoveRule}
+              />
+            ) : null}
+
+            {draft.step === "checklist" ? (
+              <SetupPreTradeSection
+                setupId={currentSetup?.id ?? null}
+                items={draft.checklistItems}
+                onItemsChange={(updater) => {
+                  setDraft((current) => ({
+                    ...current,
+                    checklistItems: updater(current.checklistItems),
+                  }));
+                }}
+              />
+            ) : null}
+
+            {draft.step === "review" ? (
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/50 pb-4">
+                  <div className="flex items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="h-10 w-10 rounded-2xl border border-black/5 shadow-sm ring-1 ring-black/5"
+                      style={{ backgroundColor: previewColor }}
+                    />
+                    <p className="text-sm font-medium text-foreground">{formColorLabel}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-foreground">Archived</span>
+                    <Switch
+                      checked={draft.form.isArchived}
+                      onCheckedChange={(checked) => setDraft((current) => ({
+                        ...current,
+                        form: { ...current.form, isArchived: checked },
+                      }))}
+                    />
+                  </div>
+                </div>
+                <SetupReviewStep form={draft.form} checklistItems={draft.checklistItems} />
               </div>
             ) : null}
           </div>
-        </FloatingActionPanel>
+
+          <div className="flex flex-col gap-4 border-t border-border/50 bg-background/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="text-sm text-muted-foreground">{saveStateLabel}</div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="ghost" onClick={handlePreviousStep} disabled={activeStepIndex === 0 || saveMutation.isPending}>
+                Back
+              </Button>
+              {isFinalStep ? (
+                <>
+                  <Button variant="outline" onClick={() => void handleSaveStrategy()} disabled={!isNameValid || saveMutation.isPending}>
+                    {saveMutation.isPending ? "Saving..." : "Save Draft"}
+                  </Button>
+                  <Button onClick={() => void handleSaveStrategy()} disabled={!isNameValid || saveMutation.isPending}>
+                    {saveMutation.isPending ? "Saving..." : currentSetup ? "Update Setup" : "Save Setup"}
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={handleNextStep} disabled={!canContinueFromCurrentStep || saveMutation.isPending}>
+                  Next
+                </Button>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
     </PageShell>
   );

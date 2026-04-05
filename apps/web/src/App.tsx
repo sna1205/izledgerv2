@@ -161,6 +161,7 @@ function AppRoutes() {
             <Route path="/setups" element={<Setups />} />
             <Route path="/setups/new" element={<NewSetup />} />
             <Route path="/setups/:id" element={<NewSetup />} />
+            <Route path="/setups/:id/edit" element={<NewSetup />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/trades/new" element={<NewTrade />} />

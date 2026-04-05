@@ -31,7 +31,7 @@ export const SETUP_TEMPLATE_PRESETS: SetupTemplatePreset[] = [
   {
     id: "ict",
     label: "ICT",
-    summary: "Bias, liquidity sweep, displacement, and structure reclaim.",
+    summary: "Sweep to reclaim",
     form: {
       name: "ICT Displacement Reclaim",
       description: "Trade the reclaim after a liquidity sweep confirms displacement back into structure.",
@@ -53,7 +53,7 @@ export const SETUP_TEMPLATE_PRESETS: SetupTemplatePreset[] = [
   {
     id: "msnr",
     label: "MSNR",
-    summary: "Market structure shift into a narrative retest with defined invalidation.",
+    summary: "Shift and retest",
     form: {
       name: "MSNR Retest",
       description: "Trade the retest after a market structure shift confirms the new short-term narrative.",
@@ -74,7 +74,7 @@ export const SETUP_TEMPLATE_PRESETS: SetupTemplatePreset[] = [
   {
     id: "scalping",
     label: "Scalping",
-    summary: "Fast execution, clean trigger, and strict session discipline.",
+    summary: "Session pullback",
     form: {
       name: "Session Scalping Pullback",
       description: "Capture short-duration pullbacks only when momentum and session conditions stay clean.",

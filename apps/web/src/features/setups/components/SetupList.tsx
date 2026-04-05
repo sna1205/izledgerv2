@@ -4,13 +4,11 @@ import { SetupCard } from "./SetupCard";
 export function SetupList({
   setups,
   onEdit,
-  onArchive,
-  onDuplicate,
+  onDelete,
 }: {
   setups: SetupListItem[];
   onEdit: (setup: SetupListItem) => void;
-  onArchive: (setup: SetupListItem) => void;
-  onDuplicate: (setup: SetupListItem) => void;
+  onDelete: (setup: SetupListItem) => void;
 }) {
   return (
     <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
@@ -19,8 +17,7 @@ export function SetupList({
           key={setup.id}
           setup={setup}
           onEdit={onEdit}
-          onArchive={onArchive}
-          onDuplicate={onDuplicate}
+          onDelete={onDelete}
         />
       ))}
     </div>

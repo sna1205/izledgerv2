@@ -122,6 +122,7 @@ function renderPage() {
           <Route path="/setups" element={<Setups />} />
           <Route path="/setups/new" element={<NewSetup />} />
           <Route path="/setups/:id" element={<NewSetup />} />
+          <Route path="/setups/:id/edit" element={<NewSetup />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -238,7 +239,10 @@ describe("setups color flow", () => {
 
     await screen.findByLabelText("Setup Name");
     fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Setup" }));
 
     await waitFor(() => {
       expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
@@ -269,7 +273,10 @@ describe("setups color flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
 
     await screen.findByDisplayValue("Breakout");
-    fireEvent.click(screen.getAllByRole("button", { name: "Save Setup" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update Setup" }));
 
     await waitFor(() => {
       expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", expect.objectContaining({
@@ -278,28 +285,19 @@ describe("setups color flow", () => {
     });
   });
 
-  it("shows fast-scanning card content and archives from quick actions", async () => {
-    apiMocks.updateSetup.mockResolvedValue({
-      setup: {
-        id: "setup-1",
-        name: "Breakout",
-        description: "Retest entry",
-        color: "#3B82F6",
-        isArchived: true,
-        createdAt: "2026-03-01T10:00:00.000Z",
-        updatedAt: "2026-03-04T10:00:00.000Z",
-      },
-    });
+  it("shows fast-scanning card content and deletes from quick actions", async () => {
+    apiMocks.deleteSetup.mockResolvedValue(undefined);
 
     renderPage();
 
     await screen.findByText("Breakout");
-    expect(screen.getByText("1 rule")).toBeInTheDocument();
-    expect(screen.getByText((_content, element) => element?.textContent === "Used in 12 trades")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Archive Breakout" }));
+    expect(screen.getAllByText("Rules").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Breakout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete setup" }));
 
     await waitFor(() => {
-      expect(apiMocks.updateSetup).toHaveBeenCalledWith("setup-1", { isArchived: true });
+      expect(apiMocks.deleteSetup).toHaveBeenCalledWith("setup-1");
     });
   });
 
@@ -329,7 +327,8 @@ describe("setups color flow", () => {
 
     await screen.findByLabelText("Setup Name");
     fireEvent.change(screen.getByLabelText("Setup Name"), { target: { value: "Momentum" } });
-    fireEvent.click(screen.getByRole("button", { name: /Pre-trade Checklist/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: /Checklist/ }));
 
     await screen.findByLabelText("Add a pre-trade rule");
     fireEvent.change(screen.getByLabelText("Add a pre-trade rule"), { target: { value: "Wait for confirmation candle" } });
@@ -338,7 +337,8 @@ describe("setups color flow", () => {
     expect(apiMocks.createChecklistRule).not.toHaveBeenCalled();
     expect(apiMocks.reorderChecklistRules).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Create Setup" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Setup" }));
 
     await waitFor(() => {
       expect(apiMocks.createSetup).toHaveBeenCalledTimes(1);
@@ -353,40 +353,13 @@ describe("setups color flow", () => {
     expect(apiMocks.createSetup.mock.invocationCallOrder[0]).toBeLessThan(apiMocks.createChecklistRule.mock.invocationCallOrder[0]);
   });
 
-  it("duplicates a setup from the list and recreates its checklist", async () => {
-    apiMocks.createSetup.mockResolvedValue({
-      setup: {
-        id: "setup-3",
-        name: "Breakout Copy",
-        description: "Retest entry",
-        entryLogic: "Wait for breakout and reclaim.",
-        confirmationLogic: "Accept only with displacement.",
-        invalidationLogic: "Cancel if price loses the reclaimed level.",
-        notes: "",
-        color: "#3B82F6",
-        isArchived: false,
-        preTradeChecklist: [],
-        tradeCount: 0,
-        createdAt: "2026-03-05T10:00:00.000Z",
-        updatedAt: "2026-03-05T10:00:00.000Z",
-      },
-    });
-
+  it("navigates to the wizard edit route from the list", async () => {
     renderPage();
 
     await screen.findByText("Breakout");
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate Breakout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Breakout" }));
 
-    await waitFor(() => {
-      expect(apiMocks.createSetup).toHaveBeenCalledWith(expect.objectContaining({
-        name: "Breakout Copy",
-        description: "Retest entry",
-      }));
-      expect(apiMocks.createChecklistRule).toHaveBeenCalledWith(expect.objectContaining({
-        title: "Bias aligned",
-        setupId: "setup-3",
-      }));
-      expect(apiMocks.reorderChecklistRules).toHaveBeenCalledWith(["rule-created"]);
-    });
+    await screen.findByText("Edit Setup");
+    expect(screen.getByRole("button", { name: /Update Setup/i })).toBeInTheDocument();
   });
 });

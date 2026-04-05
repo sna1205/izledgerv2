@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/features/auth/auth-context";
 import { SetupChecklistEmptyState } from "@/features/setups/components/SetupChecklistEmptyState";
@@ -105,7 +104,6 @@ export function SetupPreTradeSection({
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
   const normalizedItems = useMemo(() => normalizeChecklistItems(items), [items]);
-  const activeCount = normalizedItems.filter((item) => item.isActive).length;
   const requiredCount = normalizedItems.filter((item) => item.isRequired).length;
 
   const invalidateChecklistData = async () => {
@@ -300,59 +298,39 @@ export function SetupPreTradeSection({
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-[22px] border border-border/60 bg-card/80 px-4 py-4">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Total</p>
-          <p className="text-2xl font-semibold text-foreground">{normalizedItems.length}</p>
-        </div>
-        <div className="rounded-[22px] border border-border/60 bg-card/80 px-4 py-4">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Active</p>
-          <p className="text-2xl font-semibold text-foreground">{activeCount}</p>
-        </div>
-        <div className="rounded-[22px] border border-border/60 bg-card/80 px-4 py-4">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Required</p>
-          <p className="text-2xl font-semibold text-foreground">{requiredCount}</p>
-        </div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {normalizedItems.length} {normalizedItems.length === 1 ? "item" : "items"}{" "}
+          <span aria-hidden="true">•</span>{" "}
+          {requiredCount} required
+        </p>
       </div>
 
-      <div className="rounded-[28px] border border-border bg-card/85 p-5 sm:p-6">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/80 text-muted-foreground">
-            <ClipboardList className="h-4 w-4" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-foreground">Checklist</h3>
-          </div>
-        </div>
+      <SetupChecklistQuickAdd
+        onAdd={(title) => void handleQuickAdd(title)}
+        disabled={createRuleMutation.isPending}
+      />
 
-        <div className="mt-4">
-          <SetupChecklistQuickAdd
-            onAdd={(title) => void handleQuickAdd(title)}
-            disabled={createRuleMutation.isPending}
+      <div>
+        {normalizedItems.length === 0 ? (
+          <SetupChecklistEmptyState />
+        ) : normalizedItems.map((item) => (
+          <SetupChecklistItemRow
+            key={item.id}
+            item={item}
+            disabled={deleteRuleMutation.isPending}
+            isDragging={draggedItemId === item.id}
+            onDragStart={() => setDraggedItemId(item.id)}
+            onDragOver={() => undefined}
+            onDrop={() => void handleDropOnItem(item.id)}
+            onTitleChange={(value) => handleFieldChange(item.id, (current) => ({ ...current, title: value }))}
+            onDescriptionChange={(value) => handleFieldChange(item.id, (current) => ({ ...current, description: value || null }))}
+            onRequiredChange={(nextRequired) => handleFieldChange(item.id, (current) => ({ ...current, isRequired: nextRequired }))}
+            onActiveChange={(nextActive) => void handleToggleActive(item, nextActive)}
+            onDelete={() => void handleDelete(item)}
           />
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {normalizedItems.length === 0 ? (
-            <SetupChecklistEmptyState />
-          ) : normalizedItems.map((item) => (
-            <SetupChecklistItemRow
-              key={item.id}
-              item={item}
-              disabled={deleteRuleMutation.isPending}
-              isDragging={draggedItemId === item.id}
-              onDragStart={() => setDraggedItemId(item.id)}
-              onDragOver={() => undefined}
-              onDrop={() => void handleDropOnItem(item.id)}
-              onTitleChange={(value) => handleFieldChange(item.id, (current) => ({ ...current, title: value }))}
-              onDescriptionChange={(value) => handleFieldChange(item.id, (current) => ({ ...current, description: value || null }))}
-              onRequiredChange={(nextRequired) => handleFieldChange(item.id, (current) => ({ ...current, isRequired: nextRequired }))}
-              onActiveChange={(nextActive) => void handleToggleActive(item, nextActive)}
-              onDelete={() => void handleDelete(item)}
-            />
-          ))}
-        </div>
+        ))}
       </div>
     </div>
   );

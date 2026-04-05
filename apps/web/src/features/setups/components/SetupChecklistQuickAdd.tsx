@@ -24,28 +24,25 @@ export function SetupChecklistQuickAdd({
   };
 
   return (
-    <div className="rounded-[24px] border border-border/60 bg-background/70 p-4">
-      <p className="text-label">Quick Add</p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-        <Input
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              handleAdd();
-            }
-          }}
-          placeholder="Add a pre-trade rule..."
-          disabled={disabled}
-          aria-label="Add a pre-trade rule"
-          className="h-11 rounded-2xl"
-        />
-        <Button type="button" onClick={handleAdd} disabled={disabled || !value.trim()}>
-          <Plus className="h-4 w-4" />
-          Add
-        </Button>
-      </div>
+    <div className="flex flex-col gap-3 sm:flex-row">
+      <Input
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            handleAdd();
+          }
+        }}
+        placeholder="Retest level mapped"
+        disabled={disabled}
+        aria-label="Add a pre-trade rule"
+        className="h-11 rounded-2xl border-border/60 bg-background shadow-none"
+      />
+      <Button type="button" onClick={handleAdd} disabled={disabled || !value.trim()} className="rounded-full px-4">
+        <Plus className="h-4 w-4" />
+        Add
+      </Button>
     </div>
   );
 }

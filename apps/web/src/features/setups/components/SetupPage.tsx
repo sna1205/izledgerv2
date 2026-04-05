@@ -6,6 +6,16 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageErrorState } from "@/components/PageErrorState";
 import { PaginationControls } from "@/components/PaginationControls";
 import { SetupsSkeleton } from "@/components/skeletons/SetupsSkeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { PageHeader, PageShell } from "@/layouts/PageShell";
@@ -13,10 +23,8 @@ import { useAuth } from "@/features/auth/auth-context";
 import { useUnauthorizedSessionGuard } from "@/features/auth/use-unauthorized-session-guard";
 import { SetupList } from "@/features/setups/components/SetupList";
 import { SetupToolbar } from "@/features/setups/components/SetupToolbar";
-import { buildDuplicateSetupName, sanitizeChecklistItemsForDuplication } from "@/features/setups/setup-duplication";
-import { createChecklistRule, reorderChecklistRules } from "@/services/api/checklist-rules";
 import { ApiError } from "@/services/api/client";
-import { createSetup, listSetups, updateSetup, type SetupListItem } from "@/services/api/setups";
+import { deleteSetup, listSetups, type SetupListItem } from "@/services/api/setups";
 import { privateQueryKey } from "@/services/query-client";
 import { getPageErrorState } from "@/utils/page-errors";
 import { withMinimumDelay } from "@/utils/loading";
@@ -30,6 +38,7 @@ export function SetupPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">("all");
   const [page, setPage] = useState(1);
+  const [setupPendingDelete, setSetupPendingDelete] = useState<SetupListItem | null>(null);
 
   const setupsQuery = useQuery({
     queryKey: privateQueryKey(user.id, "setups", "list", {
@@ -65,70 +74,15 @@ export function SetupPage() {
     ]);
   };
 
-  const archiveMutation = useMutation({
-    mutationFn: async (setupId: string) => updateSetup(setupId, { isArchived: true }),
+  const deleteMutation = useMutation({
+    mutationFn: async (setupId: string) => deleteSetup(setupId),
     onSuccess: async () => {
       await invalidateData();
-      toast.success("Setup archived.");
+      toast.success("Setup deleted.");
+      setSetupPendingDelete(null);
     },
     onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not archive the setup right now.";
-      toast.error(message);
-    },
-  });
-
-  const duplicateMutation = useMutation({
-    mutationFn: async (setup: SetupListItem) => {
-      const duplicatedName = buildDuplicateSetupName(setup.name, setups.map((item) => item.name));
-      const duplicatedSetup = await createSetup({
-        name: duplicatedName,
-        description: setup.description,
-        entryLogic: setup.entryLogic,
-        confirmationLogic: setup.confirmationLogic,
-        invalidationLogic: setup.invalidationLogic,
-        notes: setup.notes,
-        color: setup.color ?? undefined,
-        isArchived: false,
-      });
-
-      const checklistItems = sanitizeChecklistItemsForDuplication(
-        (setup.preTradeChecklist ?? []).map((item) => ({
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          isRequired: item.isRequired,
-          isActive: item.isActive,
-          sortOrder: item.sortOrder,
-          isLocalOnly: false,
-          setupId: item.setupId,
-          accountId: item.accountId,
-        })),
-      );
-
-      if (checklistItems.length > 0) {
-        const createdRules = await Promise.all(
-          checklistItems.map((item) => createChecklistRule({
-            title: item.title,
-            description: item.description,
-            isRequired: item.isRequired,
-            isActive: item.isActive,
-            setupId: duplicatedSetup.setup.id,
-            accountId: null,
-          })),
-        );
-
-        await reorderChecklistRules(createdRules.map((result) => result.rule.id));
-      }
-
-      return duplicatedSetup.setup;
-    },
-    onSuccess: async (setup) => {
-      await invalidateData();
-      toast.success("Setup duplicated.");
-      navigate(`/setups/${setup.id}`);
-    },
-    onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "Could not duplicate the setup right now.";
+      const message = error instanceof ApiError ? error.message : "Could not delete the setup right now.";
       toast.error(message);
     },
   });
@@ -165,7 +119,8 @@ export function SetupPage() {
   return (
     <PageShell size="wide">
       <PageHeader
-        title="Your Setups"
+        title="Setups"
+        description="Keep your playbook clean, searchable, and fast to update."
         actions={(
           <Button asChild>
             <Link to="/setups/new">
@@ -220,8 +175,7 @@ export function SetupPage() {
                   <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-700">Active</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                  <span>Key rules: sweep, reclaim, displacement</span>
-                  <span>Checklist: 5 rules</span>
+                  <span>Rules: 3</span>
                   <span>Used in 24 trades</span>
                 </div>
               </div>
@@ -232,9 +186,8 @@ export function SetupPage() {
         <div className="space-y-6">
           <SetupList
             setups={setups}
-            onEdit={(setup) => navigate(`/setups/${setup.id}`)}
-            onArchive={(setup) => archiveMutation.mutate(setup.id)}
-            onDuplicate={(setup) => duplicateMutation.mutate(setup)}
+            onEdit={(setup) => navigate(`/setups/${setup.id}/edit`)}
+            onDelete={(setup) => setSetupPendingDelete(setup)}
           />
 
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -248,6 +201,38 @@ export function SetupPage() {
           </div>
         </div>
       )}
+
+      <AlertDialog open={Boolean(setupPendingDelete)} onOpenChange={(open) => {
+        if (!open) {
+          setSetupPendingDelete(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete setup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {setupPendingDelete
+                ? `This will permanently remove "${setupPendingDelete.name}" unless it is still being used elsewhere.`
+                : "This will permanently remove this setup."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+
+                if (setupPendingDelete) {
+                  deleteMutation.mutate(setupPendingDelete.id);
+                }
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete setup"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageShell>
   );
 }

@@ -1,4 +1,5 @@
-import { GripVertical, PauseCircle, PlayCircle, Trash2 } from "lucide-react";
+import { GripVertical, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +33,8 @@ export function SetupChecklistItemRow({
   onActiveChange: (nextActive: boolean) => void;
   onDelete: () => void;
 }) {
+  const [showNote, setShowNote] = useState(Boolean(item.description));
+
   return (
     <div
       draggable={!disabled}
@@ -45,46 +48,38 @@ export function SetupChecklistItemRow({
         onDrop();
       }}
       className={cn(
-        "rounded-[24px] border border-border/60 bg-background/70 p-4 transition-all",
+        "border-b border-border/50 py-3 transition-all last:border-b-0",
         isDragging && "opacity-60 ring-2 ring-primary/20",
       )}
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card/70 text-muted-foreground">
-            <GripVertical className="h-3.5 w-3.5" />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground">
+            <GripVertical className="h-4 w-4" />
           </div>
 
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3">
+              <Input
+                value={item.title}
+                onChange={(event) => onTitleChange(event.target.value)}
+                placeholder="Structure confirmed"
+                disabled={disabled}
+                className="h-10 flex-1 rounded-2xl border-border/60 bg-background shadow-none"
+                aria-label="Checklist item title"
+              />
               <DataBadge tone={item.isRequired ? "warning" : "neutral"}>
                 {item.isRequired ? "Required" : "Optional"}
               </DataBadge>
-              <DataBadge tone={item.isActive ? "success" : "neutral"}>
-                {item.isActive ? "Active" : "Paused"}
-              </DataBadge>
-              {item.isLocalOnly ? <DataBadge tone="neutral">Draft</DataBadge> : null}
             </div>
-
-            <Input
-              value={item.title}
-              onChange={(event) => onTitleChange(event.target.value)}
-              placeholder="Checklist item title"
-              disabled={disabled}
-              className="h-11 rounded-2xl border-border/60 bg-background/80 shadow-none"
-              aria-label="Checklist item title"
-            />
-
-            <Textarea
-              value={item.description ?? ""}
-              onChange={(event) => onDescriptionChange(event.target.value)}
-              placeholder="Note"
-              disabled={disabled}
-              rows={3}
-              aria-label="Checklist item note"
-              className="rounded-2xl border-border/60 bg-background/80 shadow-none"
-            />
           </div>
+
+          <Switch
+            checked={item.isActive}
+            onCheckedChange={onActiveChange}
+            disabled={disabled}
+            aria-label="Toggle checklist item"
+          />
 
           <Button
             type="button"
@@ -99,27 +94,40 @@ export function SetupChecklistItemRow({
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-foreground">Required</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 pl-12">
+          <div className="flex items-center gap-4">
             <Switch
               checked={item.isRequired}
               onCheckedChange={onRequiredChange}
               disabled={disabled}
               aria-label="Toggle required"
             />
+            <span className="text-sm text-foreground">Required</span>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setShowNote((current) => !current)}
+            >
+              {showNote ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Note
+            </button>
           </div>
 
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-border"
-            onClick={() => onActiveChange(!item.isActive)}
-            disabled={disabled}
-          >
-            {item.isActive ? <PauseCircle className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}
-            {item.isActive ? "Pause" : "Activate"}
-          </button>
         </div>
+
+        {showNote ? (
+          <div className="pl-12">
+            <Textarea
+              value={item.description ?? ""}
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              placeholder="Note"
+              disabled={disabled}
+              rows={2}
+              aria-label="Checklist item note"
+              className="rounded-2xl border-border/60 bg-background shadow-none"
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );
